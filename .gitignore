@@ -1,0 +1,5 @@
+scripts/data/
+.vscode/
+**/.ccls-cache/
+freicar_data_collector/build/
+freicar_data_collector/Debug/
