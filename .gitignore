@@ -3,3 +3,4 @@ scripts/data/
 **/.ccls-cache/
 freicar_data_collector/build/
 freicar_data_collector/Debug/
+freicar_data_collector/compile_commands.json
