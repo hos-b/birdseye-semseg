@@ -1,7 +1,7 @@
 #include "hdf5_dataset.h"
 
 HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
-                         size_t init_size, size_t max_size, size_t chunk_size) {
+                         unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size) {
     unsigned int hdf5_flags = 0;
     std::string file_action_str;
     switch (flags & statics::open_mask) {
@@ -28,7 +28,15 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
             H5::DataSpace data_space(statics::dataset_rank, initial_size, maximum_size);
             H5::DSetCreatPropList dset_params;
             hsize_t chunk_dims[] = {chunk_size};
-            dset_params.setChunk(1, chunk_dims);    
+            dset_params.setChunk(1, chunk_dims);
+            switch (compression & statics::comp_type_mask) {
+            case compression::ZLIB:
+                dset_params.setDeflate(compression & statics::comp_lvl_mask);
+                break;
+            case compression::SZIP:
+                dset_params.setSzip(H5_SZIP_NN_OPTION_MASK, compression & statics::comp_lvl_mask);
+                break;
+            };
             dataset_ = h5file_.createDataSet(dset_name, comp_type_, data_space, dset_params);
             write_index_ = 0;
             break;
@@ -87,7 +95,7 @@ void HDF5Dataset::Close() {
     // std::cout << "file closed" << std::endl;
 }
 
-MASSDataType HDF5Dataset::ReadElement(size_t index) {
+MASSDataType HDF5Dataset::ReadElement(size_t index) const {
     MASSDataType read_out;
     auto dspace = dataset_.getSpace();
     // read_offset_[0] = {index};
@@ -97,7 +105,7 @@ MASSDataType HDF5Dataset::ReadElement(size_t index) {
     dataset_.read(&read_out, comp_type_, _mspace, dspace);
     return read_out;
 }
-std::pair<hsize_t, hsize_t> HDF5Dataset::GetCurrentSize() {
+std::pair<hsize_t, hsize_t> HDF5Dataset::GetCurrentSize() const {
     hsize_t dim[] = {0};
     hsize_t maxdim[] = {0};
     dataset_.getSpace().getSimpleExtentDims(dim, maxdim);

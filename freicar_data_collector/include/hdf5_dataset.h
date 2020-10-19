@@ -19,6 +19,8 @@ constexpr static unsigned int dataset_rank = 1;
 
 constexpr static unsigned int open_mask = 0b0011;
 constexpr static unsigned int dset_mask = 0b1100;
+constexpr static unsigned int comp_type_mask = 0b1100000;
+constexpr static unsigned int comp_lvl_mask = 0b0011111;
 }
 struct MASSDataType {
     char name[statics::name_length];
@@ -27,24 +29,30 @@ struct MASSDataType {
     float top_depth[statics::top_depth_height][statics::top_depth_width];
     float transform[statics::transform_length];
 };
+enum mode : unsigned int {
+    FILE_RD_ONLY    = 0b0001,
+    FILE_RDWR       = 0b0010,
+    FILE_TRUNC      = 0b0011,
+    DSET_OPEN       = 0b0100,
+    DSET_CREAT      = 0b1000,
+};
+enum compression : unsigned int {
+    NONE    = 0b0000000,
+    ZLIB    = 0b0100000,
+    SZIP    = 0b1000000
+};
 
 class HDF5Dataset
 {
 public:
-    enum mode : unsigned int{
-        FILE_RD_ONLY    = 0b0001,
-        FILE_RDWR       = 0b0010,
-        FILE_TRUNC      = 0b0011,
-        DSET_OPEN       = 0b0100,
-        DSET_CREAT      = 0b1000,
-    };
-    HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags, size_t init_size, size_t max_size, size_t chunk_size);
+    HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
+                unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size);
     HDF5Dataset(const HDF5Dataset&) = delete;
     HDF5Dataset(HDF5Dataset&&) = delete;
     void AppendElement(const MASSDataType* mass_data);
-    MASSDataType ReadElement(size_t index);
+    MASSDataType ReadElement(size_t index) const;
+    std::pair<hsize_t, hsize_t> GetCurrentSize() const;
     void Close();
-    std::pair<hsize_t, hsize_t> GetCurrentSize();
 private:
     void InitializeCompoundType();
     H5::DataSet dataset_;
