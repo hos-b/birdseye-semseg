@@ -2,22 +2,44 @@
 
 HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
                          size_t init_size, size_t max_size, size_t chunk_size) {
-    write_index_ = 0;
-    h5file_ = H5::H5File(path, flags);
-    std::cout << path << " created" << std::endl;
+    unsigned int hdf5_flags = 0;
+    std::string file_action_str;
+    switch (flags & statics::open_mask) {
+        case FILE_RD_ONLY:
+            hdf5_flags = H5F_ACC_RDONLY;
+            file_action_str = "opened ";
+            break;
+        case FILE_RDWR:
+            hdf5_flags = H5F_ACC_RDWR;
+            file_action_str = "opened ";
+            break;
+        case FILE_TRUNC:
+            hdf5_flags = H5F_ACC_TRUNC;
+            file_action_str = "created ";
+            break;
+    }
+    h5file_ = H5::H5File(path, hdf5_flags);
+    std::cout << file_action_str << path << std::endl;
     InitializeCompoundType();
-    // dataset size (initial, max)
-    hsize_t initial_size[] = {init_size};
-    hsize_t maximum_size[] = {max_size};
-    H5::DataSpace data_space(statics::dataset_rank, initial_size, maximum_size);
-    H5::DSetCreatPropList dset_params;
-    hsize_t chunk_dims[] = {chunk_size};
-    dset_params.setChunk(1, chunk_dims);
-    std::cout << "created some other stuff" << std::endl;
-    
-    // dataset_ = h5file_.openDataSet(dset_name);
-    dataset_ = h5file_.createDataSet(dset_name, comp_type_, data_space, dset_params);
-
+    switch (flags & statics::dset_mask) {
+        case DSET_CREAT: {
+            hsize_t initial_size[] = {init_size};
+            hsize_t maximum_size[] = {max_size};
+            H5::DataSpace data_space(statics::dataset_rank, initial_size, maximum_size);
+            H5::DSetCreatPropList dset_params;
+            hsize_t chunk_dims[] = {chunk_size};
+            dset_params.setChunk(1, chunk_dims);    
+            dataset_ = h5file_.createDataSet(dset_name, comp_type_, data_space, dset_params);
+            write_index_ = 0;
+            break;
+        }
+        case DSET_OPEN: {
+            dataset_ = h5file_.openDataSet(dset_name);
+            auto [dsize, dsize_max] = GetCurrentSize();
+            write_index_ = dsize - 1;
+            break;
+        }
+    }
     // hyperslab parameters
     _stride[0] = 1;
     _block[0] = 1;
@@ -74,4 +96,10 @@ MASSDataType HDF5Dataset::ReadElement(size_t index) {
     dspace.selectHyperslab(H5S_SELECT_SET, count, read_offset);
     dataset_.read(&read_out, comp_type_, _mspace, dspace);
     return read_out;
+}
+std::pair<hsize_t, hsize_t> HDF5Dataset::GetCurrentSize() {
+    hsize_t dim[] = {0};
+    hsize_t maxdim[] = {0};
+    dataset_.getSpace().getSimpleExtentDims(dim, maxdim);
+    return std::make_pair(dim[0], maxdim[0]);
 }

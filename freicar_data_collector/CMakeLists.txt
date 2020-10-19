@@ -1,6 +1,10 @@
 cmake_minimum_required (VERSION 3.12)
 project (HDF5Test CXX)
 
+set(CMAKE_CXX_FLAGS "-O3 -Wall -Wextra")
+set(CMAKE_CXX_STANDARD 17)
+
+
 # set (LIB_TYPE STATIC) # or SHARED
 # string(TOLOWER ${LIB_TYPE} SEARCH_TYPE)
 list(APPEND CMAKE_PREFIX_PATH $ENV{LIBHDF5_ROOT})

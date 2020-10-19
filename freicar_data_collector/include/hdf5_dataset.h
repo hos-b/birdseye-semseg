@@ -16,6 +16,9 @@ constexpr static unsigned int top_depth_width = 1000;
 constexpr static unsigned int top_depth_height = 1000;
 constexpr static unsigned int transform_length = 16;
 constexpr static unsigned int dataset_rank = 1;
+
+constexpr static unsigned int open_mask = 0b0011;
+constexpr static unsigned int dset_mask = 0b1100;
 }
 struct MASSDataType {
     char name[statics::name_length];
@@ -28,16 +31,24 @@ struct MASSDataType {
 class HDF5Dataset
 {
 public:
+    enum mode : unsigned int{
+        FILE_RD_ONLY    = 0b0001,
+        FILE_RDWR       = 0b0010,
+        FILE_TRUNC      = 0b0011,
+        DSET_OPEN       = 0b0100,
+        DSET_CREAT      = 0b1000,
+    };
     HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags, size_t init_size, size_t max_size, size_t chunk_size);
     HDF5Dataset(const HDF5Dataset&) = delete;
     HDF5Dataset(HDF5Dataset&&) = delete;
     void AppendElement(const MASSDataType* mass_data);
     MASSDataType ReadElement(size_t index);
     void Close();
-    H5::DataSet dataset_;
-    H5::CompType comp_type_;
+    std::pair<hsize_t, hsize_t> GetCurrentSize();
 private:
     void InitializeCompoundType();
+    H5::DataSet dataset_;
+    H5::CompType comp_type_;
     size_t write_index_;
     H5::H5File h5file_;
     H5::DataSpace _mspace;
