@@ -20,7 +20,7 @@ constexpr static unsigned int dataset_rank = 1;
 constexpr static unsigned int open_mask = 0b0011;
 constexpr static unsigned int dset_mask = 0b1100;
 constexpr static unsigned int comp_type_mask = 0b1100000;
-constexpr static unsigned int comp_lvl_mask = 0b0011111;
+constexpr static unsigned int comp_lvl_mask  = 0b0011111;
 }
 struct MASSDataType {
     char name[statics::name_length];

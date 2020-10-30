@@ -1,8 +1,6 @@
 #include <iostream>
 #include <string>
 #include <cstring>
-// #include "hdf5/openmpi/hdf5.h"
-// #include "hdf5/serial/H5Cpp.h"
 #include "hdf5_dataset.h"
 
 #define DATASET_RANK 1
@@ -32,5 +30,6 @@ int main(int argc, char** argv)
     }
     auto [dset_size, dset_max_size] = xtra.GetCurrentSize();
     std::cout << dset_size << "/" << dset_max_size << std::endl;
+    
     return 0;
 }
