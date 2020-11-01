@@ -1,12 +1,7 @@
-# building compiler database for ccls
-# cmake -H. -BDebug -DCMAKE_BUILD_TYPE=Debug -DCMAKE_EXPORT_COMPILE_COMMANDS=YES
-# ln -s Debug/compile_commands.json .
 cmake_minimum_required(VERSION 2.8.3)
 project(freicar_carla_proxy)
 
-set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -Wall")
 set(CMAKE_CXX_FLAGS "-O3 -Wall -Wextra")
-# set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 

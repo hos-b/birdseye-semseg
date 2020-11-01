@@ -1,6 +1,9 @@
 scripts/data/
-.vscode/
+**/.vscode/
 **/.ccls-cache/
-freicar_data_collector/build/
-freicar_data_collector/Debug/
-freicar_data_collector/compile_commands.json
+**/build/
+**/Debug/
+**/compile_commands.json
+**/.clangd/
+**/.ccls-cache/
+**/.cache/

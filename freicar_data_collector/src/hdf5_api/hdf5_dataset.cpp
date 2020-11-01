@@ -1,4 +1,4 @@
-#include "hdf5_dataset.h"
+#include "hdf5_api/hdf5_dataset.h"
 
 HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
                          unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size) {

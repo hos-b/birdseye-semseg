@@ -1,7 +1,7 @@
 #include <iostream>
 #include <string>
 #include <cstring>
-#include "hdf5_dataset.h"
+#include "hdf5_api/hdf5_dataset.h"
 
 #define DATASET_RANK 1
 struct TType {
@@ -9,7 +9,7 @@ struct TType {
     float transform[16];
 };
 
-int main(int argc, char** argv)
+int main(void)
 {
     std::cout << "starting..." << std::endl;
     HDF5Dataset xtra("testfile2.hdf5", "testset", mode::FILE_TRUNC | mode::DSET_CREAT,
