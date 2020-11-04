@@ -4,9 +4,12 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <iterator>
 #include <opencv2/highgui.hpp>
+#include <opencv2/imgcodecs.hpp>
 #include <ros/package.h>
+#include <thread>
 #include <tuple>
 #include <yaml-cpp/yaml.h>
 #include <cmath>
@@ -72,6 +75,32 @@ void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port
 	}
 	SetupSensors();
 }
+/* places the agent on a random point in the map at a random pose */
+void MassAgent::SetRandomPose() {
+	bool admissable = false;
+	float yaw = 0;
+	while (!admissable) {
+		admissable = true;
+		auto lane_point = map_instance_.GetRandomLanePoint();
+		std::tie(x_, y_, z_) = lane_point.GetCoords();
+		yaw = lane_point.GetHeading();
+		for (const auto *agent : agents()) {
+			if (agent->id_ == id_) {
+				continue;
+			}
+			auto distance = std::sqrt((agent->x_ - x_) * (agent->x_ - x_) +
+									  (agent->y_ - y_) * (agent->y_ - y_) +
+									  (agent->z_ - z_) * (agent->z_ - z_));
+			if (distance < config::kMinimumAgentDistance) {
+				admissable = false;
+				break;
+			}
+		}
+	}
+	// CARLA/Unreal' C.S. is left-handed
+	vehicle_->SetTransform(cg::Transform(cg::Location(x_, -y_, z_),
+										 cg::Rotation(0, -yaw * config::kToDegrees, 0)));
+}
 /* initializes the structures for the camera, lidar & depth measurements */
 void MassAgent::SetupSensors() {
 	std::string yaml_path = ros::package::getPath("mass_data_collector");
@@ -115,10 +144,11 @@ void MassAgent::SetupSensors() {
 																		   raw_data,
 																		   rgb_view.width() * sizeof(pixel)));
 			front_cam_.carla_image = cv::Mat(rgb_view.height(), rgb_view.width(), CV_8UC3, raw_data);
-			if (++front_cam_.count == 1) {
-				cv::imshow("front_rgb", front_cam_.carla_image);
-				cv::waitKey(1); // NOLINT
+			if (++front_cam_.count % 5 == 0) {
+				cv::imshow("front_cam", front_cam_.carla_image);
+				cv::waitKey(20); // NOLINT
 			}
+		
 		});
 	}
 	// depth camera
@@ -160,9 +190,9 @@ void MassAgent::SetupSensors() {
 																				 raw_data,
 																				 grayscale_view.width() * sizeof(pixel)));
 			depth_cam_.carla_image = cv::Mat(grayscale_view.height(), grayscale_view.width(), CV_8UC1, raw_data);
-			if (++depth_cam_.count == 1) {
-				cv::imshow("front_depth", depth_cam_.carla_image);
-				cv::waitKey(1); // NOLINT
+			if (++depth_cam_.count % 5 == 0) {
+				cv::imshow("depth_cam", depth_cam_.carla_image);
+				cv::waitKey(20); // NOLINT
 			}
 		});
 	}
@@ -203,15 +233,16 @@ void MassAgent::SetupSensors() {
 																		   raw_data,
 																		   rgb_view.width() * sizeof(pixel)));
 			semseg_cam_.carla_image = cv::Mat(rgb_view.height(), rgb_view.width(), CV_8UC3, raw_data);
-			if (++semseg_cam_.count == 1) {
-				cv::imshow("front_semseg", semseg_cam_.carla_image);
-				cv::waitKey(1); // NOLINT
+			if (++semseg_cam_.count % 5 == 0) {
+				cv::imshow("semseg_cam", semseg_cam_.carla_image);
+				cv::waitKey(20); // NOLINT
 			}
 		});
 	}
 }
 /* destroys the agent in the simulation & its sensors. */
 void MassAgent::DestroyAgent() {
+	std::cout << "destroying mass-agent-" << id_ << std::endl;
 	if (front_cam_.sensor) {
 		front_cam_.sensor->Destroy();
 		front_cam_.sensor = nullptr;
@@ -232,29 +263,7 @@ void MassAgent::DestroyAgent() {
 		carla_client_.reset();
 	}
 }
-/* places the agent on a random point in the map at a random pose */
-void MassAgent::SetRandomPose() {
-	bool admissable = true;
-	float yaw = 0;
-	while (true) {
-		admissable = true;
-		auto lane_point = map_instance_.GetRandomLanePoint();
-		std::tie(x_, y_, z_) = lane_point.GetCoords();
-		yaw = lane_point.GetHeading();
-		for (const auto *agent : agents()) {
-			auto distance = std::sqrt((agent->x_ - x_) * (agent->x_ - x_) +
-									  (agent->y_ - y_) * (agent->y_ - y_) +
-									  (agent->z_ - z_) * (agent->z_ - z_));
-			if (distance < config::kMinimumAgentDistance) {
-				admissable = false;
-				break;
-			}
-		}
-	}
-	// CARLA/Unreal' C.S. is left-handed
-	vehicle_->SetTransform(cg::Transform(cg::Location(x_, -y_, z_),
-										 cg::Rotation(0, -yaw * config::kToDegrees, 0)));
-}
+
 /* returns the current position of the agent */
 std::tuple<float, float, float> MassAgent::GetPostion() const {
 	return std::make_tuple(x_, y_, z_);

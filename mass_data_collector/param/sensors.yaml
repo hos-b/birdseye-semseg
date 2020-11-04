@@ -45,7 +45,7 @@ camera-front:
   lens_kcube: 0.0
   lens_x_size: 0.08
   lens_y_size: 0.08
-  sensor_tick: 0.1
+  sensor_tick: 0.05
 
 camera-depth:
   type: "sensor.camera.depth"
@@ -59,7 +59,7 @@ camera-depth:
   width: 640
   height: 480
   fov: 90
-  sensor_tick: 0.1
+  sensor_tick: 0.05
 
 camera-semseg:
   type: "sensor.camera.semantic_segmentation"
@@ -73,4 +73,4 @@ camera-semseg:
   width: 640
   height: 480
   fov: 90
-  sensor_tick: 0.1
+  sensor_tick: 0.05

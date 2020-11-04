@@ -52,7 +52,7 @@ private:
 	static std::vector<const MassAgent*>& agents();
 	// state
 	freicar::map::Map& map_instance_;
-	uint8 id_;
+	uint16 id_;
 	float x_, y_, z_;
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;

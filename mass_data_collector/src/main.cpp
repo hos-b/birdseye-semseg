@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <thread>
 #include <unistd.h>
 #include <csignal>
 #include <sstream>
@@ -10,19 +11,29 @@
 #include <ros/package.h>
 
 #include "mass_agent/mass_agent.h"
+#include "ros/init.h"
 
 #define RANDOM_SEED 135
 #define MAP_INIT_SLEEP 2.0
 #define MAP_DENSIFICATION_LIMIT 0.22f
-#define CALRA_PORT 2000
+#define CALRA_PORT 2000 // NOLINT
+
+using namespace std::chrono_literals;
 
 void InitializeFreicarMap(freicar::map::ThriftMapProxy& proxy);
+void inter(int signo) {
+	(void)signo;
+	std::cout << "shutting down" << std::endl;
+	ros::shutdown();
+}
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "mass_data_collector");
 	std::shared_ptr<ros::NodeHandle> node_handle = std::make_shared<ros::NodeHandle>();
-	size_t number_of_agents = 0;
+	signal(SIGINT, inter);
+
 	// reading command line args
+	size_t number_of_agents = 0;
 	if (argc != 2) {
 		number_of_agents = 1;
 		std::cout << "use: rosrun mass_data_collector <number of agents>" << std::endl;
@@ -34,13 +45,16 @@ int main(int argc, char **argv)
 	InitializeFreicarMap(map_proxy);
 	ROS_INFO("starting data collection...");
 	srand(RANDOM_SEED);
-	std::vector<MassAgent*> agents;
-	for (size_t i = 0; i < number_of_agents; ++i) {
-		agents.emplace_back(new MassAgent()); // NOLINT
-		agents.back()->ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
-		agents.back()->SetRandomPose();
+	
+	MassAgent agent;
+	agent.ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
+	while (ros::ok()) {
+		agent.SetRandomPose();
+		std::this_thread::sleep_for(1s);
+		ros::spinOnce();
 	}
-	ros::spin();
+	std::cout << "destroying agent" << std::endl;
+	agent.~MassAgent(); 
 	return 0;
 }
 
