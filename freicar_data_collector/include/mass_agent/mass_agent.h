@@ -1,20 +1,24 @@
 #ifndef __AISCAR_RL_AGENT__
 #define __AISCAR_RL_AGENT__
 
+#include <opencv2/core/hal/interface.h>
 #include <string>
 #include <memory>
 #include <thread>
 
-#include <ros/ros.h>
-// #include <sensor_msgs/Image.h>
-#include "carla_agent/sensor_structs.h"
+#include "map_core/freicar_map.h"
+#include "mass_agent/sensor_structs.h"
+#include "freicar_map/thrift_map_proxy.h"
 
+// Eigen stuff
 #include <Eigen/Dense>
+
+// OpenCV stuff
 #include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-////CARLA STUFF
+// CARLA stuff
 #include <carla/client/Map.h>
 #include <carla/client/World.h>
 #include <carla/client/Client.h>
@@ -22,37 +26,40 @@
 #include <carla/client/BlueprintLibrary.h>
 #include <carla/client/TimeoutException.h>
 #include <carla/geom/Transform.h>
+#include <vector>
+
+// Open3D stuff ?
 
 namespace cc = carla::client;
 
-class CarlaAgent
+class MassAgent
 {
 public:
-	~CarlaAgent();
-	CarlaAgent(const CarlaAgent&) = delete;
-	const CarlaAgent& operator=(const CarlaAgent&) = delete;
-	CarlaAgent(unsigned long thread_sleep_ms);
+	~MassAgent();
+	MassAgent(const MassAgent&) = delete;
+	const MassAgent& operator=(const MassAgent&) = delete;
+	MassAgent(MassAgent&&) = delete;
+	const MassAgent& operator=(MassAgent&&) = delete;
+	explicit MassAgent();
 	void ActivateCarlaAgent(const std::string &address, unsigned int port);
-	void StopAgentThread();
-	void SetupCallbacks();
+	void SetRandomPose();
+
 private:
-	void Step(unsigned int thread_sleep_ms);
+	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
+	[[nodiscard]] std::tuple<float, float, float, float> GetRandomInitialPose();
 	void SetupSensors();
 	void DestroyAgent();
-	
-	// agent's state
-	std::thread *agent_thread_;
-	bool running_;
-	unsigned long thread_sleep_ms_;
+	static std::vector<const MassAgent*>& agents();
+	// state
+	freicar::map::Map& map_instance_;
+	uint8 id_;
+	float x_, y_, z_;
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	CarlaCamera front_cam_;
     CarlaSemanticCamera semseg_cam_;
-    CarlaDepthCamera depth_cam_;
-    bool sync_trigger_rgb;
-    bool sync_trigger_depth;
-    bool sync_trigger_sem;
+	CarlaDepthCamera depth_cam_;
 };
 
 

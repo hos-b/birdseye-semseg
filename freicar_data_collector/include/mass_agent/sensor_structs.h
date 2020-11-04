@@ -20,17 +20,20 @@ struct CarlaCamera {
     float shift_x;
     float margin_y;
     float shift_y;
+    size_t count;
 };
 
 struct CarlaDepthCamera : public CarlaCamera {
     boost::shared_ptr<carla::client::Sensor> sensor;
     Eigen::Matrix<float, 3, 3> intrinsics;
+    size_t count;
 };
 
 struct CarlaSemanticCamera : public CarlaCamera {
     cv::Mat carla_image;
     boost::shared_ptr<carla::client::Sensor> sensor;
     Eigen::Matrix<float, 3, 3> intrinsics;
+    size_t count;
 };
 
 

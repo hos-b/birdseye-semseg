@@ -12,7 +12,6 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 find_package(OpenCV 4 REQUIRED)
 find_package (Eigen3 3 REQUIRED)
-# find_package(PCL REQUIRED COMPONENTS)
 
 # CARLA related stuff -------------------------------------------------------
 if (NOT DEFINED ENV{CARLA_CXX_API})
@@ -30,7 +29,7 @@ find_package(catkin REQUIRED COMPONENTS
 	freicar_map
 )
 # HDF5 lib ------------------------------------------------------------------
-# CMAKE_PREFIX_PATH should only be appended after catkin find_package
+# CMAKE_PREFIX_PATH should only be appended after catkin find_package (idk)
 list(APPEND CMAKE_PREFIX_PATH $ENV{LIBHDF5_ROOT})
 find_package (HDF5) # NAMES hdf5 COMPONENTS C ${SEARCH_TYPE}
 
@@ -52,7 +51,7 @@ include_directories(
 	${EIGEN3_INCLUDE_DIR}
 	$ENV{CARLA_CXX_API}/include
 	$ENV{CARLA_CXX_API}/include/system
-	# ${SUBDIRS}
+	# ${Open3D_INCLUDE_DIRS} not necessary
 )
 
 # HDF5 api for the dataset --------------------------------------------------
@@ -71,18 +70,19 @@ set_target_properties(hdf5_dataset PROPERTIES CXX_STANDARD 17)
 # data collection executable ------------------------------------------------
 add_executable(${PROJECT_NAME}
 	src/main.cpp
-	src/carla_agent/carla_agent.cpp
+	src/mass_agent/mass_agent.cpp
 )
+
 target_link_libraries(${PROJECT_NAME}
-	${CMAKE_THREAD_LIBS_INIT}
 	${catkin_LIBRARIES}
 	${CARLA_LIBRARIES}
 	${OpenCV_LIBS}
-	# $ENV{CARLA_CXX_API}/lib/libDetourCrowd.a
-	# $ENV{CARLA_CXX_API}/lib/libDetour.a
-	# $ENV{CARLA_CXX_API}/lib/librpc.a
+	$ENV{CARLA_CXX_API}/lib/libDetourCrowd.a
+	$ENV{CARLA_CXX_API}/lib/libDetour.a
+	$ENV{CARLA_CXX_API}/lib/librpc.a
 	hdf5_dataset
-	Eigen3::Eigen
 	yaml-cpp
+	Open3D
+	Open3D_3rdparty_jsoncpp
 	pthread
 )
