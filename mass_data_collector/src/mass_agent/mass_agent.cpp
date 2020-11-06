@@ -2,25 +2,25 @@
 #include "mass_agent/mass_agent.h"
 #include "mass_agent/agent_config.h"
 
-#include <cstddef>
-#include <cstdint>
 #include <cstdlib>
 #include <iterator>
+#include <opencv2/core/hal/interface.h>
 #include <opencv2/highgui.hpp>
 #include <opencv2/imgcodecs.hpp>
+#include <png.h>
+#include <string>
+#include <yaml-cpp/yaml.h>
 #include <ros/package.h>
 #include <thread>
 #include <tuple>
-#include <yaml-cpp/yaml.h>
 #include <cmath>
 
-#include <open3d/camera/PinholeCameraIntrinsic.h>
-#include <open3d/io/FileFormatIO.h>
-#include <open3d/Open3D.h>
+// #include <open3d/Open3D.h>
+// #include <open3d/io/FileFormatIO.h>
+// #include <open3d/camera/PinholeCameraIntrinsic.h>
 
 using namespace std::chrono_literals;
 namespace cg = carla::geom;
-namespace csd = carla::sensor::data;
 
 std::vector<const MassAgent*>& MassAgent::agents() {
 	static std::vector<const MassAgent*> activte_agents;
@@ -35,7 +35,6 @@ MassAgent::MassAgent() : map_instance_(freicar::map::Map::GetInstance()) {
 	agents().emplace_back(this);
 	std::cout << "created mass-agent-" << id_ << std::endl;
 }
-
 /* destructor */
 MassAgent::~MassAgent() {
 	// releasing resources
@@ -134,26 +133,20 @@ void MassAgent::SetupSensors() {
 		// register a callback to publish images
 		front_cam_.sensor->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 			auto image = boost::static_pointer_cast<csd::Image>(data);
-			auto image_view = carla::image::ImageView::MakeView(*image);
-			auto rgb_view = boost::gil::color_converted_view<boost::gil::rgb8_pixel_t>(image_view);
-			using pixel = decltype(rgb_view)::value_type;
-			static_assert(sizeof(pixel) == 3, "R, G & B");
-			pixel raw_data[rgb_view.width() * rgb_view.height()];
-			boost::gil::copy_pixels(rgb_view, boost::gil::interleaved_view(rgb_view.width(),
-																		   rgb_view.height(),
-																		   raw_data,
-																		   rgb_view.width() * sizeof(pixel)));
-			front_cam_.carla_image = cv::Mat(rgb_view.height(), rgb_view.width(), CV_8UC3, raw_data);
-			if (++front_cam_.count % 5 == 0) {
-				cv::imshow("front_cam", front_cam_.carla_image);
-				cv::waitKey(20); // NOLINT
+			// auto image_view = carla::image::ImageView::MakeView(*image);
+			// static_assert(sizeof(decltype(image_view)::value_type) == 4, "R, G & B and A for some reason");
+			front_cam_.carla_image = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
+			if (++front_cam_.count == 1) {
+				cv::imwrite("/export/home/aiscar2/Desktop/test_rgb.png", front_cam_.carla_image);
+				// cv::imshow("front_cam", front_cam_.carla_image);
+				// cv::waitKey(20); // NOLINT
 			}
 		
 		});
 	}
 	// depth camera
 	YAML::Node depth_cam_node = base["camera-depth"];
-	if (depth_cam_node.IsDefined()) {
+	if (depth_cam_node.IsDefined()) {;
 		std::cout << "setting up front depth camera" << std::endl;
 		// usual camera info stuff
 		auto cam_blueprint = *bp_library->Find(depth_cam_node["type"].as<std::string>());
@@ -178,21 +171,16 @@ void MassAgent::SetupSensors() {
 		// register a callback to publish images
 		depth_cam_.sensor->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 			auto image = boost::static_pointer_cast<csd::Image>(data);
-			auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*image),
-																			  carla::image::ColorConverter::LogarithmicDepth());
+			// auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*image),
+			// 																     carla::image::ColorConverter::LogarithmicDepth());
 			// auto image_view = carla::image::ImageView::MakeView(*image);
-			auto grayscale_view = boost::gil::color_converted_view<boost::gil::gray8_pixel_t>(image_view);
-			using pixel = decltype(grayscale_view)::value_type;
-			static_assert(sizeof(pixel) == 1, "single channel");
-			pixel raw_data[grayscale_view.width() * grayscale_view.height()];
-			boost::gil::copy_pixels(grayscale_view, boost::gil::interleaved_view(grayscale_view.width(),
-																				 grayscale_view.height(),
-																				 raw_data,
-																				 grayscale_view.width() * sizeof(pixel)));
-			depth_cam_.carla_image = cv::Mat(grayscale_view.height(), grayscale_view.width(), CV_8UC1, raw_data);
-			if (++depth_cam_.count % 5 == 0) {
-				cv::imshow("depth_cam", depth_cam_.carla_image);
-				cv::waitKey(20); // NOLINT
+			depth_cam_.carla_image = DecodeToDepthMat(image);
+			if (++depth_cam_.count == 1) {
+			 	cv::imwrite("/export/home/aiscar2/Desktop/test_depth.png", depth_cam_.carla_image);
+				auto logmat = DecodeToLogarithmicDepthMat(image);
+				cv::imwrite("/export/home/aiscar2/Desktop/test_depthl.png", logmat);
+				// cv::imshow("depth_cam", depth_cam_.carla_image);
+				// cv::waitKey(20); // NOLINT
 			}
 		});
 	}
@@ -222,23 +210,78 @@ void MassAgent::SetupSensors() {
 		// callback
 		semseg_cam_.sensor->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 			auto image = boost::static_pointer_cast<csd::Image>(data);
-			auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*image), 
-																			  carla::image::ColorConverter::CityScapesPalette());
-			auto rgb_view = boost::gil::color_converted_view<boost::gil::rgb8_pixel_t>(image_view);
-			using pixel = decltype(rgb_view)::value_type;
-			static_assert(sizeof(pixel) == 3, "R, G & B");
-			pixel raw_data[rgb_view.width() * rgb_view.height()];
-			boost::gil::copy_pixels(rgb_view, boost::gil::interleaved_view(rgb_view.width(),
-																		   rgb_view.height(),
-																		   raw_data,
-																		   rgb_view.width() * sizeof(pixel)));
-			semseg_cam_.carla_image = cv::Mat(rgb_view.height(), rgb_view.width(), CV_8UC3, raw_data);
-			if (++semseg_cam_.count % 5 == 0) {
-				cv::imshow("semseg_cam", semseg_cam_.carla_image);
+			semseg_cam_.carla_image = DecodeToSemSegMat(image);
+			if (++semseg_cam_.count == 1) {
+				cv::imwrite("/export/home/aiscar2/Desktop/test_semseg.png", semseg_cam_.carla_image);
+				auto csp = DecodeToCityScapesPalleteSemSegMat(image);
+				cv::imwrite("/export/home/aiscar2/Desktop/test_semsegcs.png", csp);
 				cv::waitKey(20); // NOLINT
 			}
 		});
 	}
+}
+/* converts an rgb coded matrix into an OpenCV mat containg real depth values
+   returns CV_32FC1
+*/
+cv::Mat MassAgent::DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+	auto color_coded_depth = cv::Mat(carla_image->GetHeight(),
+									 carla_image->GetWidth(),
+									 CV_8UC4,
+									 carla_image->data());
+	std::vector<cv::Mat> splits;
+	cv::split(color_coded_depth, splits);
+	cv::Mat real_depth(color_coded_depth.rows, color_coded_depth.cols, CV_32FC1);
+	cv::Mat B;
+	cv::Mat G;
+	cv::Mat R;
+	splits[0].convertTo(B, CV_32FC1);
+	splits[1].convertTo(G, CV_32FC1);
+	splits[2].convertTo(R, CV_32FC1);
+	// carla's color coded depth to real depth conversion
+	real_depth = ((R + G * 256.0f + B * (256.0f * 256.0f)) / (256.0f * 256.0f * 256.0f - 1.0f)) * 1000.0f; // NOLINT
+	return real_depth;
+}
+/* converts an rgb coded depth image into an OpenCV mat containg logarithmic depth values (good for visualization)
+   returns CV_8UC1
+*/
+cv::Mat MassAgent::DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image),
+																	  carla::image::ColorConverter::LogarithmicDepth());
+	static_assert(sizeof(decltype(image_view)::value_type) == 1, "single channel");
+	decltype(image_view)::value_type raw_data[image_view.width() * image_view.height()];
+	boost::gil::copy_pixels(image_view, boost::gil::interleaved_view(image_view.width(),
+																	 image_view.height(),
+																	 raw_data,
+																	 image_view.width()));
+	// if not clone, corrupted stack memory will be used
+	return cv::Mat(image_view.height(), image_view.width(), CV_8UC1, raw_data).clone();
+}
+/* extractss the red channel of the BGRA image which contains semantic data
+   returns CV_8UC1
+ */
+cv::Mat MassAgent::DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+	auto semseg_mat_4c = cv::Mat(carla_image->GetHeight(), carla_image->GetWidth(), CV_8UC4, carla_image->data());
+	std::vector<cv::Mat> splits;
+	cv::split(semseg_mat_4c, splits);
+	return splits[2]; // BG->R<-A
+}
+/* converts the semantic data to an RGB image with cityscapes' semantic pallete
+   returns CV_8UC3
+*/
+cv::Mat MassAgent::DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+	// TODO(hosein): do the pallete yourself with opencv
+	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image), 
+																	  carla::image::ColorConverter::CityScapesPalette());
+	auto rgb_view = boost::gil::color_converted_view<boost::gil::rgb8_pixel_t>(image_view);
+	using pixel = decltype(rgb_view)::value_type;
+	static_assert(sizeof(pixel) == 3, "RGB");
+	pixel raw_data[rgb_view.width() * rgb_view.height()];
+	boost::gil::copy_pixels(rgb_view, boost::gil::interleaved_view(rgb_view.width(),
+																   rgb_view.height(),
+																   raw_data,
+																   rgb_view.width() * sizeof(pixel)));
+	// if not clone, corrupted stack memory will be used
+	return cv::Mat(image_view.height(), image_view.width(), CV_8UC3, raw_data).clone();
 }
 /* destroys the agent in the simulation & its sensors. */
 void MassAgent::DestroyAgent() {

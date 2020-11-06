@@ -31,6 +31,7 @@
 // Open3D stuff ?
 
 namespace cc = carla::client;
+namespace csd = carla::sensor::data;
 
 class MassAgent
 {
@@ -45,8 +46,12 @@ public:
 	void SetRandomPose();
 
 private:
+	static cv::Mat DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
+	static cv::Mat DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
+	static cv::Mat DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
+	static cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
+	
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
-	[[nodiscard]] std::tuple<float, float, float, float> GetRandomInitialPose();
 	void SetupSensors();
 	void DestroyAgent();
 	static std::vector<const MassAgent*>& agents();
