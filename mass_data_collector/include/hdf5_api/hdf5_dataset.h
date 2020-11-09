@@ -4,6 +4,7 @@
 #include <iostream>
 #include <string>
 #include <H5Cpp.h>
+#include <tiff.h>
 
 namespace statics{
 constexpr static unsigned int name_length = 10;
@@ -21,11 +22,11 @@ constexpr static unsigned int open_mask = 0b0011;
 constexpr static unsigned int dset_mask = 0b1100;
 constexpr static unsigned int comp_type_mask = 0b1100000;
 constexpr static unsigned int comp_lvl_mask  = 0b0011111;
-}
+} // namespace statics
 struct MASSDataType {
     char name[statics::name_length];
-    unsigned char front_rgb[statics::front_rgb_channels][statics::front_rgb_height][statics::front_rgb_width];
-    unsigned short top_semseg[statics::top_semseg_height][statics::top_semseg_width];
+    uint8 front_rgb[statics::front_rgb_channels][statics::front_rgb_height][statics::front_rgb_width];
+    uint8 top_semseg[statics::top_semseg_height][statics::top_semseg_width];
     float top_depth[statics::top_depth_height][statics::top_depth_width];
     float transform[statics::transform_length];
 };
@@ -48,10 +49,14 @@ public:
     HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
                 unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size);
     HDF5Dataset(const HDF5Dataset&) = delete;
+    HDF5Dataset& operator=(const HDF5Dataset&) = delete;
+    HDF5Dataset& operator=(HDF5Dataset&&) = delete;
     HDF5Dataset(HDF5Dataset&&) = delete;
+    ~HDF5Dataset() = default;
+
     void AppendElement(const MASSDataType* mass_data);
-    MASSDataType ReadElement(size_t index) const;
-    std::pair<hsize_t, hsize_t> GetCurrentSize() const;
+    [[nodiscard]] MASSDataType ReadElement(size_t index) const;
+    [[nodiscard]] std::pair<hsize_t, hsize_t> GetCurrentSize() const;
     void Close();
 private:
     void InitializeCompoundType();

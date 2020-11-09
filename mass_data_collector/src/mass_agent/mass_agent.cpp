@@ -1,27 +1,23 @@
-#include <carla/geom/Vector3D.h>
 #include "mass_agent/mass_agent.h"
-#include "mass_agent/agent_config.h"
+#include "config/agent_config.h"
+#include "config/geom_config.h"
 
 #include <cstdlib>
-#include <iterator>
-#include <opencv2/core/hal/interface.h>
-#include <opencv2/highgui.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <png.h>
-#include <string>
-#include <yaml-cpp/yaml.h>
-#include <ros/package.h>
 #include <thread>
 #include <tuple>
 #include <cmath>
+#include <ros/package.h>
+#include <yaml-cpp/yaml.h>
+#include <opencv2/imgcodecs.hpp>
 
-// #include <open3d/Open3D.h>
-// #include <open3d/io/FileFormatIO.h>
-// #include <open3d/camera/PinholeCameraIntrinsic.h>
+#include <open3d/camera/PinholeCameraIntrinsic.h>
+#include <open3d/io/FileFormatIO.h>
+#include <open3d/Open3D.h>
 
 using namespace std::chrono_literals;
 namespace cg = carla::geom;
 
+namespace agent {
 std::vector<const MassAgent*>& MassAgent::agents() {
 	static std::vector<const MassAgent*> activte_agents;
 	return activte_agents;
@@ -35,6 +31,7 @@ MassAgent::MassAgent() : map_instance_(freicar::map::Map::GetInstance()) {
 	agents().emplace_back(this);
 	std::cout << "created mass-agent-" << id_ << std::endl;
 }
+
 /* destructor */
 MassAgent::~MassAgent() {
 	// releasing resources
@@ -110,194 +107,26 @@ void MassAgent::SetupSensors() {
 	YAML::Node front_cam_node = base["camera-front"];
 	// front rgb cam
 	if (front_cam_node.IsDefined()) {
-		std::cout << "setting up front rgb camera" << std::endl;
-		auto cam_blueprint = *bp_library->Find(front_cam_node["type"].as<std::string>());
-		// setting camera attributes from the yaml
-		for (YAML::const_iterator it = front_cam_node.begin(); it != front_cam_node.end(); ++it) {
-			auto key = it->first.as<std::string>();
-			if (cam_blueprint.ContainsAttribute(key)) {
-				cam_blueprint.SetAttribute(key, it->second.as<std::string>());
-			}
-		}
-		// spawn the camera attached to the vehicle
-		auto camera_transform = cg::Transform{
-			cg::Location{front_cam_node["x"].as<float>(),
-						 front_cam_node["y"].as<float>(),
-						 front_cam_node["z"].as<float>()},
-			cg::Rotation{front_cam_node["pitch"].as<float>(),
-						 front_cam_node["yaw"].as<float>(),
-						 front_cam_node["roll"].as<float>()}};
-		auto generic_actor = vehicle_->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle_.get());
-		front_cam_.sensor = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-		front_cam_.count = 0;
-		// register a callback to publish images
-		front_cam_.sensor->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-			auto image = boost::static_pointer_cast<csd::Image>(data);
-			// auto image_view = carla::image::ImageView::MakeView(*image);
-			// static_assert(sizeof(decltype(image_view)::value_type) == 4, "R, G & B and A for some reason");
-			front_cam_.carla_image = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
-			if (++front_cam_.count == 1) {
-				cv::imwrite("/export/home/aiscar2/Desktop/test_rgb.png", front_cam_.carla_image);
-				// cv::imshow("front_cam", front_cam_.carla_image);
-				// cv::waitKey(20); // NOLINT
-			}
-		
-		});
+		front_cam_ = std::make_unique<data::RGBCamera>(front_cam_node, bp_library, vehicle_, true);
+		front_cam_->CaputreOnce();
 	}
 	// depth camera
 	YAML::Node depth_cam_node = base["camera-depth"];
-	if (depth_cam_node.IsDefined()) {;
-		std::cout << "setting up front depth camera" << std::endl;
-		// usual camera info stuff
-		auto cam_blueprint = *bp_library->Find(depth_cam_node["type"].as<std::string>());
-		// setting camera attributes from the yaml
-		for (YAML::const_iterator it = depth_cam_node.begin(); it != depth_cam_node.end(); ++it) {
-			auto key = it->first.as<std::string>();
-			if (cam_blueprint.ContainsAttribute(key)) {
-				cam_blueprint.SetAttribute(key, it->second.as<std::string>());
-			}
-		}
-		// spawn the depth camera attached to the vehicle
-		auto camera_transform = cg::Transform{
-			cg::Location{depth_cam_node["x"].as<float>(),
-						 depth_cam_node["y"].as<float>(),
-						 depth_cam_node["z"].as<float>()},
-			cg::Rotation{depth_cam_node["pitch"].as<float>(),
-						 depth_cam_node["yaw"].as<float>(),
-						 depth_cam_node["roll"].as<float>()}};
-		auto generic_actor = vehicle_->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle_.get());
-		depth_cam_.sensor = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-		depth_cam_.count = 0;
-		// register a callback to publish images
-		depth_cam_.sensor->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-			auto image = boost::static_pointer_cast<csd::Image>(data);
-			// auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*image),
-			// 																     carla::image::ColorConverter::LogarithmicDepth());
-			// auto image_view = carla::image::ImageView::MakeView(*image);
-			depth_cam_.carla_image = DecodeToDepthMat(image);
-			if (++depth_cam_.count == 1) {
-			 	cv::imwrite("/export/home/aiscar2/Desktop/test_depth.png", depth_cam_.carla_image);
-				auto logmat = DecodeToLogarithmicDepthMat(image);
-				cv::imwrite("/export/home/aiscar2/Desktop/test_depthl.png", logmat);
-				// cv::imshow("depth_cam", depth_cam_.carla_image);
-				// cv::waitKey(20); // NOLINT
-			}
-		});
-	}
-	// semantic segmentation camera
 	YAML::Node semseg_cam_node = base["camera-semseg"];
-	if (semseg_cam_node.IsDefined()) {
-		std::cout << "setting up front semantic camera" << std::endl;
-		auto cam_blueprint = *bp_library->Find(semseg_cam_node["type"].as<std::string>());
-		// setting camera attributes from the yaml
-		for (YAML::const_iterator it = semseg_cam_node.begin(); it != semseg_cam_node.end(); ++it) {
-			auto key = it->first.as<std::string>();
-			if (cam_blueprint.ContainsAttribute(key)) {
-				cam_blueprint.SetAttribute(key, it->second.as<std::string>());
-			}
-		}
-		// spawn the camera attached to the vehicle.	
-		auto camera_transform = cg::Transform{
-			cg::Location{semseg_cam_node["x"].as<float>(),
-						 semseg_cam_node["y"].as<float>(),
-						 semseg_cam_node["z"].as<float>()},
-			cg::Rotation{semseg_cam_node["pitch"].as<float>(),
-						 semseg_cam_node["yaw"].as<float>(),
-						 semseg_cam_node["roll"].as<float>()}};
-		auto generic_actor = vehicle_->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle_.get());
-		semseg_cam_.sensor = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-		semseg_cam_.count = 0;
-		// callback
-		semseg_cam_.sensor->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-			auto image = boost::static_pointer_cast<csd::Image>(data);
-			semseg_cam_.carla_image = DecodeToSemSegMat(image);
-			if (++semseg_cam_.count == 1) {
-				cv::imwrite("/export/home/aiscar2/Desktop/test_semseg.png", semseg_cam_.carla_image);
-				auto csp = DecodeToCityScapesPalleteSemSegMat(image);
-				cv::imwrite("/export/home/aiscar2/Desktop/test_semsegcs.png", csp);
-				cv::waitKey(20); // NOLINT
-			}
-		});
+	if (depth_cam_node.IsDefined() && semseg_cam_node.IsDefined()) {
+		semantic_pc_cam_center_ = std::make_unique<data::SemanticPointCloudCamera>(depth_cam_node,
+																 semseg_cam_node,
+																 bp_library,
+																 vehicle_, true);
+		semantic_pc_cam_center_->CaputreOnce();
 	}
-}
-/* converts an rgb coded matrix into an OpenCV mat containg real depth values
-   returns CV_32FC1
-*/
-cv::Mat MassAgent::DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
-	auto color_coded_depth = cv::Mat(carla_image->GetHeight(),
-									 carla_image->GetWidth(),
-									 CV_8UC4,
-									 carla_image->data());
-	std::vector<cv::Mat> splits;
-	cv::split(color_coded_depth, splits);
-	cv::Mat real_depth(color_coded_depth.rows, color_coded_depth.cols, CV_32FC1);
-	cv::Mat B;
-	cv::Mat G;
-	cv::Mat R;
-	splits[0].convertTo(B, CV_32FC1);
-	splits[1].convertTo(G, CV_32FC1);
-	splits[2].convertTo(R, CV_32FC1);
-	// carla's color coded depth to real depth conversion
-	real_depth = ((R + G * 256.0f + B * (256.0f * 256.0f)) / (256.0f * 256.0f * 256.0f - 1.0f)) * 1000.0f; // NOLINT
-	return real_depth;
-}
-/* converts an rgb coded depth image into an OpenCV mat containg logarithmic depth values (good for visualization)
-   returns CV_8UC1
-*/
-cv::Mat MassAgent::DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
-	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image),
-																	  carla::image::ColorConverter::LogarithmicDepth());
-	static_assert(sizeof(decltype(image_view)::value_type) == 1, "single channel");
-	decltype(image_view)::value_type raw_data[image_view.width() * image_view.height()];
-	boost::gil::copy_pixels(image_view, boost::gil::interleaved_view(image_view.width(),
-																	 image_view.height(),
-																	 raw_data,
-																	 image_view.width()));
-	// if not clone, corrupted stack memory will be used
-	return cv::Mat(image_view.height(), image_view.width(), CV_8UC1, raw_data).clone();
-}
-/* extractss the red channel of the BGRA image which contains semantic data
-   returns CV_8UC1
- */
-cv::Mat MassAgent::DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
-	auto semseg_mat_4c = cv::Mat(carla_image->GetHeight(), carla_image->GetWidth(), CV_8UC4, carla_image->data());
-	std::vector<cv::Mat> splits;
-	cv::split(semseg_mat_4c, splits);
-	return splits[2]; // BG->R<-A
-}
-/* converts the semantic data to an RGB image with cityscapes' semantic pallete
-   returns CV_8UC3
-*/
-cv::Mat MassAgent::DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
-	// TODO(hosein): do the pallete yourself with opencv
-	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image), 
-																	  carla::image::ColorConverter::CityScapesPalette());
-	auto rgb_view = boost::gil::color_converted_view<boost::gil::rgb8_pixel_t>(image_view);
-	using pixel = decltype(rgb_view)::value_type;
-	static_assert(sizeof(pixel) == 3, "RGB");
-	pixel raw_data[rgb_view.width() * rgb_view.height()];
-	boost::gil::copy_pixels(rgb_view, boost::gil::interleaved_view(rgb_view.width(),
-																   rgb_view.height(),
-																   raw_data,
-																   rgb_view.width() * sizeof(pixel)));
-	// if not clone, corrupted stack memory will be used
-	return cv::Mat(image_view.height(), image_view.width(), CV_8UC3, raw_data).clone();
 }
 /* destroys the agent in the simulation & its sensors. */
 void MassAgent::DestroyAgent() {
 	std::cout << "destroying mass-agent-" << id_ << std::endl;
-	if (front_cam_.sensor) {
-		front_cam_.sensor->Destroy();
-		front_cam_.sensor = nullptr;
-	}
-	if (depth_cam_.sensor) {
-		depth_cam_.sensor->Destroy();
-		depth_cam_.sensor = nullptr;
-	}
-	if (semseg_cam_.sensor) {
-		semseg_cam_.sensor->Destroy();
-		semseg_cam_.sensor = nullptr;
-	}
+	// TODO(hosein): fix
+	front_cam_->Destroy();
+	semantic_pc_cam_center_->Destroy();
 	if (vehicle_) {
 		vehicle_->Destroy();
 		vehicle_ = nullptr;
@@ -311,3 +140,5 @@ void MassAgent::DestroyAgent() {
 std::tuple<float, float, float> MassAgent::GetPostion() const {
 	return std::make_tuple(x_, y_, z_);
 }
+
+} // namespace agent

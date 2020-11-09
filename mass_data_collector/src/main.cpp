@@ -46,15 +46,14 @@ int main(int argc, char **argv)
 	ROS_INFO("starting data collection...");
 	srand(RANDOM_SEED);
 	
-	MassAgent agent;
+	agent::MassAgent agent;
 	agent.ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
 	while (ros::ok()) {
 		agent.SetRandomPose();
 		std::this_thread::sleep_for(1s);
 		ros::spinOnce();
 	}
-	std::cout << "destroying agent" << std::endl;
-	agent.~MassAgent(); 
+	// agent.~MassAgent(); 
 	return 0;
 }
 

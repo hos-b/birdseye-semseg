@@ -54,7 +54,7 @@ include_directories(
 	# ${Open3D_INCLUDE_DIRS} not necessary
 )
 
-# HDF5 api for the dataset --------------------------------------------------
+# HDF5 lib for the dataset --------------------------------------------------
 add_library(hdf5_dataset STATIC 
 	${PROJECT_SOURCE_DIR}/src/hdf5_api/hdf5_dataset.cpp
 )
@@ -70,19 +70,21 @@ set_target_properties(hdf5_dataset PROPERTIES CXX_STANDARD 17)
 # data collection executable ------------------------------------------------
 add_executable(${PROJECT_NAME}
 	src/main.cpp
+	src/geometry/camera.cpp
+	# src/geometry/pointcloud.cpp
 	src/mass_agent/mass_agent.cpp
+	src/mass_agent/sensors.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}
-	${catkin_LIBRARIES}
-	${CARLA_LIBRARIES}
-	${OpenCV_LIBS}
 	$ENV{CARLA_CXX_API}/lib/libDetourCrowd.a
 	$ENV{CARLA_CXX_API}/lib/libDetour.a
 	$ENV{CARLA_CXX_API}/lib/librpc.a
+	${catkin_LIBRARIES}
+	${CARLA_LIBRARIES}
+	${OpenCV_LIBS}
 	hdf5_dataset
 	yaml-cpp
 	Open3D
 	Open3D_3rdparty_jsoncpp
-	pthread
 )

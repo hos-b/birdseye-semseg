@@ -1,13 +1,12 @@
 #ifndef __AISCAR_RL_AGENT__
 #define __AISCAR_RL_AGENT__
 
-#include <opencv2/core/hal/interface.h>
 #include <string>
 #include <memory>
 #include <thread>
 
 #include "map_core/freicar_map.h"
-#include "mass_agent/sensor_structs.h"
+#include "mass_agent/sensors.h"
 #include "freicar_map/thrift_map_proxy.h"
 
 // Eigen stuff
@@ -21,9 +20,7 @@
 // CARLA stuff
 #include <carla/client/Map.h>
 #include <carla/client/World.h>
-#include <carla/client/Client.h>
-#include <carla/client/ActorBlueprint.h>
-#include <carla/client/BlueprintLibrary.h>
+
 #include <carla/client/TimeoutException.h>
 #include <carla/geom/Transform.h>
 #include <vector>
@@ -31,7 +28,9 @@
 // Open3D stuff ?
 
 namespace cc = carla::client;
-namespace csd = carla::sensor::data;
+
+
+namespace agent {
 
 class MassAgent
 {
@@ -46,10 +45,6 @@ public:
 	void SetRandomPose();
 
 private:
-	static cv::Mat DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
-	static cv::Mat DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
-	static cv::Mat DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
-	static cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image);
 	
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors();
@@ -62,10 +57,11 @@ private:
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
-	CarlaCamera front_cam_;
-    CarlaSemanticCamera semseg_cam_;
-	CarlaDepthCamera depth_cam_;
+
+	// carla sensors
+	std::unique_ptr<data::RGBCamera> front_cam_;
+	std::unique_ptr<data::SemanticPointCloudCamera> semantic_pc_cam_center_;	
 };
 
-
+} // namespace agent
 #endif
