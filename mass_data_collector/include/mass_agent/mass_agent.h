@@ -8,6 +8,7 @@
 #include "map_core/freicar_map.h"
 #include "mass_agent/sensors.h"
 #include "freicar_map/thrift_map_proxy.h"
+#include "geometry/semantic_cloud.h"
 
 // Eigen stuff
 #include <Eigen/Dense>
@@ -43,7 +44,7 @@ public:
 	explicit MassAgent();
 	void ActivateCarlaAgent(const std::string &address, unsigned int port);
 	void SetRandomPose();
-
+	void GenerateDataPoint();
 private:
 	
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
@@ -54,6 +55,7 @@ private:
 	freicar::map::Map& map_instance_;
 	uint16 id_;
 	float x_, y_, z_;
+	geom::SemanticCloud semantic_cloud_;
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;

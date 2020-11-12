@@ -10,10 +10,6 @@
 #include <yaml-cpp/yaml.h>
 #include <opencv2/imgcodecs.hpp>
 
-#include <open3d/camera/PinholeCameraIntrinsic.h>
-#include <open3d/io/FileFormatIO.h>
-#include <open3d/Open3D.h>
-
 using namespace std::chrono_literals;
 namespace cg = carla::geom;
 
@@ -133,6 +129,15 @@ void MassAgent::DestroyAgent() {
 	}
 	if (carla_client_) {
 		carla_client_.reset();
+	}
+}
+/* checks the buffers and creates a  */
+void MassAgent::GenerateDataPoint() {
+	auto[success, semantic, depth] = semantic_pc_cam_center_->pop();
+	if (success) {
+		semantic_cloud_.AddSemanticDepthImage(semantic_pc_cam_center_->geometry(), semantic, depth);
+		semantic_cloud_.MaskOutlierPoints(front_cam_->geometry());
+		semantic_cloud_.SaveCloud("/home/hosein/scloud_filtered.pcl");
 	}
 }
 

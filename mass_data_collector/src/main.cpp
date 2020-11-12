@@ -11,7 +11,6 @@
 #include <ros/package.h>
 
 #include "mass_agent/mass_agent.h"
-#include "ros/init.h"
 
 #define RANDOM_SEED 135
 #define MAP_INIT_SLEEP 2.0
@@ -51,6 +50,7 @@ int main(int argc, char **argv)
 	while (ros::ok()) {
 		agent.SetRandomPose();
 		std::this_thread::sleep_for(1s);
+		agent.GenerateDataPoint();
 		ros::spinOnce();
 	}
 	// agent.~MassAgent(); 

@@ -2,9 +2,10 @@
 #define __CARLA_SENSOR_STRUCTS__
 
 
-#include "geometry/camera.h"
+#include "geometry/camera_geomtry.h"
 #include "config/agent_config.h"
-
+//------------------------------------
+#include <mutex>
 #include <yaml-cpp/yaml.h>
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -20,8 +21,6 @@
 
 
 namespace csd = carla::sensor::data;
-
-
 namespace data
 {
 // conversion prototypes
@@ -40,10 +39,15 @@ public:
 			  bool log = true);
 	void CaputreOnce();
 	void Destroy();
+	size_t count();
+	std::shared_ptr<geom::CameraGeometry> geometry();
+	std::pair <bool, cv::Mat> pop();
 private:
 	bool save_ = false;
 	boost::shared_ptr<carla::client::Sensor> sensor_;
 	std::vector<cv::Mat> images_;
+	std::shared_ptr<geom::CameraGeometry> geometry_;
+	std::mutex buffer_mutex_;
 };
 
 class SemanticPointCloudCamera {
@@ -56,15 +60,22 @@ public:
 			bool log = true);
 	void CaputreOnce();
 	void Destroy();
+
+	size_t count();
+	size_t depth_image_count();
+	size_t semantic_image_count();
+	std::tuple<bool, cv::Mat, cv::Mat> pop();
+	std::shared_ptr<geom::CameraGeometry> geometry();
 private:
 	bool save_depth_ = false;
 	bool save_semantics_ = false;
 	boost::shared_ptr<carla::client::Sensor> depth_sensor_;
 	boost::shared_ptr<carla::client::Sensor> semantic_sensor_;
-	std::unique_ptr<geom::Camera> projection_camera_;
-
+	std::shared_ptr<geom::CameraGeometry> geometry_;
 	std::vector<cv::Mat> semantic_images_;
 	std::vector<cv::Mat> depth_images_;
+	std::mutex semantic_buffer_mutex_;
+	std::mutex depth_buffer_mutex_;
 };
 
 

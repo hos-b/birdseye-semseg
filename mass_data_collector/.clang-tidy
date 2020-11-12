@@ -93,7 +93,7 @@ CheckOptions:
   - key:             cert-oop54-cpp.WarnOnlyIfThisHasSuspiciousField
     value:           '0'
   - key:             cppcoreguidelines-avoid-magic-numbers.IgnoredFloatingPointValues
-    value:           '1.0;100.0;'
+    value:           '1.0;100.0;255.0;2.5;'
   - key:             cppcoreguidelines-avoid-magic-numbers.IgnoredIntegerValues
     value:           '1;2;3;4;'
   - key:             cppcoreguidelines-explicit-virtual-functions.AllowOverrideAndFinal
