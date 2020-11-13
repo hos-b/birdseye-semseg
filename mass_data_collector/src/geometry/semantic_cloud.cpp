@@ -14,7 +14,10 @@ SemanticCloud::SemanticCloud() {
     std::cout << "hello" << std::endl;
 }
 /* converts all pixels in semantic image and their depth into 3D points and adds them to the point cloud  */
-void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry, cv::Mat semantic, cv::Mat depth) { // NOLINT
+void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+                                          const Eigen::Matrix4d& car_transform,
+                                          cv::Mat semantic,
+                                          cv::Mat depth) { // NOLINT
     Eigen::Vector3d pixel_3d_loc;
     cv::Vec3b pixel_color_uc;
     pcl::PointXYZRGB point;
@@ -28,7 +31,7 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
             cloud_[index].r = pixel_color_uc[0]; // NOLINT
             cloud_[index].g = pixel_color_uc[1]; // NOLINT
             cloud_[index].b = pixel_color_uc[2]; // NOLINT
-            pixel_3d_loc = geometry->Reproject(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+            pixel_3d_loc = geometry->Reproject(Eigen::Vector2d(i, j), depth.at<float>(i, j), car_transform);
             cloud_[index].x = pixel_3d_loc.x(); // NOLINT
             cloud_[index].y = pixel_3d_loc.y(); // NOLINT
             cloud_[index].z = pixel_3d_loc.z(); // NOLINT
@@ -37,12 +40,13 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
     }
 }
 /* removes all the points in the point cloud that are not visible in the specified camera geometry */
-void SemanticCloud::MaskOutlierPoints(std::shared_ptr<geom::CameraGeometry> geometry) { // NOLINT
+void SemanticCloud::MaskOutlierPoints(std::shared_ptr<geom::CameraGeometry> geometry,
+                                      const Eigen::Matrix4d& car_transform) { // NOLINT
     auto it = cloud_.points.begin();
     size_t erased = 0;
     size_t survived = 0;
     while (it != cloud_.points.end()) {
-        if (geometry->IsInView(*it, config::kPixelDistanceThreshold)) {
+        if (geometry->IsInView(*it, config::kPixelDistanceThreshold, car_transform)) {
             ++it;
             ++survived;
         } else {

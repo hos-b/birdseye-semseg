@@ -22,7 +22,7 @@ std::vector<const MassAgent*>& MassAgent::agents() {
 MassAgent::MassAgent() : map_instance_(freicar::map::Map::GetInstance()) {
 	// initialize some stuff & things
 	carla_client_ = nullptr;
-	x_ = y_ = z_ = 0;
+	transform_.setZero();
 	id_ = agents().size();
 	agents().emplace_back(this);
 	std::cout << "created mass-agent-" << id_ << std::endl;
@@ -48,6 +48,7 @@ void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port
 			vehicles = blueprint_library->Filter("freicar_10");
 		}
 		carla::client::ActorBlueprint blueprint = (*vehicles)[0];
+		transform_.setIdentity();
 		auto actor = world.TrySpawnActor(blueprint, cg::Transform(cg::Location(cg::Vector3D(0, 0, 0))));
 		if (!actor) {
 			std::cout << "failed to spawn " << "freicar_1" << ". exiting..." << std::endl;
@@ -67,31 +68,46 @@ void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port
 	}
 	SetupSensors();
 }
-/* places the agent on a random point in the map at a random pose */
-void MassAgent::SetRandomPose() {
+/* places the agent on a random point in the map at a random pose, returns true if successful */
+bool MassAgent::SetRandomPose() {
+	// if the sensors have not yet acquired the image from the last pose
+	if (front_cam_->waiting() || semantic_pc_cam_center_->waiting()) {
+		return false;
+	}
 	bool admissable = false;
 	float yaw = 0;
+	float x = 0.0f;
+	float y = 0.0f;
+	float z = 0.0f;
 	while (!admissable) {
 		admissable = true;
 		auto lane_point = map_instance_.GetRandomLanePoint();
-		std::tie(x_, y_, z_) = lane_point.GetCoords();
+		std::tie(x, y, z) = lane_point.GetCoords();
 		yaw = lane_point.GetHeading();
 		for (const auto *agent : agents()) {
 			if (agent->id_ == id_) {
 				continue;
 			}
-			auto distance = std::sqrt((agent->x_ - x_) * (agent->x_ - x_) +
-									  (agent->y_ - y_) * (agent->y_ - y_) +
-									  (agent->z_ - z_) * (agent->z_ - z_));
+			auto distance = std::sqrt((agent->x() - x) * (agent->x() - x) +
+									  (agent->y() - y) * (agent->y() - y) +
+									  (agent->z() - z) * (agent->z() - z));
 			if (distance < config::kMinimumAgentDistance) {
 				admissable = false;
 				break;
 			}
 		}
 	}
+	Eigen::Matrix3d rot;
+	rot = Eigen::AngleAxisd(0.0 * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
+		  Eigen::AngleAxisd(0.0 * config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
+		  Eigen::AngleAxisd(yaw * config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
+    Eigen::Vector3d trans(x, y, z);
+    transform_.block<3, 3>(0, 0) = rot;
+    transform_.block<3, 1>(0, 3) = trans;
 	// CARLA/Unreal' C.S. is left-handed
-	vehicle_->SetTransform(cg::Transform(cg::Location(x_, -y_, z_),
+	vehicle_->SetTransform(cg::Transform(cg::Location(x, -y, z),
 										 cg::Rotation(0, -yaw * config::kToDegrees, 0)));
+	return true;
 }
 /* initializes the structures for the camera, lidar & depth measurements */
 void MassAgent::SetupSensors() {
@@ -133,17 +149,23 @@ void MassAgent::DestroyAgent() {
 }
 /* checks the buffers and creates a  */
 void MassAgent::GenerateDataPoint() {
-	auto[success, semantic, depth] = semantic_pc_cam_center_->pop();
+	auto[success, semantic, depth, car_transform] = semantic_pc_cam_center_->pop();
 	if (success) {
 		semantic_cloud_.AddSemanticDepthImage(semantic_pc_cam_center_->geometry(), semantic, depth);
 		semantic_cloud_.MaskOutlierPoints(front_cam_->geometry());
 		semantic_cloud_.SaveCloud("/home/hosein/scloud_filtered.pcl");
 	}
 }
-
-/* returns the current position of the agent */
-std::tuple<float, float, float> MassAgent::GetPostion() const {
-	return std::make_tuple(x_, y_, z_);
+/* returns x coordinate */
+double MassAgent::x() const {
+	return transform_(0, 3);
 }
-
+/* returns y coordinate */
+double MassAgent::y() const {
+	return transform_(1, 3);
+}
+/* returns z coordinate */
+double MassAgent::z() const {
+	return transform_(2, 3);
+}
 } // namespace agent

@@ -31,8 +31,12 @@ class SemanticCloud
 {
 public:
 	SemanticCloud();
-	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry, cv::Mat semantic, cv::Mat depth);
-	void MaskOutlierPoints(std::shared_ptr<geom::CameraGeometry> geometry);
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   const Eigen::Matrix4d& car_transform,
+							   cv::Mat semantic,
+							   cv::Mat depth);
+	void MaskOutlierPoints(std::shared_ptr<geom::CameraGeometry> geometry,
+						   const Eigen::Matrix4d& car_transform);
 	void SaveCloud(const std::string& path);
 	[[nodiscard]] cv::Mat GetBEV() const;
 

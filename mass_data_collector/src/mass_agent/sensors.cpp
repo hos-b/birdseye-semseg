@@ -1,5 +1,6 @@
 #include "mass_agent/sensors.h"
 #include "geometry/camera_geomtry.h"
+#include <Eigen/src/Core/Matrix.h>
 #include <algorithm>
 #include <memory>
 #include <mutex>
@@ -36,10 +37,7 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
                     rgb_cam_node["roll"].as<float>()}};
     auto generic_actor = vehicle->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle.get());
     sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-    geometry_ = std::make_unique<geom::CameraGeometry>(sensor_,
-                                                       rgb_cam_node["fov"].as<float>(),
-                                                       rgb_cam_node["image_size_x"].as<unsigned int>(),
-                                                       rgb_cam_node["image_size_y"].as<unsigned int>());
+    geometry_ = std::make_shared<geom::CameraGeometry>(rgb_cam_node);
     // register a callback to publish images
     sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
         std::lock_guard<std::mutex> guard(buffer_mutex_);
@@ -65,7 +63,7 @@ void RGBCamera::Destroy() {
     images_.clear();
 }
 /* returns the number of images currently stored in buffer */
-size_t RGBCamera::count() {
+size_t RGBCamera::count() const {
     return images_.size();
 }
 /* returns true and the oldest buffer element. false and empty element if empty */
@@ -80,15 +78,20 @@ std::pair <bool, cv::Mat> RGBCamera::pop() {
     return std::make_pair(empty, oldest);
 }
 /* returns the camera geometry */
-std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() {
+std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() const {
     return geometry_;
+}
+/* returns whether CaptureOnce has been called but we haven't recoreded the sensor data yet */
+bool RGBCamera::waiting() const {
+    return save_;
 }
 // ------------------------ SemnaticPointCloudCamera -----------------------------
 SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& depth_cam_node,
             const YAML::Node& semseg_cam_node,
 			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
 			boost::shared_ptr<carla::client::Vehicle> vehicle,						// NOLINT
-			bool log) {
+            const Eigen::Matrix4d& car_transform,
+			bool log) : car_transform_(car_transform) {
     cam_log ("setting up top depth camera");
     // usual camera info stuff
     auto dcam_blueprint = *bp_library->Find(depth_cam_node["type"].as<std::string>());
@@ -115,6 +118,10 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& depth_cam_n
         if (save_depth_) {
             std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
             depth_images_.emplace_back(DecodeToDepthMat(image).clone());
+            // add car transform, if haven't already in semantic callback
+            if (car_transforms_.size() == depth_images_.size() - 1) {
+                car_transforms_.emplace_back(car_transform_);
+            }
             // cv::exp(depth_images_[0], depth_images_[0]); good for debugging
             save_depth_ = false;
             std::cout << "saving depth:" << depth_images_.size() << std::endl;
@@ -140,16 +147,17 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& depth_cam_n
                     semseg_cam_node["roll"].as<float>()}};
     generic_actor = vehicle->GetWorld().SpawnActor(scam_blueprint, camera_transform, vehicle.get());
     semantic_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-    geometry_ = std::make_unique<geom::CameraGeometry>(semantic_sensor_,
-                                                       semseg_cam_node["fov"].as<float>(),
-                                                       semseg_cam_node["image_size_x"].as<unsigned int>(),
-                                                       semseg_cam_node["image_size_y"].as<unsigned int>());
+    geometry_ = std::make_shared<geom::CameraGeometry>(semseg_cam_node);
     // callback
     semantic_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
         auto image = boost::static_pointer_cast<csd::Image>(data);
         if (save_semantics_) {
             std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
             semantic_images_.emplace_back(DecodeToCityScapesPalleteSemSegMat(image));
+            // add car transform, if haven't already in depth callback
+            if (car_transforms_.size() == semantic_images_.size() - 1) {
+                car_transforms_.emplace_back(car_transform_);
+            }
             save_semantics_ = false;
             std::cout << "saving semantics:" << semantic_images_.size() << semantic_images_.back().cols
                                                                  << "x" << semantic_images_.back().rows << std::endl;
@@ -174,37 +182,42 @@ void SemanticPointCloudCamera::CaputreOnce() {
     save_depth_ = true;
 }
 /* returns the minimum size of the two buffer */
-size_t SemanticPointCloudCamera::count() {
+size_t SemanticPointCloudCamera::count() const {
     return std::min(semantic_images_.size(), depth_images_.size());
 }
 /* returns depth buffer size */
-size_t SemanticPointCloudCamera::depth_image_count() {
+size_t SemanticPointCloudCamera::depth_image_count() const {
     return depth_images_.size();
 }
 /* returns semantic buffer size */
-size_t SemanticPointCloudCamera::semantic_image_count() {
+size_t SemanticPointCloudCamera::semantic_image_count() const {
     return semantic_images_.size();
 }
-/* returns true and oldest semnatic|depth images. false and two empty images if empty */
-std::tuple<bool, cv::Mat, cv::Mat> SemanticPointCloudCamera::pop() {
-    cv::Mat semantic;
-    cv::Mat depth;
-    bool success = std::min(semantic_images_.size(), depth_images_.size()) > 0;
-    if (success) {
+/* returns true and oldest data tuple. false and empty tuple if empty */
+std::tuple<bool, cv::Mat, cv::Mat, Eigen::Matrix4d> SemanticPointCloudCamera::pop() {
+    if (std::min(semantic_images_.size(), depth_images_.size()) > 0) {
         std::lock(semantic_buffer_mutex_, depth_buffer_mutex_);
         std::lock_guard<std::mutex> sguard(semantic_buffer_mutex_, std::adopt_lock);
         std::lock_guard<std::mutex> dguard(depth_buffer_mutex_, std::adopt_lock);
-        semantic = std::move(semantic_images_.front());
-        depth = std::move(depth_images_.front());
+        cv::Mat semantic = std::move(semantic_images_.front());
+        cv::Mat depth = std::move(depth_images_.front());
+        Eigen::Matrix4d car_transform = std::move(car_transforms_.front());
         semantic_images_.erase(semantic_images_.begin());
         depth_images_.erase(depth_images_.begin());
+        car_transforms_.erase(car_transforms_.begin());
+        return std::make_tuple(true, semantic, depth, car_transform);
     }
-    return std::make_tuple(success, semantic, depth);
+    return std::make_tuple(false, cv::Mat(), cv::Mat(), Eigen::Matrix4d());
 }
 /* returns the camera geometry */
-std::shared_ptr<geom::CameraGeometry> SemanticPointCloudCamera::geometry() {
+std::shared_ptr<geom::CameraGeometry> SemanticPointCloudCamera::geometry() const {
     return geometry_;
 }
+/* returns whether CaptureOnce has been called but we haven't recoreded the sensor data yet */
+bool SemanticPointCloudCamera::waiting() const {
+    return save_semantics_ || save_depth_;
+}
+
 // custom conversion functions
 
 /* converts an rgb coded matrix into an OpenCV mat containg real depth values

@@ -43,10 +43,16 @@ public:
 	const MassAgent& operator=(MassAgent&&) = delete;
 	explicit MassAgent();
 	void ActivateCarlaAgent(const std::string &address, unsigned int port);
-	void SetRandomPose();
 	void GenerateDataPoint();
-private:
+
+	[[nodiscard]] bool SetRandomPose();
+	[[nodiscard]] const Eigen::Matrix4d& GetTransformReference() const;
+
+	[[nodiscard]] inline double x() const;
+	[[nodiscard]] inline double y() const;
+	[[nodiscard]] inline double z() const;
 	
+private:
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors();
 	void DestroyAgent();
@@ -54,7 +60,7 @@ private:
 	// state
 	freicar::map::Map& map_instance_;
 	uint16 id_;
-	float x_, y_, z_;
+	Eigen::Matrix4d transform_;
 	geom::SemanticCloud semantic_cloud_;
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;
