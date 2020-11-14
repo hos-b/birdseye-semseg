@@ -44,6 +44,7 @@ public:
 	explicit MassAgent();
 	void ActivateCarlaAgent(const std::string &address, unsigned int port);
 	void GenerateDataPoint();
+	void CaptureOnce();
 
 	[[nodiscard]] bool SetRandomPose();
 	[[nodiscard]] const Eigen::Matrix4d& GetTransformReference() const;
@@ -61,6 +62,7 @@ private:
 	freicar::map::Map& map_instance_;
 	uint16 id_;
 	Eigen::Matrix4d transform_;
+	std::vector<Eigen::Matrix4d> datapoint_transforms_;
 	geom::SemanticCloud semantic_cloud_;
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;
@@ -68,7 +70,7 @@ private:
 
 	// carla sensors
 	std::unique_ptr<data::RGBCamera> front_cam_;
-	std::unique_ptr<data::SemanticPointCloudCamera> semantic_pc_cam_center_;	
+	std::vector<std::unique_ptr<data::SemanticPointCloudCamera>> semantic_pc_cams_;
 };
 
 } // namespace agent

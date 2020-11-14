@@ -11,7 +11,7 @@ namespace geom
 class CameraGeometry
 {
 public:
-    explicit CameraGeometry(const YAML::Node& cam_node);
+    explicit CameraGeometry(const YAML::Node& cam_node, float x, float y, float z, float rr, float pp, float yy);
     [[nodiscard]] Eigen::Matrix4d GetTransform() const;
     [[nodiscard]] Eigen::Matrix4d GetInvTransform() const;
     [[nodiscard]] Eigen::Matrix3d kalib() const;

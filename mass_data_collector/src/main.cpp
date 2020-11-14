@@ -33,6 +33,8 @@ int main(int argc, char **argv)
 
 	// reading command line args
 	size_t number_of_agents = 0;
+	size_t max_data_count = 1;
+	size_t data_count = 0;
 	if (argc != 2) {
 		number_of_agents = 1;
 		std::cout << "use: rosrun mass_data_collector <number of agents>" << std::endl;
@@ -48,7 +50,10 @@ int main(int argc, char **argv)
 	agent::MassAgent agent;
 	agent.ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
 	while (ros::ok()) {
-		agent.SetRandomPose();
+		// if successful capture
+		if (agent.SetRandomPose() && data_count++ < max_data_count) {
+			agent.CaptureOnce();
+		}
 		std::this_thread::sleep_for(1s);
 		agent.GenerateDataPoint();
 		ros::spinOnce();

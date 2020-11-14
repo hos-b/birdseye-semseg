@@ -4,7 +4,10 @@
 
 namespace config
 {
-	static constexpr float kMinimumAgentDistance = 0.7; // meters
+	static constexpr float kMinimumAgentDistance = 0.7f; // meters
+	// additional BEV camera formation
+	static constexpr float kCamLRHover = 2.0f; // meters
+	static constexpr float kCamFBHover = 2.0f; // meters
 	static constexpr unsigned int kFrameVizInterval = 5;
 } // namespace config
 

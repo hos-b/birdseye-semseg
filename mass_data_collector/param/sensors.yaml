@@ -47,9 +47,7 @@ camera-front:
   lens_y_size: 0.08
   sensor_tick: 1.0
 
-camera-depth:
-  type: "sensor.camera.depth"
-  id: "depth"
+camera-mass:
   x: 0.0
   y: 0.0
   z: 4.0
@@ -61,16 +59,30 @@ camera-depth:
   fov: 90
   sensor_tick: 1.0
 
-camera-semseg:
-  type: "sensor.camera.semantic_segmentation"
-  id: "semseg"
-  x: 0.0
-  y: 0.0
-  z: 4.0
-  roll: 0.0
-  pitch: -90.0
-  yaw: 0.0
-  image_size_x: 640
-  image_size_y: 480
-  fov: 90
-  sensor_tick: 1.0
+# camera-depth:
+#   type: "sensor.camera.depth"
+#   id: "depth"
+#   x: 0.0
+#   y: 0.0
+#   z: 4.0
+#   roll: 0.0
+#   pitch: -90.0
+#   yaw: 0.0
+#   image_size_x: 640
+#   image_size_y: 480
+#   fov: 90
+#   sensor_tick: 1.0
+
+# camera-semseg:
+#   type: "sensor.camera.semantic_segmentation"
+#   id: "semseg"
+#   x: 0.0
+#   y: 0.0
+#   z: 4.0
+#   roll: 0.0
+#   pitch: -90.0
+#   yaw: 0.0
+#   image_size_x: 640
+#   image_size_y: 480
+#   fov: 90
+#   sensor_tick: 1.0

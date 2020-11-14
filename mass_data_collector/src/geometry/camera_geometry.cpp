@@ -4,16 +4,16 @@
 #define RAD(x) x * config::kToRadians;
 namespace geom
 {
-CameraGeometry::CameraGeometry(const YAML::Node& cam_node) {
+CameraGeometry::CameraGeometry(const YAML::Node& cam_node, float x, float y, float z, float rr, float pp, float yy) {
     width_ = cam_node["image_size_x"].as<double>();
     height_ = cam_node["image_size_y"].as<double>();
     // creating transform matrix
     Eigen::Matrix3d rot; 
     // left handed -> y & pitch flipped
-    rot =  Eigen::AngleAxisd(cam_node["roll"].as<double>()   * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
-           Eigen::AngleAxisd(-cam_node["pitch"].as<double>() * config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
-           Eigen::AngleAxisd(cam_node["yaw"].as<double>()    * config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
-    Eigen::Vector3d trans(cam_node["x"].as<double>(), -cam_node["y"].as<double>(), cam_node["z"].as<double>());
+    rot =  Eigen::AngleAxisd(rr  * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
+           Eigen::AngleAxisd(-pp * config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
+           Eigen::AngleAxisd(yy  * config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
+    Eigen::Vector3d trans(x, -y, z);
     cam_transform_.setIdentity();
     cam_transform_.block<3, 3>(0, 0) = rot;
     cam_transform_.block<3, 1>(0, 3) = trans;
@@ -51,8 +51,8 @@ Eigen::Matrix3d CameraGeometry::kalib_inv() const {
 /* returns whether the given point is in the view or not, given the pixel threshold */
 bool CameraGeometry::IsInView(const pcl::PointXYZRGB& point3d, const Eigen::Matrix4d& car_transform, double pixel_threshold) const {
     auto local_car = car_transform.inverse() * Eigen::Vector4d(point3d.x, point3d.y, point3d.z, 1.0); // NOLINT
-    auto local_cam = (cam_inv_transform_ * local_car).normalized(); 
-    auto res = (kalibration_ * local_cam.head<3>()); // NOLINT
+    auto local_cam = (cam_inv_transform_ * local_car).hnormalized();
+    auto res = (kalibration_ * local_cam).hnormalized(); // NOLINT
     bool in_width = res.x() >= -pixel_threshold && res.x() <= width_ + pixel_threshold;
     bool in_height = res.y() >= -pixel_threshold && res.y() <= height_ + pixel_threshold;
     return in_width && in_height;
@@ -67,7 +67,7 @@ Eigen::Vector2d CameraGeometry::DLT(const Eigen::Vector3d& point3d, const Eigen:
 Eigen::Vector3d CameraGeometry::Reproject(const Eigen::Vector2d& pixel_coords, const Eigen::Matrix4d& car_transform, double depth) const {
     auto cam_local = inv_kalibration_ * pixel_coords.homogeneous() * depth;
     auto global = car_transform * cam_transform_ * cam_local.homogeneous();
-    return global.head<3>() / global.w();
+    return global.hnormalized();
 }
 
 } // namespace geom

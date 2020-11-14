@@ -1,7 +1,9 @@
 #include "mass_agent/mass_agent.h"
 #include "config/agent_config.h"
 #include "config/geom_config.h"
+#include "mass_agent/sensors.h"
 
+#include <Eigen/src/Core/Matrix.h>
 #include <cstdlib>
 #include <thread>
 #include <tuple>
@@ -9,6 +11,7 @@
 #include <ros/package.h>
 #include <yaml-cpp/yaml.h>
 #include <opencv2/imgcodecs.hpp>
+#include <pcl/io/pcd_io.h>
 
 using namespace std::chrono_literals;
 namespace cg = carla::geom;
@@ -44,7 +47,7 @@ void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port
 		auto blueprint_library = world.GetBlueprintLibrary();
 		auto vehicles = blueprint_library->Filter("freicar_1");
 		if (vehicles->empty()) {
-			ROS_ERROR("ERROR: Did not find car model with name: %s , ... using default model: freicar_10 \n", "freicar_1");
+			ROS_ERROR("ERROR: did not find car model with name: %s... using default model: freicar_10 \n", "freicar_1");
 			vehicles = blueprint_library->Filter("freicar_10");
 		}
 		carla::client::ActorBlueprint blueprint = (*vehicles)[0];
@@ -68,12 +71,8 @@ void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port
 	}
 	SetupSensors();
 }
-/* places the agent on a random point in the map at a random pose, returns true if successful */
+/* places the agent on a random point in the map at a random pose, returns true if successful. [[blocking]] */
 bool MassAgent::SetRandomPose() {
-	// if the sensors have not yet acquired the image from the last pose
-	if (front_cam_->waiting() || semantic_pc_cam_center_->waiting()) {
-		return false;
-	}
 	bool admissable = false;
 	float yaw = 0;
 	float x = 0.0f;
@@ -107,38 +106,33 @@ bool MassAgent::SetRandomPose() {
 	// CARLA/Unreal' C.S. is left-handed
 	vehicle_->SetTransform(cg::Transform(cg::Location(x, -y, z),
 										 cg::Rotation(0, -yaw * config::kToDegrees, 0)));
+	do {
+		auto transform = vehicle_->GetTransform();
+		// if this is not enough, it just means I have a scientifically proven shit luck
+		if (std::abs(transform.location.x - x) < 1e-2) { // NOLINT
+			break;
+		}
+	} while(true);
 	return true;
 }
-/* initializes the structures for the camera, lidar & depth measurements */
-void MassAgent::SetupSensors() {
-	std::string yaml_path = ros::package::getPath("mass_data_collector");
-	yaml_path += "/param/sensors.yaml";
-	std::cout << "reading sensor description file: " << yaml_path << std::endl;
-	auto bp_library = vehicle_->GetWorld().GetBlueprintLibrary();
-	YAML::Node base = YAML::LoadFile(yaml_path);
-	YAML::Node front_cam_node = base["camera-front"];
-	// front rgb cam
-	if (front_cam_node.IsDefined()) {
-		front_cam_ = std::make_unique<data::RGBCamera>(front_cam_node, bp_library, vehicle_, true);
-		front_cam_->CaputreOnce();
+/* caputres one frame for all sensors [[blocking]] */
+void MassAgent::CaptureOnce() {
+	front_cam_->CaputreOnce();
+	for (auto& semantic_cam : semantic_pc_cams_) {
+		semantic_cam->CaputreOnce();
 	}
-	// depth camera
-	YAML::Node depth_cam_node = base["camera-depth"];
-	YAML::Node semseg_cam_node = base["camera-semseg"];
-	if (depth_cam_node.IsDefined() && semseg_cam_node.IsDefined()) {
-		semantic_pc_cam_center_ = std::make_unique<data::SemanticPointCloudCamera>(depth_cam_node,
-																 semseg_cam_node,
-																 bp_library,
-																 vehicle_, true);
-		semantic_pc_cam_center_->CaputreOnce();
-	}
+	datapoint_transforms_.emplace_back(transform_);
+	std::cout << "captured once" << std::endl;
 }
 /* destroys the agent in the simulation & its sensors. */
 void MassAgent::DestroyAgent() {
 	std::cout << "destroying mass-agent-" << id_ << std::endl;
-	// TODO(hosein): fix
 	front_cam_->Destroy();
-	semantic_pc_cam_center_->Destroy();
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		if (semantic_depth_cam) {
+			semantic_depth_cam->Destroy();
+		}
+	}
 	if (vehicle_) {
 		vehicle_->Destroy();
 		vehicle_ = nullptr;
@@ -147,14 +141,33 @@ void MassAgent::DestroyAgent() {
 		carla_client_.reset();
 	}
 }
-/* checks the buffers and creates a  */
+/* checks the buffers and creates a single data point from all the sensors */
 void MassAgent::GenerateDataPoint() {
-	auto[success, semantic, depth, car_transform] = semantic_pc_cam_center_->pop();
-	if (success) {
-		semantic_cloud_.AddSemanticDepthImage(semantic_pc_cam_center_->geometry(), semantic, depth);
-		semantic_cloud_.MaskOutlierPoints(front_cam_->geometry());
-		semantic_cloud_.SaveCloud("/home/hosein/scloud_filtered.pcl");
+	// TODO(hosein): find a better way of checking for an empty stack
+	if (datapoint_transforms_.empty()) {
+		return;
 	}
+	auto car_transform = datapoint_transforms_.front();
+	std::cout << "decoding with car transform \n" << car_transform << std::endl;
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+		if (success) {
+			semantic_cloud_.AddSemanticDepthImage(semantic_depth_cam->geometry(), car_transform, semantic, depth);
+			std::cout << semantic_depth_cam->name() << " added to pointcloud" << std::endl;
+		} else {
+			std::cout << semantic_depth_cam->name() << " unresponsive" << std::endl;
+		}
+	}
+	semantic_cloud_.SaveCloud("/home/hosein/s2cloud.pcl");
+	std::cout << "point cloud saved" << std::endl;
+	pcl::PointCloud<pcl::PointXYZRGB> filtered_cloud = semantic_cloud_.MaskOutlierPoints(front_cam_->geometry(), car_transform);
+	if (filtered_cloud.points.empty()) {
+		std::cout << "filtered point cloud is empty!" << std::endl;
+	} else {
+		pcl::io::savePCDFile("/home/hosein/f2cloud.pcl", filtered_cloud);
+		std::cout << "filtered point cloud saved" << std::endl;
+	}
+	datapoint_transforms_.erase(datapoint_transforms_.begin());
 }
 /* returns x coordinate */
 double MassAgent::x() const {
@@ -167,5 +180,30 @@ double MassAgent::y() const {
 /* returns z coordinate */
 double MassAgent::z() const {
 	return transform_(2, 3);
+}
+/* initializes the structures for the camera, lidar & depth measurements */
+void MassAgent::SetupSensors() {
+	std::string yaml_path = ros::package::getPath("mass_data_collector");
+	yaml_path += "/param/sensors.yaml";
+	std::cout << "reading sensor description file: " << yaml_path << std::endl;
+	auto bp_library = vehicle_->GetWorld().GetBlueprintLibrary();
+	YAML::Node base = YAML::LoadFile(yaml_path);
+	YAML::Node front_cam_node = base["camera-front"];
+	// front rgb cam
+	if (front_cam_node.IsDefined()) {
+		front_cam_ = std::make_unique<data::RGBCamera>(front_cam_node, bp_library, vehicle_, true);
+	}
+	// depth camera
+	YAML::Node mass_cam_node = base["camera-mass"];
+	if (mass_cam_node.IsDefined()) {
+		// static_cast<size_t>(data::CameraPosition::BACK)
+		for (size_t i = 0; i <= 1; ++i) {
+			semantic_pc_cams_.emplace_back(std::make_unique<data::SemanticPointCloudCamera>(mass_cam_node,
+															bp_library,
+															vehicle_,
+															static_cast<data::CameraPosition>(i),
+															true));
+		}
+	}
 }
 } // namespace agent

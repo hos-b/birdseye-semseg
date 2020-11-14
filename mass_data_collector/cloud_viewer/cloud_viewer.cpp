@@ -7,7 +7,7 @@
 int user_data;
 
 void viewerOneOff (pcl::visualization::PCLVisualizer& viewer) {
-    viewer.setBackgroundColor (1.0, 0.5, 1.0); // NOLINT
+    viewer.setBackgroundColor (0.3, 0.3, 0.3); // NOLINT
     pcl::PointXYZ o;
     o.x = 1.0; // NOLINT
     o.y = 0; // NOLINT
@@ -34,6 +34,7 @@ int main (int argc, char** argv)
     if (argc == 2) {
         path  = std::string(argv[1]); // NOLINT
     }
+    std::cout << "opening " << path << std::endl;
     pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGBA>);
     pcl::io::loadPCDFile(path, *cloud);
     

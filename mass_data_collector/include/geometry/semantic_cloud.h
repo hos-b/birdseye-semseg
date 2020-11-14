@@ -35,10 +35,10 @@ public:
 							   const Eigen::Matrix4d& car_transform,
 							   cv::Mat semantic,
 							   cv::Mat depth);
-	void MaskOutlierPoints(std::shared_ptr<geom::CameraGeometry> geometry,
-						   const Eigen::Matrix4d& car_transform);
-	void SaveCloud(const std::string& path);
+	[[nodiscard]] pcl::PointCloud<pcl::PointXYZRGB> MaskOutlierPoints(std::shared_ptr<geom::CameraGeometry> geometry,
+						   											  const Eigen::Matrix4d& car_transform);
 	[[nodiscard]] cv::Mat GetBEV() const;
+	void SaveCloud(const std::string& path);
 
 private:
 	pcl::PointCloud<pcl::PointXYZRGB> cloud_;
