@@ -40,7 +40,7 @@ MassAgent::~MassAgent() {
 void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port) {
 	try {
 		carla_client_ = std::make_unique<cc::Client>(address, port);
-		carla_client_->SetTimeout(10s);
+		carla_client_->SetTimeout(1s);
 		std::cout << "client version: " << carla_client_->GetClientVersion() << '\t'
 				  << "server version: " << carla_client_->GetServerVersion() << std::endl;
 		auto world = carla_client_->GetWorld();
@@ -148,7 +148,6 @@ void MassAgent::GenerateDataPoint() {
 		return;
 	}
 	auto car_transform = datapoint_transforms_.front();
-	std::cout << "decoding with car transform \n" << car_transform << std::endl;
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 		if (success) {
@@ -197,7 +196,7 @@ void MassAgent::SetupSensors() {
 	YAML::Node mass_cam_node = base["camera-mass"];
 	if (mass_cam_node.IsDefined()) {
 		// static_cast<size_t>(data::CameraPosition::BACK)
-		for (size_t i = 0; i <= 1; ++i) {
+		for (size_t i = 0; i <= static_cast<size_t>(data::CameraPosition::BACK); ++i) {
 			semantic_pc_cams_.emplace_back(std::make_unique<data::SemanticPointCloudCamera>(mass_cam_node,
 															bp_library,
 															vehicle_,

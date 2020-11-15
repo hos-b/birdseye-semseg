@@ -1,12 +1,18 @@
 camera-front:
   type: "sensor.camera.rgb"
   id: "front"
-  x: 0.095
+  x: 0.0
   y: 0.0
-  z: 0.23
+  z: 1.0
   roll: 0.0
   pitch: 0.0
   yaw: 0.0
+  # x: 0.095
+  # y: 0.0
+  # z: 0.23
+  # roll: 0.0
+  # pitch: 0.0
+  # yaw: 0.0
   image_size_x: 640
   image_size_y: 480
   fov: 90

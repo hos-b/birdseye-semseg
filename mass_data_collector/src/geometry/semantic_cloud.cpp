@@ -48,13 +48,13 @@ pcl::PointCloud<pcl::PointXYZRGB> SemanticCloud::MaskOutlierPoints(std::shared_p
     for (auto& point : cloud_.points) {
         if (geometry->IsInView(point, car_transform, config::kPixelDistanceThreshold)) {
             filtered_cloud.points.emplace_back(point);
-        }    
+        }
     }
     filtered_cloud.width = filtered_cloud.points.size();
     filtered_cloud.height = 1;
     filtered_cloud.is_dense = true;
     std::cout << filtered_cloud.points.size() << "/" << cloud_.points.size() << " survived" << std::endl;
-    // TODO(hosein): move semantics doesn't work! we'll switch to masks anyawy but wtf!
+    // TODO(hosein): move semantics don't work! we'll switch to masks anyawy but wtf!
     return filtered_cloud;
 }
 /* returns the orthographic bird's eye view image */

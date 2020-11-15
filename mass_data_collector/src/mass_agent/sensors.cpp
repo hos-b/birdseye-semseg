@@ -18,249 +18,256 @@ namespace cg = carla::geom;
 namespace data
 {
 static std::string ToString(CameraPosition position) {
-    switch (position) {
-    case LEFT:
-        return "left";
-    case RIGHT:
-        return "right";
-    case FRONT:
-        return "front";
-    case BACK:
-        return "back";
-    case CENTER:
-        return "center";
-    default:
-        return "unknown";
-    }
+	switch (position) {
+	case LEFT:
+		return "left";
+	case RIGHT:
+		return "right";
+	case FRONT:
+		return "front";
+	case BACK:
+		return "back";
+	case CENTER:
+		return "center";
+	default:
+		return "unknown";
+	}
 }
 
 RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
-            boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
-            boost::shared_ptr<carla::client::Vehicle> vehicle,					    // NOLINT
-            bool log) {
-    cam_log("setting up rgb camera");
-    auto cam_blueprint = *bp_library->Find(rgb_cam_node["type"].as<std::string>());
-    // setting camera attributes from the yaml
-    for (YAML::const_iterator it = rgb_cam_node.begin(); it != rgb_cam_node.end(); ++it) {
-        auto key = it->first.as<std::string>();
-        if (cam_blueprint.ContainsAttribute(key)) {
-            cam_blueprint.SetAttribute(key, it->second.as<std::string>());
-        }
-    }
-    // spawn the camera attached to the vehicle
-    auto camera_transform = cg::Transform{
-        cg::Location{rgb_cam_node["x"].as<float>(),
-                    rgb_cam_node["y"].as<float>(),
-                    rgb_cam_node["z"].as<float>()},
-        cg::Rotation{rgb_cam_node["pitch"].as<float>(),
-                    rgb_cam_node["yaw"].as<float>(),
-                    rgb_cam_node["roll"].as<float>()}};
-    auto generic_actor = vehicle->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle.get());
-    sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-    geometry_ = std::make_shared<geom::CameraGeometry>(rgb_cam_node, camera_transform.location.x,
-                                                                     camera_transform.location.y,
-                                                                     camera_transform.location.z,
-                                                                     camera_transform.rotation.roll,
-                                                                     camera_transform.rotation.pitch,
-                                                                     camera_transform.rotation.yaw);
-    save_ = false;
-    // register a callback to publish images
-    sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-        std::lock_guard<std::mutex> guard(buffer_mutex_);
-        auto image = boost::static_pointer_cast<csd::Image>(data);
-        auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
-        if (save_) {
-            images_.emplace_back(mat.clone());
-            save_ = false;
-            std::cout << "saving rgb:" << images_.size() << std::endl;
-            cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
-        }
-    });
+			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
+			boost::shared_ptr<carla::client::Vehicle> vehicle,					    // NOLINT
+			bool log) {
+	cam_log("setting up rgb camera");
+	auto cam_blueprint = *bp_library->Find(rgb_cam_node["type"].as<std::string>());
+	// setting camera attributes from the yaml
+	for (YAML::const_iterator it = rgb_cam_node.begin(); it != rgb_cam_node.end(); ++it) {
+		auto key = it->first.as<std::string>();
+		if (cam_blueprint.ContainsAttribute(key)) {
+			cam_blueprint.SetAttribute(key, it->second.as<std::string>());
+		}
+	}
+	// spawn the camera attached to the vehicle
+	auto camera_transform = cg::Transform{
+		cg::Location{rgb_cam_node["x"].as<float>(),
+					rgb_cam_node["y"].as<float>(),
+					rgb_cam_node["z"].as<float>()},
+		cg::Rotation{rgb_cam_node["pitch"].as<float>(),
+					rgb_cam_node["yaw"].as<float>(),
+					rgb_cam_node["roll"].as<float>()}};
+	auto generic_actor = vehicle->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle.get());
+	sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
+	geometry_ = std::make_shared<geom::CameraGeometry>(rgb_cam_node, camera_transform.location.x,
+																	 camera_transform.location.y,
+																	 camera_transform.location.z,
+																	 camera_transform.rotation.roll,
+																	 camera_transform.rotation.pitch,
+																	 camera_transform.rotation.yaw);
+	// std::cout << "transform\n" << geometry_->GetTransform() << std::endl;
+	save_ = false;
+	// register a callback to publish images
+	sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+		std::lock_guard<std::mutex> guard(buffer_mutex_);
+		auto image = boost::static_pointer_cast<csd::Image>(data);
+		auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
+		if (save_) {
+			images_.emplace_back(mat.clone());
+			save_ = false;
+			std::cout << "saving rgb:" << images_.size() << std::endl;
+			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
+		}
+	});
 }
 /* lets the camera save the next frame [[blocking]] */
 void RGBCamera::CaputreOnce() {
-    save_ = true;
-    while (save_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
-    }
+	save_ = true;
+	while (save_) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
+	}
 }
 /* destroys the sensor and clears the queue */
 void RGBCamera::Destroy() {
-    if (sensor_) {
-        sensor_->Destroy();
-    }
-    images_.clear();
+	if (sensor_) {
+		sensor_->Destroy();
+	}
+	images_.clear();
 }
 /* returns the number of images currently stored in buffer */
 size_t RGBCamera::count() const {
-    return images_.size();
+	return images_.size();
 }
 /* returns true and the oldest buffer element. false and empty element if empty */
 std::pair <bool, cv::Mat> RGBCamera::pop() {
-    cv::Mat oldest;
-    bool empty = images_.empty();
-    if (!empty) {
-        std::lock_guard<std::mutex> guard(buffer_mutex_);
-        oldest = images_.front();
-        images_.erase(images_.begin());
-    }
-    return std::make_pair(empty, oldest);
+	cv::Mat oldest;
+	bool empty = images_.empty();
+	if (!empty) {
+		std::lock_guard<std::mutex> guard(buffer_mutex_);
+		oldest = images_.front();
+		images_.erase(images_.begin());
+	}
+	return std::make_pair(empty, oldest);
 }
 /* returns the camera geometry */
 std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() const {
-    return geometry_;
+	return geometry_;
 }
 /* returns whether CaptureOnce has been called but we haven't recoreded the sensor data yet */
 bool RGBCamera::waiting() const {
-    return save_;
+	return save_;
 }
 // ------------------------ SemnaticPointCloudCamera -----------------------------
 SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_node,
 			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
 			boost::shared_ptr<carla::client::Vehicle> vehicle,						// NOLINT
-            CameraPosition position,
+			CameraPosition position,
 			bool log) {
-    name_ = "semantic_depth_" + ToString(position);
-    cam_log("setting up " + name_);
-    // get the correct pose of the camera
-    auto camera_transform = cg::Transform{
-        cg::Location{mass_cam_node["x"].as<float>(),
-                        mass_cam_node["y"].as<float>(),
-                        mass_cam_node["z"].as<float>()},
-        cg::Rotation{mass_cam_node["pitch"].as<float>(),
-                        mass_cam_node["yaw"].as<float>(),
-                        mass_cam_node["roll"].as<float>()}};
-    switch (position) {
-    case LEFT:
-        camera_transform.location.y -= config::kCamLRHover;
-        break;
-    case RIGHT:
-        camera_transform.location.y += config::kCamLRHover;
-        break;
-    case FRONT:
-        camera_transform.location.x += config::kCamFBHover;
-        break;
-    case BACK:
-        camera_transform.location.x -= config::kCamFBHover;
-        break;
-    case CENTER:
-    default:
-        break;
-    }
-    // usual camera info stuff
-    auto dcam_blueprint = *bp_library->Find("sensor.camera.depth");
-    // setting camera attributes from the yaml
-    for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
-        auto key = it->first.as<std::string>();
-        if (dcam_blueprint.ContainsAttribute(key)) {
-            dcam_blueprint.SetAttribute(key, it->second.as<std::string>());
-        }
-    }
-    // spawn the depth camera attached to the vehicle
-    auto generic_actor = vehicle->GetWorld().SpawnActor(dcam_blueprint, camera_transform, vehicle.get());
-    depth_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-    // register a callback to publish images
-    save_depth_ = false;
-    depth_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-        auto image = boost::static_pointer_cast<csd::Image>(data);
-        if (save_depth_) {
-            std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
-            auto depth_mat = DecodeToDepthMat(image);
-            depth_images_.emplace_back(depth_mat.clone());
-            cv::exp(depth_mat, depth_mat); // good for debugging
-            save_depth_ = false;
-            // std::cout << "saving depth:" << depth_images_.size() << std::endl;
-            cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
-        }
-    });
-    auto scam_blueprint = *bp_library->Find("sensor.camera.semantic_segmentation");
-    // setting camera attributes from the yaml
-    for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
-        auto key = it->first.as<std::string>();
-        if (scam_blueprint.ContainsAttribute(key)) {
-            scam_blueprint.SetAttribute(key, it->second.as<std::string>());
-        }
-    }
-    // spawn the camera attached to the vehicle.	
-    generic_actor = vehicle->GetWorld().SpawnActor(scam_blueprint, camera_transform, vehicle.get());
-    semantic_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-    geometry_ = std::make_shared<geom::CameraGeometry>(mass_cam_node, camera_transform.location.x,
-                                                                      camera_transform.location.y,
-                                                                      camera_transform.location.z,
-                                                                      camera_transform.rotation.roll,
-                                                                      camera_transform.rotation.pitch,
-                                                                      camera_transform.rotation.yaw);
-    // std::cout << name_ << "' transform:\n" << geometry_->GetTransform() << std::endl;
-    // callback
-    save_semantics_ = false;
-    semantic_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-        auto image = boost::static_pointer_cast<csd::Image>(data);
-        if (save_semantics_) {
-            std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
-            semantic_images_.emplace_back(DecodeToCityScapesPalleteSemSegMat(image));
-            // add car transform, if haven't already in depth callback
-            save_semantics_ = false;
-            std::cout << "saving semantics:" << semantic_images_.size() << std::endl;
-            cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/s" + name_ + ".png", semantic_images_[0]);
-        }
-    });
+	name_ = "semantic_depth_" + ToString(position);
+	cam_log("setting up " + name_);
+	// get the correct pose of the camera
+	auto camera_transform = cg::Transform{
+		cg::Location{mass_cam_node["x"].as<float>(),
+					mass_cam_node["y"].as<float>(),
+					mass_cam_node["z"].as<float>()},
+		cg::Rotation{mass_cam_node["pitch"].as<float>(),
+					mass_cam_node["yaw"].as<float>(),
+					mass_cam_node["roll"].as<float>()}};
+	switch (position) {
+	case LEFT:
+		camera_transform.location.y -= config::kCamLRHover;
+		break;
+	case RIGHT:
+		camera_transform.location.y += config::kCamLRHover;
+		break;
+	case FRONT:
+		camera_transform.location.x += config::kCamFBHover;
+		break;
+	case BACK:
+		camera_transform.location.x -= config::kCamFBHover;
+		break;
+	case CENTER:
+	default:
+		break;
+	}
+	std::cout << "           location: (" << camera_transform.location.x << ", "
+								   << camera_transform.location.y << ", "
+								   << camera_transform.location.z << ")\n";
+	std::cout << "           rotation: (" << camera_transform.rotation.roll << ", "
+								   << camera_transform.rotation.pitch << ", "
+								   << camera_transform.rotation.yaw << ")" << std::endl;
+	// usual camera info stuff
+	auto dcam_blueprint = *bp_library->Find("sensor.camera.depth");
+	// setting camera attributes from the yaml
+	for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
+		auto key = it->first.as<std::string>();
+		if (dcam_blueprint.ContainsAttribute(key)) {
+			dcam_blueprint.SetAttribute(key, it->second.as<std::string>());
+		}
+	}
+	// spawn the depth camera attached to the vehicle
+	auto generic_actor = vehicle->GetWorld().SpawnActor(dcam_blueprint, camera_transform, vehicle.get());
+	depth_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
+	// register a callback to publish images
+	save_depth_ = false;
+	depth_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+		auto image = boost::static_pointer_cast<csd::Image>(data);
+		if (save_depth_) {
+			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
+			auto depth_mat = DecodeToDepthMat(image);
+			depth_images_.emplace_back(depth_mat.clone());
+			cv::exp(depth_mat, depth_mat); // good for debugging
+			save_depth_ = false;
+			// std::cout << "saving depth:" << depth_images_.size() << std::endl;
+			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
+		}
+	});
+	auto scam_blueprint = *bp_library->Find("sensor.camera.semantic_segmentation");
+	// setting camera attributes from the yaml
+	for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
+		auto key = it->first.as<std::string>();
+		if (scam_blueprint.ContainsAttribute(key)) {
+			scam_blueprint.SetAttribute(key, it->second.as<std::string>());
+		}
+	}
+	// spawn the camera attached to the vehicle.	
+	generic_actor = vehicle->GetWorld().SpawnActor(scam_blueprint, camera_transform, vehicle.get());
+	semantic_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
+	geometry_ = std::make_shared<geom::CameraGeometry>(mass_cam_node, camera_transform.location.x,
+																	  camera_transform.location.y,
+																	  camera_transform.location.z,
+																	  camera_transform.rotation.roll,
+																	  camera_transform.rotation.pitch,
+																	  camera_transform.rotation.yaw);
+	// std::cout << "transform\n" << geometry_->GetTransform() << std::endl;
+	// callback
+	save_semantics_ = false;
+	semantic_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+		auto image = boost::static_pointer_cast<csd::Image>(data);
+		if (save_semantics_) {
+			std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
+			semantic_images_.emplace_back(DecodeToCityScapesPalleteSemSegMat(image));
+			// add car transform, if haven't already in depth callback
+			save_semantics_ = false;
+			std::cout << "saving semantics:" << semantic_images_.size() << std::endl;
+			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/s" + name_ + ".png", semantic_images_[0]);
+		}
+	});
 }
 /* destroys the sensors */
 void SemanticPointCloudCamera::Destroy() {
-    if (depth_sensor_) {
-        depth_sensor_->Destroy();
-    }
-    if (semantic_sensor_) {
-        semantic_sensor_->Destroy();
-    }
-    semantic_images_.clear();
-    depth_images_.clear();
+	if (depth_sensor_) {
+		depth_sensor_->Destroy();
+	}
+	if (semantic_sensor_) {
+		semantic_sensor_->Destroy();
+	}
+	semantic_images_.clear();
+	depth_images_.clear();
 }
 /* allows the cameras to save the very next frame [[blocking]] */
 void SemanticPointCloudCamera::CaputreOnce() {
-    save_semantics_ = true;
-    save_depth_ = true;
-    while (save_depth_ || save_semantics_) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
-    }
+	save_semantics_ = true;
+	save_depth_ = true;
+	while (save_depth_ || save_semantics_) {
+		std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
+	}
 }
 /* returns the minimum size of the two buffer */
 size_t SemanticPointCloudCamera::count() const {
-    return std::min(semantic_images_.size(), depth_images_.size());
+	return std::min(semantic_images_.size(), depth_images_.size());
 }
 /* returns depth buffer size */
 size_t SemanticPointCloudCamera::depth_image_count() const {
-    return depth_images_.size();
+	return depth_images_.size();
 }
 /* returns semantic buffer size */
 size_t SemanticPointCloudCamera::semantic_image_count() const {
-    return semantic_images_.size();
+	return semantic_images_.size();
 }
 /* returns true and oldest data tuple. false and empty tuple if empty */
 std::tuple<bool, cv::Mat, cv::Mat> SemanticPointCloudCamera::pop() {
-    if (std::min(semantic_images_.size(), depth_images_.size()) > 0) {
-        std::lock(semantic_buffer_mutex_, depth_buffer_mutex_);
-        std::lock_guard<std::mutex> sguard(semantic_buffer_mutex_, std::adopt_lock);
-        std::lock_guard<std::mutex> dguard(depth_buffer_mutex_, std::adopt_lock);
-        cv::Mat semantic = std::move(semantic_images_.front());
-        cv::Mat depth = std::move(depth_images_.front());
-        semantic_images_.erase(semantic_images_.begin());
-        depth_images_.erase(depth_images_.begin());
-        return std::make_tuple(true, semantic.clone(), depth.clone());
-    }
-    return std::make_tuple(false, cv::Mat(), cv::Mat());
+	if (std::min(semantic_images_.size(), depth_images_.size()) > 0) {
+		std::lock(semantic_buffer_mutex_, depth_buffer_mutex_);
+		std::lock_guard<std::mutex> sguard(semantic_buffer_mutex_, std::adopt_lock);
+		std::lock_guard<std::mutex> dguard(depth_buffer_mutex_, std::adopt_lock);
+		cv::Mat semantic = std::move(semantic_images_.front());
+		cv::Mat depth = std::move(depth_images_.front());
+		semantic_images_.erase(semantic_images_.begin());
+		depth_images_.erase(depth_images_.begin());
+		return std::make_tuple(true, semantic.clone(), depth.clone());
+	}
+	return std::make_tuple(false, cv::Mat(), cv::Mat());
 }
 /* returns the camera geometry */
 std::shared_ptr<geom::CameraGeometry> SemanticPointCloudCamera::geometry() const {
-    return geometry_;
+	return geometry_;
 }
 /* returns whether CaptureOnce has been called but we haven't recoreded the sensor data yet */
 bool SemanticPointCloudCamera::waiting() const {
-    return save_semantics_ || save_depth_;
+	return save_semantics_ || save_depth_;
 }
 /* returns the camera's name, used for debugging */
 std::string SemanticPointCloudCamera::name() const {
-    return name_;
+	return name_;
 }
 // custom conversion functions -------------------------------------------------------------------------------
 

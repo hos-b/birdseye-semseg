@@ -51,7 +51,7 @@ int main(int argc, char **argv)
 	agent.ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
 	while (ros::ok()) {
 		// if successful capture
-		if (agent.SetRandomPose() && data_count++ < max_data_count) {
+		if (data_count++ < max_data_count) {
 			agent.CaptureOnce();
 		}
 		std::this_thread::sleep_for(1s);

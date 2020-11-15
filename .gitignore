@@ -7,3 +7,4 @@ scripts/data/
 **/.clangd/
 **/.ccls-cache/
 **/.cache/
+mass_data_collector/guide/
