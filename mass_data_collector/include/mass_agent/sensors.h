@@ -55,10 +55,10 @@ private:
 
 enum CameraPosition : unsigned int {
 	CENTER = 0,
-	LEFT = 1,
-	RIGHT = 2,
-	FRONT = 3,
-	BACK = 4,
+	FRONTLEFT = 1,
+	FRONTRIGHT = 2,
+	REARLEFT = 3,
+	REARRIGHT = 4,
 };
 class SemanticPointCloudCamera {
 public:

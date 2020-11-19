@@ -72,7 +72,7 @@ void MassAgent::ActivateCarlaAgent(const std::string &address, unsigned int port
 	SetupSensors();
 }
 /* places the agent on a random point in the map at a random pose, returns true if successful. [[blocking]] */
-bool MassAgent::SetRandomPose() {
+void MassAgent::SetRandomPose() {
 	bool admissable = false;
 	float yaw = 0;
 	float x = 0.0f;
@@ -109,11 +109,11 @@ bool MassAgent::SetRandomPose() {
 	do {
 		auto transform = vehicle_->GetTransform();
 		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(transform.location.x - x) < 1e-2) { // NOLINT
+		if ((std::abs(transform.location.x - x) + std::abs(transform.location.y + y)) < 1e-2) { // NOLINT
 			break;
 		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
 	} while(true);
-	return true;
 }
 /* caputres one frame for all sensors [[blocking]] */
 void MassAgent::CaptureOnce() {
@@ -147,25 +147,28 @@ void MassAgent::GenerateDataPoint() {
 	if (datapoint_transforms_.empty()) {
 		return;
 	}
+	geom::SemanticCloud semantic_cloud(config::kPointCloudMaxLocalX,
+									   config::kPointCloudMaxLocalY,
+									   config::kSemanticBEVRows,
+									   config::kSemanticBEVCols);
 	auto car_transform = datapoint_transforms_.front();
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 		if (success) {
-			semantic_cloud_.AddSemanticDepthImage(semantic_depth_cam->geometry(), car_transform, semantic, depth);
+			semantic_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
 			std::cout << semantic_depth_cam->name() << " added to pointcloud" << std::endl;
 		} else {
 			std::cout << semantic_depth_cam->name() << " unresponsive" << std::endl;
 		}
 	}
-	semantic_cloud_.SaveCloud("/home/hosein/s2cloud.pcl");
-	std::cout << "point cloud saved" << std::endl;
-	pcl::PointCloud<pcl::PointXYZRGB> filtered_cloud = semantic_cloud_.MaskOutlierPoints(front_cam_->geometry(), car_transform);
-	if (filtered_cloud.points.empty()) {
-		std::cout << "filtered point cloud is empty!" << std::endl;
-	} else {
-		pcl::io::savePCDFile("/home/hosein/f2cloud.pcl", filtered_cloud);
-		std::cout << "filtered point cloud saved" << std::endl;
-	}
+	// semantic_cloud.SaveTargetCloud("/home/hosein/s2cloud.pcl");
+	// std::cout << "original point cloud saved" << std::endl;
+	// semantic_cloud.SaveTargetCloud("/home/hosein/f2cloud.pcl");
+	// std::cout << "aux point clouds saved" << std::endl;
+	semantic_cloud.FilterCloud();
+	auto image_pair = semantic_cloud.GetSemanticBEV(front_cam_->geometry(), 1.0, 0.05);
+	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/bev.png", image_pair.first);
+	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/mask.png", image_pair.second);
 	datapoint_transforms_.erase(datapoint_transforms_.begin());
 }
 /* returns x coordinate */
@@ -196,7 +199,7 @@ void MassAgent::SetupSensors() {
 	YAML::Node mass_cam_node = base["camera-mass"];
 	if (mass_cam_node.IsDefined()) {
 		// static_cast<size_t>(data::CameraPosition::BACK)
-		for (size_t i = 0; i <= static_cast<size_t>(data::CameraPosition::BACK); ++i) {
+		for (size_t i = 0; i <= static_cast<size_t>(data::CameraPosition::REARRIGHT); ++i) {
 			semantic_pc_cams_.emplace_back(std::make_unique<data::SemanticPointCloudCamera>(mass_cam_node,
 															bp_library,
 															vehicle_,

@@ -14,6 +14,7 @@ find_package(Threads REQUIRED)
 find_package(OpenCV 4 REQUIRED)
 find_package (Eigen3 3 REQUIRED)
 find_package(PCL 1.3 REQUIRED COMPONENTS common io)
+find_package(nanoflann)
 
 # link_directories(${PCL_LIBRARY_DIRS})
 # add_definitions(${PCL_DEFINITIONS})
@@ -89,6 +90,7 @@ target_link_libraries(${PROJECT_NAME}
 	${CARLA_LIBRARIES}
 	${PCL_LIBRARIES}
 	${OpenCV_LIBS}
+	nanoflann::nanoflann
 	Eigen3::Eigen
 	hdf5_dataset
 	yaml-cpp

@@ -22,7 +22,8 @@ public:
     [[nodiscard]] double height() const { return height_; }
     
     [[nodiscard]] Eigen::Vector2d DLT(const Eigen::Vector3d& point3d, const Eigen::Matrix4d& car_transform) const;
-    [[nodiscard]] Eigen::Vector3d Reproject(const Eigen::Vector2d& pixel_coords, const Eigen::Matrix4d& car_transform, double depth) const;
+    [[nodiscard]] Eigen::Vector3d ReprojectToGlobal(const Eigen::Vector2d& pixel_coords, const Eigen::Matrix4d& car_transform, double depth) const;
+    [[nodiscard]] Eigen::Vector3d ReprojectToLocal(const Eigen::Vector2d& pixel_coords, double depth) const;
     [[nodiscard]] bool IsInView(const pcl::PointXYZRGB& point3d, const Eigen::Matrix4d& car_transform, double pixel_threshold) const;
 private:
     Eigen::Matrix3d kalibration_;

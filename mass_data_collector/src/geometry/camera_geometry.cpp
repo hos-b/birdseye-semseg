@@ -58,10 +58,16 @@ Eigen::Vector2d CameraGeometry::DLT(const Eigen::Vector3d& point3d, const Eigen:
     return (dlt_matrix_ * local_car).hnormalized();
 }
 /* reprojects the point back into the global 3D coordinates */
-Eigen::Vector3d CameraGeometry::Reproject(const Eigen::Vector2d& pixel_coords, const Eigen::Matrix4d& car_transform, double depth) const {
+Eigen::Vector3d CameraGeometry::ReprojectToGlobal(const Eigen::Vector2d& pixel_coords, const Eigen::Matrix4d& car_transform, double depth) const {
     Eigen::Vector3d cam_local = inv_kalibration_ * pixel_coords.homogeneous() * depth;
     Eigen::Vector4d global = car_transform * cam_transform_ * cam_local.homogeneous();
     return global.hnormalized();
+}
+/* reprojects the point back into the local car 3D coordinates */
+Eigen::Vector3d CameraGeometry::ReprojectToLocal(const Eigen::Vector2d& pixel_coords, double depth) const {
+    Eigen::Vector3d cam_local = inv_kalibration_ * pixel_coords.homogeneous() * depth;
+    Eigen::Vector4d car_local = cam_transform_ * cam_local.homogeneous();
+    return car_local.hnormalized();
 }
 /* returns the transform matrix, i.e. transforms world to camera */
 Eigen::Matrix4d CameraGeometry::GetTransform() const {
@@ -82,7 +88,7 @@ Eigen::Matrix3d CameraGeometry::kalib_inv() const {
 /* testing whether points get projected to where they should */
 // TODO(hosein): turn into unit test
 Eigen::Vector2d CameraGeometry::Test(double x, double y, double depth,const Eigen::Matrix4d& car_transform) const {
-    Eigen::Vector3d global_point = Reproject(Eigen::Vector2d(x, y), car_transform, depth);
+    Eigen::Vector3d global_point = ReprojectToGlobal(Eigen::Vector2d(x, y), car_transform, depth);
     std::cout << "intermediate: " << global_point.transpose() << std::endl;
     return DLT(global_point, car_transform);
 }

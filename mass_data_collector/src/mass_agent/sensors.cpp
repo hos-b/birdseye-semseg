@@ -19,14 +19,14 @@ namespace data
 {
 static std::string ToString(CameraPosition position) {
 	switch (position) {
-	case LEFT:
-		return "left";
-	case RIGHT:
-		return "right";
-	case FRONT:
-		return "front";
-	case BACK:
-		return "back";
+	case FRONTLEFT:
+		return "front-left";
+	case FRONTRIGHT:
+		return "front-right";
+	case REARLEFT:
+		return "rear-left";
+	case REARRIGHT:
+		return "rear-right";
 	case CENTER:
 		return "center";
 	default:
@@ -73,7 +73,7 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 		if (save_) {
 			images_.emplace_back(mat.clone());
 			save_ = false;
-			std::cout << "saving rgb:" << images_.size() << std::endl;
+			// std::cout << "saving rgb:" << images_.size() << std::endl;
 			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
 		}
 	});
@@ -82,7 +82,7 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 void RGBCamera::CaputreOnce() {
 	save_ = true;
 	while (save_) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
+		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
 	}
 }
 /* destroys the sensor and clears the queue */
@@ -132,26 +132,30 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 					mass_cam_node["yaw"].as<float>(),
 					mass_cam_node["roll"].as<float>()}};
 	switch (position) {
-	case LEFT:
+	case FRONTLEFT:
 		camera_transform.location.y -= config::kCamLRHover;
-		break;
-	case RIGHT:
-		camera_transform.location.y += config::kCamLRHover;
-		break;
-	case FRONT:
 		camera_transform.location.x += config::kCamFBHover;
 		break;
-	case BACK:
+	case FRONTRIGHT:
+		camera_transform.location.y += config::kCamLRHover;
+		camera_transform.location.x += config::kCamFBHover;
+		break;
+	case REARLEFT:
+		camera_transform.location.y -= config::kCamLRHover;
+		camera_transform.location.x -= config::kCamFBHover;
+		break;
+	case REARRIGHT:
+		camera_transform.location.y += config::kCamLRHover;
 		camera_transform.location.x -= config::kCamFBHover;
 		break;
 	case CENTER:
 	default:
 		break;
 	}
-	std::cout << "           location: (" << camera_transform.location.x << ", "
+	std::cout << "\tlocation: (" << camera_transform.location.x << ", "
 								   << camera_transform.location.y << ", "
 								   << camera_transform.location.z << ")\n";
-	std::cout << "           rotation: (" << camera_transform.rotation.roll << ", "
+	std::cout << "\trotation: (" << camera_transform.rotation.roll << ", "
 								   << camera_transform.rotation.pitch << ", "
 								   << camera_transform.rotation.yaw << ")" << std::endl;
 	// usual camera info stuff
@@ -174,10 +178,10 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
 			auto depth_mat = DecodeToDepthMat(image);
 			depth_images_.emplace_back(depth_mat.clone());
-			cv::exp(depth_mat, depth_mat); // good for debugging
 			save_depth_ = false;
-			// std::cout << "saving depth:" << depth_images_.size() << std::endl;
-			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
+			// cv::exp(depth_mat, depth_mat); // good for debugging
+			// std::cout << "saving depth: " << depth_images_.size() << std::endl;
+			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
 		}
 	});
 	auto scam_blueprint = *bp_library->Find("sensor.camera.semantic_segmentation");
@@ -207,8 +211,8 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 			semantic_images_.emplace_back(DecodeToCityScapesPalleteSemSegMat(image));
 			// add car transform, if haven't already in depth callback
 			save_semantics_ = false;
-			std::cout << "saving semantics:" << semantic_images_.size() << std::endl;
-			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/s" + name_ + ".png", semantic_images_[0]);
+			// std::cout << "saving semantics: " << semantic_images_.size() << std::endl;
+			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/s" + name_ + ".png", semantic_images_[0]);
 		}
 	});
 }
@@ -228,7 +232,7 @@ void SemanticPointCloudCamera::CaputreOnce() {
 	save_semantics_ = true;
 	save_depth_ = true;
 	while (save_depth_ || save_semantics_) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(10)); // NOLINT
+		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
 	}
 }
 /* returns the minimum size of the two buffer */

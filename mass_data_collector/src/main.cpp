@@ -50,7 +50,7 @@ int main(int argc, char **argv)
 	agent::MassAgent agent;
 	agent.ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
 	while (ros::ok()) {
-		// if successful capture
+		agent.SetRandomPose();
 		if (data_count++ < max_data_count) {
 			agent.CaptureOnce();
 		}

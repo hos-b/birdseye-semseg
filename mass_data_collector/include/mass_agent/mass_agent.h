@@ -46,8 +46,7 @@ public:
 	void GenerateDataPoint();
 	void CaptureOnce();
 
-	[[nodiscard]] bool SetRandomPose();
-	[[nodiscard]] const Eigen::Matrix4d& GetTransformReference() const;
+	void SetRandomPose();
 
 	[[nodiscard]] inline double x() const;
 	[[nodiscard]] inline double y() const;
@@ -63,7 +62,6 @@ private:
 	uint16 id_;
 	Eigen::Matrix4d transform_;
 	std::vector<Eigen::Matrix4d> datapoint_transforms_;
-	geom::SemanticCloud semantic_cloud_;
 	// carla stuff
 	std::unique_ptr<cc::Client> carla_client_;
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
