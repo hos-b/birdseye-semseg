@@ -13,13 +13,9 @@
 #include "mass_agent/mass_agent.h"
 
 #define RANDOM_SEED 135
-#define MAP_INIT_SLEEP 2.0
-#define MAP_DENSIFICATION_LIMIT 0.22f
-#define CALRA_PORT 2000 // NOLINT
 
 using namespace std::chrono_literals;
 
-void InitializeFreicarMap(freicar::map::ThriftMapProxy& proxy);
 void inter(int signo) {
 	(void)signo;
 	std::cout << "shutting down" << std::endl;
@@ -41,33 +37,17 @@ int main(int argc, char **argv)
 	} else {
 		number_of_agents = std::atoi(argv[1]); // NOLINT
 	}
-	// thrift map intialization
-	freicar::map::ThriftMapProxy map_proxy;
-	InitializeFreicarMap(map_proxy);
-	ROS_INFO("starting data collection...");
 	srand(RANDOM_SEED);
-	
+	ROS_INFO("starting data collection...");
 	agent::MassAgent agent;
-	agent.ActivateCarlaAgent("127.0.0.1", CALRA_PORT);
 	while (ros::ok()) {
-		agent.SetRandomPose();
 		if (data_count++ < max_data_count) {
 			agent.CaptureOnce();
+			agent.GenerateDataPoint();
+			// agent.SetRandomPose();
 		}
-		std::this_thread::sleep_for(1s);
-		agent.GenerateDataPoint();
-		ros::spinOnce();
 	}
+	// ros::spin();
 	// agent.~MassAgent(); 
 	return 0;
-}
-
-void InitializeFreicarMap(freicar::map::ThriftMapProxy& proxy) {
-	std::string map_path = ros::package::getPath("freicar_map") + "/maps/thriftmap_fix.aismap";
-	// if should wait for network or the map can't be loaded
-	if (!proxy.LoadMapFromFile(map_path)) {
-		ROS_ERROR("could not find thriftmap file: %s", map_path.c_str());
-	}
-	ros::Duration(MAP_INIT_SLEEP).sleep();
-	freicar::map::Map::GetInstance().PostProcess(MAP_DENSIFICATION_LIMIT);
 }

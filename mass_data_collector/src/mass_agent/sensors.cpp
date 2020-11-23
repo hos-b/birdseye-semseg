@@ -1,11 +1,10 @@
 #include "mass_agent/sensors.h"
 #include "config/agent_config.h"
 #include "geometry/camera_geomtry.h"
-#include <Eigen/src/Core/Matrix.h>
+#include <opencv2/imgproc.hpp>
 #include <algorithm>
 #include <chrono>
 #include <memory>
-#include <mutex>
 #include <string>
 #include <thread>
 #include <tuple>
@@ -35,8 +34,8 @@ static std::string ToString(CameraPosition position) {
 }
 
 RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
-			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
-			boost::shared_ptr<carla::client::Vehicle> vehicle,					    // NOLINT
+			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
+			boost::shared_ptr<carla::client::Vehicle> vehicle,
 			bool log) {
 	cam_log("setting up rgb camera");
 	auto cam_blueprint = *bp_library->Find(rgb_cam_node["type"].as<std::string>());
@@ -63,17 +62,16 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 																	 camera_transform.rotation.roll,
 																	 camera_transform.rotation.pitch,
 																	 camera_transform.rotation.yaw);
-	// std::cout << "transform\n" << geometry_->GetTransform() << std::endl;
 	save_ = false;
 	// register a callback to publish images
-	sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+	sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		std::lock_guard<std::mutex> guard(buffer_mutex_);
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
 		if (save_) {
 			images_.emplace_back(mat.clone());
 			save_ = false;
-			// std::cout << "saving rgb:" << images_.size() << std::endl;
+			cam_log("saving rgb:" << images_.size());
 			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
 		}
 	});
@@ -117,8 +115,8 @@ bool RGBCamera::waiting() const {
 }
 // ------------------------ SemnaticPointCloudCamera -----------------------------
 SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_node,
-			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
-			boost::shared_ptr<carla::client::Vehicle> vehicle,						// NOLINT
+			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
+			boost::shared_ptr<carla::client::Vehicle> vehicle,
 			CameraPosition position,
 			bool log) {
 	name_ = "semantic_depth_" + ToString(position);
@@ -152,12 +150,12 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	default:
 		break;
 	}
-	std::cout << "\tlocation: (" << camera_transform.location.x << ", "
-								   << camera_transform.location.y << ", "
-								   << camera_transform.location.z << ")\n";
-	std::cout << "\trotation: (" << camera_transform.rotation.roll << ", "
-								   << camera_transform.rotation.pitch << ", "
-								   << camera_transform.rotation.yaw << ")" << std::endl;
+	cam_log("\tlocation: (" << camera_transform.location.x << ", "
+							<< camera_transform.location.y << ", "
+							<< camera_transform.location.z << ")");
+	cam_log("\trotation: (" << camera_transform.rotation.roll << ", "
+							<< camera_transform.rotation.pitch << ", "
+							<< camera_transform.rotation.yaw << ")");
 	// usual camera info stuff
 	auto dcam_blueprint = *bp_library->Find("sensor.camera.depth");
 	// setting camera attributes from the yaml
@@ -172,7 +170,7 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	depth_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
 	// register a callback to publish images
 	save_depth_ = false;
-	depth_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+	depth_sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_depth_) {
 			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
@@ -180,7 +178,7 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 			depth_images_.emplace_back(depth_mat.clone());
 			save_depth_ = false;
 			// cv::exp(depth_mat, depth_mat); // good for debugging
-			// std::cout << "saving depth: " << depth_images_.size() << std::endl;
+			cam_log("saving depth: " << depth_images_.size());
 			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
 		}
 	});
@@ -201,17 +199,16 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 																	  camera_transform.rotation.roll,
 																	  camera_transform.rotation.pitch,
 																	  camera_transform.rotation.yaw);
-	// std::cout << "transform\n" << geometry_->GetTransform() << std::endl;
 	// callback
 	save_semantics_ = false;
-	semantic_sensor_->Listen([this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+	semantic_sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_semantics_) {
 			std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
 			semantic_images_.emplace_back(DecodeToCityScapesPalleteSemSegMat(image));
 			// add car transform, if haven't already in depth callback
 			save_semantics_ = false;
-			// std::cout << "saving semantics: " << semantic_images_.size() << std::endl;
+			cam_log("saving semantics: " << semantic_images_.size());
 			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/s" + name_ + ".png", semantic_images_[0]);
 		}
 	});
@@ -336,7 +333,9 @@ cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd:
 																   raw_data,
 																   rgb_view.width() * sizeof(pixel)));
 	// if not clone, corrupted stack memory will be used
-	return cv::Mat(image_view.height(), image_view.width(), CV_8UC3, raw_data).clone();
+	auto ret_mat = cv::Mat(image_view.height(), image_view.width(), CV_8UC3, raw_data).clone();
+	cv::cvtColor(ret_mat, ret_mat, cv::COLOR_RGB2BGR);
+	return ret_mat;
 }
 
 } // namespace data

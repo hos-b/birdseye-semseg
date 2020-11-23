@@ -21,11 +21,12 @@ find_package(nanoflann)
 # add_executable(pcd_write_test pcd_write.cpp)
 # target_link_libraries(pcd_write_test )
 # CARLA related stuff -------------------------------------------------------
-if (NOT DEFINED ENV{CARLA_CXX_API})
-	message(FATAL_ERROR "environment variable CARLA_CXX_API is not defined. \
+if (NOT DEFINED ENV{CARLA_910_CXX_API})
+	message(FATAL_ERROR "environment variable CARLA_910_CXX_API is not defined. \
 						 export it before compiling")
 endif ()
-FILE(GLOB CARLA_LIBRARIES $ENV{CARLA_CXX_API}/lib/*.a)
+message(WARNING "CARLA API: $ENV{CARLA_910_CXX_API}")
+FILE(GLOB CARLA_LIBRARIES $ENV{CARLA_910_CXX_API}/lib/*.a)
 # catkin packages -----------------------------------------------------------
 find_package(catkin REQUIRED COMPONENTS
 	roscpp
@@ -58,8 +59,8 @@ include_directories(
 	${catkin_INCLUDE_DIRS}
 	${EIGEN3_INCLUDE_DIR}
 	${PCL_INCLUDE_DIRS}
-	$ENV{CARLA_CXX_API}/include
-	$ENV{CARLA_CXX_API}/include/system
+	$ENV{CARLA_910_CXX_API}/include
+	$ENV{CARLA_910_CXX_API}/include/system
 )
 # HDF5 lib for the dataset --------------------------------------------------
 add_library(hdf5_dataset STATIC 
@@ -83,9 +84,9 @@ add_executable(${PROJECT_NAME}
 	src/mass_agent/sensors.cpp
 )
 target_link_libraries(${PROJECT_NAME}
-	$ENV{CARLA_CXX_API}/lib/libDetourCrowd.a
-	$ENV{CARLA_CXX_API}/lib/libDetour.a
-	$ENV{CARLA_CXX_API}/lib/librpc.a
+	$ENV{CARLA_910_CXX_API}/lib/libDetourCrowd.a
+	$ENV{CARLA_910_CXX_API}/lib/libDetour.a
+	$ENV{CARLA_910_CXX_API}/lib/librpc.a
 	${catkin_LIBRARIES}
 	${CARLA_LIBRARIES}
 	${PCL_LIBRARIES}

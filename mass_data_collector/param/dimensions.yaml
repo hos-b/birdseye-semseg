@@ -1,0 +1,86 @@
+vehicle.audi.a2:
+  front: 1.85437
+  back: 1.82387
+  left: 0.773324
+  right: 0.743914
+vehicle.audi.etron:
+  front: 2.41829
+  back: 2.41587
+  left: 0.95259
+  right: 0.963972
+vehicle.audi.tt:
+  front: 2.09138
+  back: 2.05938
+  left: 1.00515
+  right: 0.974999
+vehicle.bmw.grandtourer:
+  front: 2.30527
+  back: 2.2697
+  left: 0.995986
+  right: 0.959075
+vehicle.chevrolet.impala:
+  front: 2.68861
+  back: 2.65012
+  left: 0.895853
+  right: 0.831608
+vehicle.citroen.c3:
+  front: 2.00025
+  back: 1.97027
+  left: 0.846419
+  right: 0.819541
+vehicle.dodge_charger.police:
+  front: 2.47321
+  back: 2.44592
+  left: 0.942774
+  right: 0.913317
+vehicle.jeep.wrangler_rubicon:
+  front: 1.92163
+  back: 1.89052
+  left: 0.829766
+  right: 0.800036
+vehicle.lincoln.mkz2017:
+  front: 2.43892
+  back: 2.40475
+  left: 0.927776
+  right: 0.898797
+vehicle.mercedes-benz.coupe:
+  front: 2.50548
+  back: 2.46365
+  left: 1.0249
+  right: 0.986128
+vehicle.mini.cooperst:
+  front: 1.90962
+  back: 1.87918
+  left: 0.94272
+  right: 0.861632
+vehicle.mustang.mustang:
+  front: 2.38321
+  back: 2.2945
+  left: 0.908862
+  right: 0.880147
+# weird on l & r
+vehicle.nissan.micra:
+  front: 1.79581
+  back: 1.7953
+  left: 0.907892
+  right: 0.753315
+vehicle.nissan.patrol:
+  front: 2.25833
+  back: 2.30084
+  left: 0.969844
+  right: 0.939545
+vehicle.seat.leon:
+  front: 2.10501
+  back: 1.90186
+  left: 0.861856
+  right: 0.806926
+vehicle.tesla.model3:
+  front: 2.421
+  back: 2.31269
+  left: 0.967148
+  right: 0.938444
+vehicle.toyota.prius:
+  front: 2.26598
+  back: 2.23607
+  left: 0.890203
+  right: 0.861665

@@ -11,17 +11,18 @@ namespace config
 	static constexpr float kCamFBHover = 2.0f; // meters
 
 	// boundaries, sizes
-	static constexpr double kPointCloudMaxLocalX = 5.0; // meters
-	static constexpr double kPointCloudMaxLocalY = 5.0; // meters
+	static constexpr double kPointCloudMaxLocalX = 10.0; // meters
+	static constexpr double kPointCloudMaxLocalY = 10.0; // meters
 	static constexpr unsigned int kSemanticBEVRows = 1000; // pixels
 	static constexpr unsigned int kSemanticBEVCols = 1000; // pixels
 
 	// stuff
 	static constexpr unsigned int kPollInterval = 10; // milisecond
 
-	// groesse
-	static constexpr float kAgentWidth = 2.0 ;
-	static constexpr float kAgentLength = 4.0 ;
+	// semantic color of the agent
+	static constexpr unsigned int kVehicleSemanticR = 0;
+	static constexpr unsigned int kVehicleSemanticG = 0;
+	static constexpr unsigned int kVehicleSemanticB = 142;
 
 	// CARLA's semantic IDs
 	static constexpr unsigned int kCARLAUnknownSemanticID = 0;

@@ -6,43 +6,51 @@
 #include <variant>
 
 #include <Eigen/Dense>
+#include <nanoflann.hpp>
 #include <pcl/point_cloud.h>
 #include <opencv2/opencv.hpp>
-#include <nanoflann.hpp>
 
 #include "geometry/camera_geomtry.h"
 
 namespace geom 
 {
 
-class SemanticCloud
+class SemanticCloud // NOLINT
 {
+using KDTree2D = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, SemanticCloud>,
+													 SemanticCloud, 2>;
+
 public:
 	SemanticCloud(double max_x, double max_y, size_t img_rows, size_t img_cols);
+	~SemanticCloud();
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 								cv::Mat semantic,
 								cv::Mat depth);
-	pcl::PointCloud<pcl::PointXYZRGB> GetMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry);
 	std::pair <cv::Mat, cv::Mat> GetSemanticBEV(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
-						   double pixel_limit, double mask_dist_threshold);
-	void SaveTargetCloud(const std::string& path);
-	void FilterCloud();
-
-	// kd-tree stuff
-	inline size_t kdtree_get_point_count() const { return target_cloud_.points.size(); } // NOLINT
-	inline float kdtree_get_pt(const size_t idx, const size_t dim) const { // NOLINT
+								   double pixel_limit, double vehicle_width, double vehicle_length);
+	std::tuple<double, double, double, double> GetVehicleBoundary();
+	void SaveCloud(const std::string& path);
+	
+	void SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
+						 const std::string& path, double pixel_limit);
+	void ProcessCloud();
+	// mandatory kd-tree stuff
+	[[nodiscard]] inline size_t kdtree_get_point_count() const { return target_cloud_.points.size(); }
+	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
 		if (dim == 0) {
-			return target_cloud_.points[idx].x; // NOLINT
-		} else {								// NOLINT
-			return target_cloud_.points[idx].y; // NOLINT
+			return target_cloud_.points[idx].x;
 		}
+		return target_cloud_.points[idx].y;
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
 
 private:
-	nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, SemanticCloud>,
-										SemanticCloud, 2> *kd_tree_;
+	size_t GetMajorityVote(const std::vector<size_t>& knn_result);
+	std::pair<std::vector<size_t>, std::vector<double>> FindClosestPoints(double knn_x, double knn_y, size_t num_results);
+
+	// members
+	std::unique_ptr<KDTree2D> kd_tree_;
 	pcl::PointCloud<pcl::PointXYZRGB> target_cloud_;
 	double point_max_y_;
 	double point_max_x_;

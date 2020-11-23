@@ -25,6 +25,7 @@ public:
     [[nodiscard]] Eigen::Vector3d ReprojectToGlobal(const Eigen::Vector2d& pixel_coords, const Eigen::Matrix4d& car_transform, double depth) const;
     [[nodiscard]] Eigen::Vector3d ReprojectToLocal(const Eigen::Vector2d& pixel_coords, double depth) const;
     [[nodiscard]] bool IsInView(const pcl::PointXYZRGB& point3d, const Eigen::Matrix4d& car_transform, double pixel_threshold) const;
+    [[nodiscard]] bool IsInView(const pcl::PointXYZRGB& point3d, double pixel_threshold) const;
 private:
     Eigen::Matrix3d kalibration_;
     Eigen::Matrix3d inv_kalibration_;
