@@ -15,7 +15,7 @@ namespace config
 	static constexpr double kPointCloudMaxLocalY = 10.0; // meters
 	static constexpr unsigned int kSemanticBEVRows = 1000; // pixels
 	static constexpr unsigned int kSemanticBEVCols = 1000; // pixels
-
+	static constexpr unsigned int kMaxAgentDistance = 400; // centimeters
 	// stuff
 	static constexpr unsigned int kPollInterval = 10; // milisecond
 

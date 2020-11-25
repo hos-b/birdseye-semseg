@@ -26,17 +26,14 @@
 #include <carla/geom/Transform.h>
 #include <vector>
 
-// Open3D stuff ?
-
 namespace cc = carla::client;
-
-
 namespace agent {
+class MassAgent;
+using WaypointKDTree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, MassAgent>,
+														   MassAgent, 3>;
 
 class MassAgent
 {
-using WaypointKDTree = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, MassAgent>,
-														   MassAgent, 3>;
 public:
 	~MassAgent();
 	explicit MassAgent();
@@ -46,9 +43,9 @@ public:
 	const MassAgent& operator=(MassAgent&&) = delete;
 	void GenerateDataPoint();
 	void CaptureOnce();
-
-	void SetRandomPose();
-	void WriteMapToImage(const std::string& path);
+	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
+	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp);
+	void WriteMapToFile(const std::string& path);
 
 
 	[[nodiscard]] inline double carla_x() const;
@@ -86,12 +83,13 @@ private:
 	// data
 	std::vector<Eigen::Matrix4d> datapoint_transforms_;
 	cv::Mat vehicle_mask_;
-	std::unique_ptr<WaypointKDTree> kd_tree_;
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	// carla sensors
 	std::unique_ptr<data::RGBCamera> front_cam_;
 	std::vector<std::unique_ptr<data::SemanticPointCloudCamera>> semantic_pc_cams_;
+	// lookup containers
+	std::unique_ptr<WaypointKDTree> kd_tree_;
 };
 
 } // namespace agent

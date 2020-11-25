@@ -1,3 +1,4 @@
+#include <chrono>
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
@@ -11,6 +12,7 @@
 #include <ros/package.h>
 
 #include "mass_agent/mass_agent.h"
+#include "ros/init.h"
 
 #define RANDOM_SEED 135
 
@@ -28,26 +30,37 @@ int main(int argc, char **argv)
 	signal(SIGINT, inter);
 
 	// reading command line args
-	size_t number_of_agents = 0;
+	size_t number_of_agents = 1;
 	size_t max_data_count = 1;
 	size_t data_count = 0;
 	if (argc != 2) {
-		number_of_agents = 1;
 		std::cout << "use: rosrun mass_data_collector <number of agents>" << std::endl;
 	} else {
 		number_of_agents = std::atoi(argv[1]); // NOLINT
 	}
 	srand(RANDOM_SEED);
 	ROS_INFO("starting data collection...");
-	agent::MassAgent agent;
+	agent::MassAgent agents[number_of_agents];
+	boost::shared_ptr<carla::client::Waypoint> random_pose;
 	while (ros::ok()) {
-		if (data_count++ < max_data_count) {
+		if (++data_count > max_data_count) {
+			break;
+		}
+		// chain randoming poses
+		std::cout << "moving agent " << 0 << std::endl;
+		random_pose = agents[0].SetRandomPose();
+		for (size_t i = 1; i < number_of_agents; ++i) {
+			std::cout << "moving agent " << i << std::endl;
+			random_pose = agents[i].SetRandomPose(random_pose);
+		}
+		for (auto& agent : agents) {
 			agent.CaptureOnce();
 			agent.GenerateDataPoint();
-			// agent.SetRandomPose();
 		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+		ros::spinOnce();
 	}
-	// ros::spin();
+	std::cout << "\ndone" << std::endl;
 	// agent.~MassAgent(); 
 	return 0;
 }
