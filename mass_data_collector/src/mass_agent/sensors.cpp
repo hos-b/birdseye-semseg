@@ -1,6 +1,8 @@
 #include "mass_agent/sensors.h"
 #include "config/agent_config.h"
+#include "config/geom_config.h"
 #include "geometry/camera_geomtry.h"
+
 #include <opencv2/imgproc.hpp>
 #include <algorithm>
 #include <chrono>

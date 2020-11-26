@@ -3,7 +3,10 @@
 #include "config/agent_config.h"
 #include "config/geom_config.h"
 
+#include <cmath>
 #include <functional>
+#include <opencv2/core/types.hpp>
+#include <opencv2/imgproc.hpp>
 #include <tuple>
 #include <unordered_map>
 #include <pcl/io/pcd_io.h>
@@ -68,7 +71,7 @@ void SemanticCloud::ProcessCloud() {
 	pcl::PointCloud<pcl::PointXYZRGB> new_target_cloud;
 	for (auto& org_point : target_cloud_.points) {
 		Eigen::Vector4d local_car = Eigen::Vector4d(org_point.x, org_point.y, org_point.z, 1.0); // NOLINT
-		// skip if outside the given boundaries
+		// skip if outside the given BEV boundaries
 		if (local_car.y() < -point_max_y_ || local_car.y() > point_max_y_ ||
 			local_car.x() < -point_max_x_ || local_car.x() > point_max_x_) {
 			continue;
@@ -96,6 +99,7 @@ void SemanticCloud::ProcessCloud() {
 /* returns the orthographic bird's eye view image */
 std::pair <cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 											  double pixel_limit, double vehicle_width, double vehicle_length) {
+	// getting pixel width & height
 	double pixel_w = 2 * point_max_y_ / static_cast<double>(image_cols_);
 	double pixel_h = 2 * point_max_x_ / static_cast<double>(image_rows_);
 	// cam stuff
@@ -103,6 +107,13 @@ std::pair <cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(std::shared_ptr<geom:
 	auto cam_kalib = rgb_geometry->kalib();
 	auto cam_img_height = rgb_geometry->height();
 	auto cam_img_width = rgb_geometry->width();
+	// getting the vehicle rectangle
+	cv::Point mid(image_cols_ / 2, image_rows_ / 2);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w)), mid.y - (vehicle_length / (2 * pixel_h)));
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w)), mid.y + (vehicle_length / (2 * pixel_h)));
+	cv::Rect2d vhc_rect(topleft, botright);
+	// the output images
+	pixel_limit = 0;
 	cv::Mat semantic_bev(image_rows_, image_cols_, CV_8UC3);
 	cv::Mat semantic_mask = cv::Mat::zeros(image_rows_, image_cols_, CV_8UC1);
 	for (int i = 0; i < semantic_bev.rows; ++i) {
@@ -110,23 +121,25 @@ std::pair <cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(std::shared_ptr<geom:
 			// get the center of the square that is to be mapped to a pixel
 			double knn_x = point_max_x_ - i * pixel_h + 0.5 * pixel_h;
 			double knn_y = point_max_y_ - j * pixel_w + 0.5 * pixel_w;
-			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 5);
+			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 32);
 			// majority voting
 			auto mv_winner = target_cloud_.points[GetMajorityVote(knn_ret_index)];
 			semantic_bev.at<cv::Vec3b>(i, j) = cv::Vec3b(mv_winner.b, mv_winner.g, mv_winner.r);
 			// if closest point is in threshold, check for visibilty
 			auto point = target_cloud_.points[knn_ret_index[0]];
-			Eigen::Vector4d local_car = Eigen::Vector4d(knn_x, knn_y, point.z, 1.0);
+			Eigen::Vector4d local_car = Eigen::Vector4d(point.x, point.y, point.z, 1.0);
 			Eigen::Vector3d local_camera = (cam_inv_transform * local_car).hnormalized();
-			// if the point belongs to the car itself
-			if (mv_winner.r == config::kVehicleSemanticR &&
-				mv_winner.g == config::kVehicleSemanticG &&
-				mv_winner.b == config::kVehicleSemanticB) {
-				if (std::abs(knn_x) < vehicle_length && std::abs(knn_y) < vehicle_width) {
-					semantic_mask.at<unsigned char>(i, j) = 255;
-					continue;		
-				}
+			if (std::sqrt(knn_sqrd_dist[0]) > 0.10) {
+				continue;
 			}
+			// if the point belongs to the car itself
+			/* if (mv_winner.r == config::kVehicleSemanticR &&
+				mv_winner.g == config::kVehicleSemanticG &&
+				mv_winner.b == config::kVehicleSemanticB &&
+				vhc_rect.contains(cv::Point(j, i))) {
+				// semantic_mask.at<unsigned char>(i, j) = 255;
+				// continue;	
+			} */
 			if (local_camera.z() < 0) {
 				// points behind the camera don't count
 				continue;
@@ -141,6 +154,7 @@ std::pair <cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(std::shared_ptr<geom:
 			semantic_mask.at<unsigned char>(i, j) = 255;
 		}
 	}
+	cv::rectangle(semantic_bev, topleft, botright, cv::Scalar(0, 0, 255), 2, cv::LineTypes::FILLED);
 	return std::make_pair(semantic_bev, semantic_mask);
 }
 /* simple kd-tree look up. only use whe the cloud is  */
@@ -265,5 +279,21 @@ void SemanticCloud::SaveCloud(const std::string& path) {
 		return;
 	}
 	pcl::io::savePCDFile(path, target_cloud_);
+}
+void SemanticCloud::PrintBoundaries() {
+	float minx = 0, miny = 0, maxx = 0, maxy = 0;
+	for (auto& point : target_cloud_.points) {
+		if (point.x < minx) {
+			minx = point.x;
+		} else if (point.x > maxx) {
+			maxx = point.x;
+		}
+		if (point.y < miny) {
+			miny = point.y;
+		} else if (point.y > maxy) {
+			maxy = point.y;
+		}
+	}
+	std::cout << "(" << minx << ", " << miny << ") - (" << maxx << ", " << maxy << ")" << std::endl;
 }
 } // namespace geom

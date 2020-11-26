@@ -16,16 +16,12 @@ find_package (Eigen3 3 REQUIRED)
 find_package(PCL 1.3 REQUIRED COMPONENTS common io)
 find_package(nanoflann)
 
-# link_directories(${PCL_LIBRARY_DIRS})
-# add_definitions(${PCL_DEFINITIONS})
-# add_executable(pcd_write_test pcd_write.cpp)
-# target_link_libraries(pcd_write_test )
 # CARLA related stuff -------------------------------------------------------
 if (NOT DEFINED ENV{CARLA_910_CXX_API})
 	message(FATAL_ERROR "environment variable CARLA_910_CXX_API is not defined. \
 						 export it before compiling")
 endif ()
-message(WARNING "CARLA API: $ENV{CARLA_910_CXX_API}")
+# message(WARNING "CARLA API: $ENV{CARLA_910_CXX_API}")
 FILE(GLOB CARLA_LIBRARIES $ENV{CARLA_910_CXX_API}/lib/*.a)
 # catkin packages -----------------------------------------------------------
 find_package(catkin REQUIRED COMPONENTS
@@ -34,7 +30,7 @@ find_package(catkin REQUIRED COMPONENTS
 	# cv_bridge
 	# image_transport
 	# sensor_msgs
-	freicar_map
+	# freicar_map
 )
 # HDF5 ----------------------------------------------------------------------
 # CMAKE_PREFIX_PATH should only be appended after catkin find_package (idk)
@@ -49,7 +45,7 @@ catkin_package(CATKIN_DEPENDS
 	# cv_bridge
 	# image_transport
 	# sensor_msgs
-	freicar_map
+	# freicar_map
 )
 
 # include dirs --------------------------------------------------------------
@@ -82,6 +78,8 @@ add_executable(${PROJECT_NAME}
 	src/geometry/semantic_cloud.cpp
 	src/mass_agent/mass_agent.cpp
 	src/mass_agent/sensors.cpp
+	src/config/geom_config.cpp
+	src/config/agent_config.cpp
 )
 target_link_libraries(${PROJECT_NAME}
 	$ENV{CARLA_910_CXX_API}/lib/libDetourCrowd.a

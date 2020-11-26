@@ -8,7 +8,7 @@
   <buildtool_depend>catkin</buildtool_depend>
   <depend>roscpp</depend>
   <depend>roslib</depend>
-  <depend>freicar_map</depend>
+  <!-- <depend>freicar_map</depend> -->
 
   <!-- forcing this build because it's usually launched before this node-->
   <!-- <build_depend>freicar_setting</build_depend> -->

@@ -34,6 +34,7 @@ public:
 	void SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 						 const std::string& path, double pixel_limit);
 	void ProcessCloud();
+	void PrintBoundaries();
 	// mandatory kd-tree stuff
 	[[nodiscard]] inline size_t kdtree_get_point_count() const { return target_cloud_.points.size(); }
 	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const {

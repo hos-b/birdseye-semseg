@@ -1,12 +1,25 @@
 #ifndef __MASS_GEOM_CONFIG__
 #define __MASS_GEOM_CONFIG__
-#include <cmath>
 
 namespace config
 {
-	static constexpr float kToRadians  = static_cast<float>(M_PI / 180.0f);
-	static constexpr float kToDegrees  = static_cast<float>(180.0f / M_PI);
-	static constexpr double kPixelDistanceThreshold  = 1.5;
+	const extern float kToRadians;
+	const extern float kToDegrees;
+	const extern double kPixelDistanceThreshold;
+
+	// additional BEV camera formation
+	const extern float kCamLRHover; // meters
+	const extern float kCamFBHover; // meters
+
+	// boundaries, sizes
+	const extern double kPointCloudMaxLocalX; // meters
+	const extern double kPointCloudMaxLocalY; // meters
+	const extern unsigned int kSemanticBEVRows; // pixels
+	const extern unsigned int kSemanticBEVCols; // pixels
+	const extern unsigned int kMaxAgentDistance; // centimeters
+	const extern float kMinimumAgentDistance; // meters
+
+
 } // namespace config
 
 #endif

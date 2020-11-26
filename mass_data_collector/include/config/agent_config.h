@@ -5,19 +5,9 @@
 
 namespace config
 {
-	static constexpr float kMinimumAgentDistance = 0.7f; // meters
-	// additional BEV camera formation
-	static constexpr float kCamLRHover = 2.0f; // meters
-	static constexpr float kCamFBHover = 2.0f; // meters
-
-	// boundaries, sizes
-	static constexpr double kPointCloudMaxLocalX = 10.0; // meters
-	static constexpr double kPointCloudMaxLocalY = 10.0; // meters
-	static constexpr unsigned int kSemanticBEVRows = 1000; // pixels
-	static constexpr unsigned int kSemanticBEVCols = 1000; // pixels
-	static constexpr unsigned int kMaxAgentDistance = 400; // centimeters
+	
 	// stuff
-	static constexpr unsigned int kPollInterval = 10; // milisecond
+	extern const unsigned int kPollInterval; // miliseconds
 
 	// semantic color of the agent
 	static constexpr unsigned int kVehicleSemanticR = 0;

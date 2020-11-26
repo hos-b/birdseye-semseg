@@ -42,7 +42,7 @@ public:
 	MassAgent(MassAgent&&) = delete;
 	const MassAgent& operator=(MassAgent&&) = delete;
 	void GenerateDataPoint();
-	void CaptureOnce();
+	void CaptureOnce(bool log = true);
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp);
 	void WriteMapToFile(const std::string& path);
