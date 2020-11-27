@@ -40,7 +40,7 @@ CameraGeometry::CameraGeometry(const YAML::Node& cam_node, float x, float y, flo
     dlt_matrix_ = kalibration_ * dlt_matrix_;
 }
 /* returns whether the given [global] point is in the view or not, given the pixel threshold */
-bool CameraGeometry::IsInView(const pcl::PointXYZRGB& point3d, const Eigen::Matrix4d& car_transform, double pixel_threshold) const {
+bool CameraGeometry::IsInView(const pcl::PointXYZL& point3d, const Eigen::Matrix4d& car_transform, double pixel_threshold) const {
     Eigen::Vector4d local_car = car_transform.inverse() * Eigen::Vector4d(point3d.x, point3d.y, point3d.z, 1.0); // NOLINT
     Eigen::Vector3d local_camera = (cam_inv_transform_ * local_car).hnormalized();
     // points behind the camera don't count
@@ -53,7 +53,7 @@ bool CameraGeometry::IsInView(const pcl::PointXYZRGB& point3d, const Eigen::Matr
     return in_width && in_height;
 }
 /* returns whether the given [local in car's transform] point is in the view or not, given the pixel threshold */
-bool CameraGeometry::IsInView(const pcl::PointXYZRGB& point3d, double pixel_threshold) const {
+bool CameraGeometry::IsInView(const pcl::PointXYZL& point3d, double pixel_threshold) const {
     Eigen::Vector4d local_car = Eigen::Vector4d(point3d.x, point3d.y, point3d.z, 1.0);
     Eigen::Vector3d local_camera = (cam_inv_transform_ * local_car).hnormalized();
     // points behind the camera don't count

@@ -2,10 +2,12 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
+#include <opencv2/core/types.hpp>
 #include <thread>
 #include <unistd.h>
 #include <csignal>
 #include <sstream>
+#include <unordered_map>
 #include <vector>
 
 #include <ros/ros.h>
@@ -23,6 +25,8 @@ void inter(int signo) {
 	std::cout << "shutting down" << std::endl;
 	ros::shutdown();
 }
+
+
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "mass_data_collector");

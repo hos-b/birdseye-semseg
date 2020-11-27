@@ -26,6 +26,8 @@ SemanticCloud::SemanticCloud(double max_x, double max_y, size_t img_rows, size_t
 	xy_hash_ = [](const std::pair<double, double>& pair) -> size_t {
 		return std::hash<double>()(pair.first * 1e4) ^ std::hash<double>()(pair.second);
 	};
+	pixel_w_ = 2 * point_max_y_ / static_cast<double>(image_cols_);
+	pixel_h_ = 2 * point_max_x_ / static_cast<double>(image_rows_);
 }
 /* destructor: cleans containers */
 SemanticCloud::~SemanticCloud() {
@@ -94,61 +96,54 @@ void SemanticCloud::ProcessCloud() {
 	kd_tree_->buildIndex();
 }
 /* returns the orthographic bird's eye view image */
-std::pair <cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
-											  double pixel_limit, double vehicle_width, double vehicle_length) {
-	// getting pixel width & height
-	double pixel_w = 2 * point_max_y_ / static_cast<double>(image_cols_);
-	double pixel_h = 2 * point_max_x_ / static_cast<double>(image_rows_);
-	// cam stuff
-	auto cam_inv_transform = rgb_geometry->GetInvTransform();
-	auto cam_kalib = rgb_geometry->kalib();
-	auto cam_img_height = rgb_geometry->height();
-	auto cam_img_width = rgb_geometry->width();
+std::pair <cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(double vehicle_width, double vehicle_length) {
 	// getting the vehicle rectangle
 	cv::Point mid(image_cols_ / 2, image_rows_ / 2);
-	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w)), mid.y - (vehicle_length / (2 * pixel_h)));
-	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w)), mid.y + (vehicle_length / (2 * pixel_h)));
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)), mid.y - (vehicle_length / (2 * pixel_h_)));
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)), mid.y + (vehicle_length / (2 * pixel_h_)));
 	cv::Rect2d vhc_rect(topleft, botright);
 	// the output images
 	cv::Mat semantic_bev(image_rows_, image_cols_, CV_8UC1);
-	cv::Mat semantic_mask = cv::Mat::zeros(image_rows_, image_cols_, CV_8UC1);
+	cv::Mat vehicle_mask = cv::Mat::zeros(image_rows_, image_cols_, CV_8UC1);
 	for (int i = 0; i < semantic_bev.rows; ++i) {
 		for (int j = 0; j < semantic_bev.cols; ++j) {
 			// get the center of the square that is to be mapped to a pixel
-			double knn_x = point_max_x_ - i * pixel_h + 0.5 * pixel_h;
-			double knn_y = point_max_y_ - j * pixel_w + 0.5 * pixel_w;
+			double knn_x = point_max_x_ - i * pixel_h_ + 0.5 * pixel_h_;
+			double knn_y = point_max_y_ - j * pixel_w_ + 0.5 * pixel_w_;
 			// ------------------------ majority voting for semantic id ------------------------
 			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 32);
 			auto mv_winner = target_cloud_.points[GetMajorityVote(knn_ret_index)];
 			semantic_bev.at<unsigned char>(i, j) = static_cast<unsigned char>(mv_winner.label);
 			// ------------------------ checking visibilty for the mask ------------------------
-			auto point = target_cloud_.points[knn_ret_index[0]];
-			// using special coordinates bcs i'm a genius
-			Eigen::Vector4d local_car = Eigen::Vector4d(knn_x, knn_y, point.z, 1.0);
-			Eigen::Vector3d local_camera = (cam_inv_transform * local_car).hnormalized();
 			// if the point belongs to the car itself
 			if (mv_winner.label == config::kCARLAVehiclesSemanticID &&
 				vhc_rect.contains(cv::Point(j, i))) {
-				semantic_mask.at<unsigned char>(i, j) = 255;
+				vehicle_mask.at<unsigned char>(i, j) = 255;
 				continue;
 			}
-			if (local_camera.z() < 0) {
-				// points behind the camera don't count
-				continue;
-			}
-			Eigen::Vector2d prj = (cam_kalib * local_camera).hnormalized();
-			bool in_height = prj.x() >= -pixel_limit && prj.x() <= cam_img_height + pixel_limit;
-			bool in_width = prj.y() >= -pixel_limit && prj.y() <= cam_img_width + pixel_limit;
-			// if outside the rgb image boundaries, skip
-			if (!in_width || !in_height) {
-				continue;
-			}
-			semantic_mask.at<unsigned char>(i, j) = 255;
 		}
 	}
-	cv::rectangle(semantic_bev, topleft, botright, cv::Scalar(0, 0, 255), 2, cv::LineTypes::FILLED);
-	return std::make_pair(semantic_bev, semantic_mask);
+	return std::make_pair(semantic_bev, vehicle_mask);
 }
+/* returns the BEV mask visible from the camera. this method assumes the point cloud only
+   consists of points captured with the front camera */
+cv::Mat SemanticCloud::GetBEVMask(double stitching_threshold) {
+	cv::Mat bev_mask = cv::Mat::zeros(image_rows_, image_cols_, CV_8UC1);
+	for (int i = 0; i < bev_mask.rows; ++i) {
+		for (int j = 0; j < bev_mask.cols; ++j) {
+			// get the center of the square that is to be mapped to a pixel
+			double knn_x = point_max_x_ - i * pixel_h_ + 0.5 * pixel_h_;
+			double knn_y = point_max_y_ - j * pixel_w_ + 0.5 * pixel_w_;
+			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 32);
+			// if the point is close enough
+			if (knn_sqrd_dist[0] <= stitching_threshold) {
+				bev_mask.at<unsigned char>(i, j) = 255;
+			}
+		}
+	}
+	return bev_mask;
+}
+
 /* simple kd-tree look up. only use whe the cloud is  */
 std::pair<std::vector<size_t>, std::vector<double>> SemanticCloud::FindClosestPoints(double knn_x, double knn_y, size_t num_results) {
 	double query[2] = {knn_x, knn_y};

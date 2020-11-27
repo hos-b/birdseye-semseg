@@ -26,9 +26,8 @@ public:
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 								cv::Mat semantic,
 								cv::Mat depth);
-	std::pair <cv::Mat, cv::Mat> GetSemanticBEV(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
-								double pixel_limit, double vehicle_width, double vehicle_length);
-	cv::Mat GetBEVMask();
+	std::pair <cv::Mat, cv::Mat> GetSemanticBEV(double vehicle_width, double vehicle_length);
+	cv::Mat GetBEVMask(double stitching_threshold);
 	void ProcessCloud();
 	static cv::Mat ConvertToCityScapesPallete(cv::Mat semantic_ids);
 
@@ -58,6 +57,8 @@ private:
 	pcl::PointCloud<pcl::PointXYZL> target_cloud_;
 	double point_max_y_;
 	double point_max_x_;
+	double pixel_w_;
+	double pixel_h_;
 	size_t image_cols_;
 	size_t image_rows_;
 	std::function<size_t(const std::pair<double, double>&)> xy_hash_;

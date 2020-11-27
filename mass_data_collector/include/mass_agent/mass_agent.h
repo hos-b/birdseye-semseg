@@ -41,10 +41,10 @@ public:
 	const MassAgent& operator=(const MassAgent&) = delete;
 	MassAgent(MassAgent&&) = delete;
 	const MassAgent& operator=(MassAgent&&) = delete;
-	void GenerateDataPoint();
-	void CaptureOnce(bool log = true);
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp);
+	void CaptureOnce(bool log = true);
+	void GenerateDataPoint();
 	void WriteMapToFile(const std::string& path);
 
 
@@ -65,6 +65,7 @@ public:
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const {return false;}
+
 private:
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors();
@@ -82,11 +83,11 @@ private:
 	double width_, length_;
 	// data
 	std::vector<Eigen::Matrix4d> datapoint_transforms_;
-	cv::Mat vehicle_mask_;
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	// carla sensors
-	std::unique_ptr<data::RGBCamera> front_cam_;
+	std::unique_ptr<data::RGBCamera> front_rgb_;
+	std::unique_ptr<data::SemanticPointCloudCamera> front_semantic_pc_;
 	std::vector<std::unique_ptr<data::SemanticPointCloudCamera>> semantic_pc_cams_;
 	// lookup containers
 	std::unique_ptr<WaypointKDTree> kd_tree_;

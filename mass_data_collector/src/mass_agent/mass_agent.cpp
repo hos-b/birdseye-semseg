@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <mutex>
+#include <opencv2/core.hpp>
 #include <string>
 #include <thread>
 #include <tuple>
@@ -86,8 +87,8 @@ MassAgent::MassAgent() {
 	width_ = std::max(boundaries["left"].as<double>(), boundaries["right"].as<double>()) * 2;
 	length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
 	// extra "padding"
-	width_ += 0.05;
-	length_ += 0.05;
+	width_ += 0.1;
+	length_ += 0.1;
 }
 /* destructor */
 MassAgent::~MassAgent() {
@@ -142,10 +143,10 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp) {
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
-	auto front_wps = initial_wp->GetNext(length_ + 0.15 /* + 
-						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0) */); // NOLINT
-	auto rear_wps = initial_wp->GetPrevious(length_ + 0.15 /* + 
-						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0) */); // NOLINT
+	auto front_wps = initial_wp->GetNext(length_ + 0.15 + 
+						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0)); // NOLINT
+	auto rear_wps = initial_wp->GetPrevious(length_ + 0.15 + 
+						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0)); // NOLINT
 	candidates.insert(candidates.end(), front_wps.begin(), front_wps.end());
 	candidates.insert(candidates.end(), rear_wps.begin(), rear_wps.end());
 	candidates.emplace_back(initial_wp->GetLeft());
@@ -198,7 +199,8 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(boost::share
 }
 /* caputres one frame for all sensors [[blocking]] */
 void MassAgent::CaptureOnce(bool log) {
-	front_cam_->CaputreOnce();
+	front_rgb_->CaputreOnce();
+	front_semantic_pc_->CaputreOnce();
 	for (auto& semantic_cam : semantic_pc_cams_) {
 		semantic_cam->CaputreOnce();
 	}
@@ -210,7 +212,8 @@ void MassAgent::CaptureOnce(bool log) {
 /* destroys the agent in the simulation & its sensors. */
 void MassAgent::DestroyAgent() {
 	std::cout << "destroying mass-agent-" << id_ << std::endl;
-	front_cam_->Destroy();
+	front_rgb_->Destroy();
+	front_semantic_pc_->Destroy();
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		if (semantic_depth_cam) {
 			semantic_depth_cam->Destroy();
@@ -228,32 +231,56 @@ void MassAgent::GenerateDataPoint() {
 				  << " with an empty queue" << std::endl;
 		return;
 	}
-	geom::SemanticCloud semantic_cloud(config::kPointCloudMaxLocalX,
-									   config::kPointCloudMaxLocalY,
-									   config::kSemanticBEVRows,
-									   config::kSemanticBEVCols);
 	auto car_transform = datapoint_transforms_.front();
+	// ---------------------- creating target cloud ----------------------
+	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
+									 config::kPointCloudMaxLocalY,
+									 config::kSemanticBEVRows,
+									 config::kSemanticBEVCols);
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 		if (success) {
-			semantic_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+			target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
 		} else {
-			std::cout << "ERROR: agent " + std::to_string(id_) + "'s "
-					  << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+			std::cout << "ERROR: agent " + std::to_string(id_)
+					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
 			return;
 		}
 	}
-	// std::cout << ">>> normal" << std::endl;
-	// semantic_cloud.PrintBoundaries();
-	// semantic_cloud.SaveCloud("/home/hosein/full" + std::to_string(id_) + ".pcl");
-	semantic_cloud.ProcessCloud();
-	// std::cout << ">>> filtered" << std::endl;
-	// semantic_cloud.PrintBoundaries();
-	// looks perfect
-	// semantic_cloud.SaveMaskedCloud(front_cam_->geometry(), "/home/hosein/visible" + std::to_string(id_) + ".pcl", 1.0);
-	auto image_pair = semantic_cloud.GetSemanticBEV(front_cam_->geometry(), 1.0, width_, length_);
-	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/bev" + std::to_string(id_) + ".png", image_pair.first);
-	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/mask" + std::to_string(id_) + ".png", image_pair.second);
+	target_cloud.ProcessCloud();
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(width_, length_);
+	// ----------------------- creating mask cloud -----------------------
+	geom::SemanticCloud mask_cloud(config::kPointCloudMaxLocalX,
+								   config::kPointCloudMaxLocalY,
+								   config::kSemanticBEVRows,
+								   config::kSemanticBEVCols);
+	auto[succ, semantic, depth] = front_semantic_pc_->pop();
+	if (!succ) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+		return;
+	}
+	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), semantic, depth);
+	mask_cloud.ProcessCloud();
+	cv::Mat bev_mask = mask_cloud.GetBEVMask(0.1);
+	bev_mask += vehicle_mask;
+	// ------------------------ getting rgb image ------------------------
+	auto[success, rgb_image] = front_rgb_->pop();
+	if (!success) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
+		return;
+	}
+	auto bev = geom::SemanticCloud::ConvertToCityScapesPallete(semantic_bev);
+	cv::Mat masked_bev;
+	cv::copyTo(bev, masked_bev, bev_mask);
+	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb" + std::to_string(id_)
+				+ ".png", rgb_image);
+	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/bev" + std::to_string(id_)
+				+ ".png", bev);
+	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/masked_bev" + std::to_string(id_)
+				+ ".png", masked_bev);
+	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/mask" + std::to_string(id_)
+				+ ".png", bev_mask);
+
 	datapoint_transforms_.erase(datapoint_transforms_.begin());
 }
 /* finding junctions and shit */
@@ -365,10 +392,17 @@ void MassAgent::SetupSensors() {
 	yaml_path += "/param/sensors.yaml";
 	auto bp_library = vehicle_->GetWorld().GetBlueprintLibrary();
 	YAML::Node base = YAML::LoadFile(yaml_path);
-	YAML::Node front_cam_node = base["camera-front"];
-	// front rgb cam
-	if (front_cam_node.IsDefined()) {
-		front_cam_ = std::make_unique<data::RGBCamera>(front_cam_node, bp_library, vehicle_, false);
+	YAML::Node front_rgb_node = base["camera-front"];
+	// front rgb & semantic pc cam
+	if (front_rgb_node.IsDefined()) {
+		front_rgb_ = std::make_unique<data::RGBCamera>(front_rgb_node, bp_library, vehicle_, false);
+		front_semantic_pc_ = std::make_unique<data::SemanticPointCloudCamera>(front_rgb_node,
+															bp_library,
+															vehicle_,
+															data::CameraPosition::CENTER,
+															false);
+	} else {
+		std::cout << "ERROR: front camera node is not defined in sensor definition file" << std::endl;
 	}
 	// depth camera
 	YAML::Node mass_cam_node = base["camera-mass"];
@@ -380,6 +414,8 @@ void MassAgent::SetupSensors() {
 															static_cast<data::CameraPosition>(i),
 															false));
 		}
+	} else {
+		std::cout << "ERROR: mass camera node is not defined in sensor definition file" << std::endl;
 	}
 }
 std::vector<const MassAgent*>& MassAgent::agents() {

@@ -74,7 +74,7 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 			images_.emplace_back(mat.clone());
 			save_ = false;
 			cam_log("saving rgb:" << images_.size());
-			cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
+			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
 		}
 	});
 }
@@ -99,13 +99,13 @@ size_t RGBCamera::count() const {
 /* returns true and the oldest buffer element. false and empty element if empty */
 std::pair <bool, cv::Mat> RGBCamera::pop() {
 	cv::Mat oldest;
-	bool empty = images_.empty();
-	if (!empty) {
+	bool success = !images_.empty();
+	if (success) {
 		std::lock_guard<std::mutex> guard(buffer_mutex_);
 		oldest = images_.front();
 		images_.erase(images_.begin());
 	}
-	return std::make_pair(empty, oldest);
+	return std::make_pair(success, oldest);
 }
 /* returns the camera geometry */
 std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() const {
@@ -158,7 +158,7 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	cam_log("\trotation: (" << camera_transform.rotation.roll << ", "
 							<< camera_transform.rotation.pitch << ", "
 							<< camera_transform.rotation.yaw << ")");
-	// usual camera info stuff
+	// depth camera -------------------------------------------------------------------------------------
 	auto dcam_blueprint = *bp_library->Find("sensor.camera.depth");
 	// setting camera attributes from the yaml
 	for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
@@ -184,6 +184,7 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
 		}
 	});
+	// semantic camera ------------------------------------------------------------------------------------
 	auto scam_blueprint = *bp_library->Find("sensor.camera.semantic_segmentation");
 	// setting camera attributes from the yaml
 	for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
@@ -195,25 +196,24 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	// spawn the camera attached to the vehicle.	
 	generic_actor = vehicle->GetWorld().SpawnActor(scam_blueprint, camera_transform, vehicle.get());
 	semantic_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
-	geometry_ = std::make_shared<geom::CameraGeometry>(mass_cam_node, camera_transform.location.x,
-																	  camera_transform.location.y,
-																	  camera_transform.location.z,
-																	  camera_transform.rotation.roll,
-																	  camera_transform.rotation.pitch,
-																	  camera_transform.rotation.yaw);
 	// callback
 	save_semantics_ = false;
 	semantic_sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_semantics_) {
 			std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
-			semantic_images_.emplace_back(DecodeToCityScapesPalleteSemSegMat(image));
+			semantic_images_.emplace_back(DecodeToSemSegMat(image));
 			// add car transform, if haven't already in depth callback
 			save_semantics_ = false;
 			cam_log("saving semantics: " << semantic_images_.size());
-			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/s" + name_ + ".png", semantic_images_[0]);
 		}
 	});
+	geometry_ = std::make_shared<geom::CameraGeometry>(mass_cam_node, camera_transform.location.x,
+																	  camera_transform.location.y,
+																	  camera_transform.location.z,
+																	  camera_transform.rotation.roll,
+																	  camera_transform.rotation.pitch,
+																	  camera_transform.rotation.yaw);
 }
 /* destroys the sensors */
 void SemanticPointCloudCamera::Destroy() {
