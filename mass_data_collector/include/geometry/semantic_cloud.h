@@ -27,14 +27,18 @@ public:
 								cv::Mat semantic,
 								cv::Mat depth);
 	std::pair <cv::Mat, cv::Mat> GetSemanticBEV(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
-								   double pixel_limit, double vehicle_width, double vehicle_length);
-	std::tuple<double, double, double, double> GetVehicleBoundary();
+								double pixel_limit, double vehicle_width, double vehicle_length);
+	cv::Mat GetBEVMask();
+	void ProcessCloud();
+	static cv::Mat ConvertToCityScapesPallete(cv::Mat semantic_ids);
+
+	// debug functions
+	void PrintBoundaries();
 	void SaveCloud(const std::string& path);
-	
+	std::tuple<double, double, double, double> GetVehicleBoundary();
 	void SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 						 const std::string& path, double pixel_limit);
-	void ProcessCloud();
-	void PrintBoundaries();
+
 	// mandatory kd-tree stuff
 	[[nodiscard]] inline size_t kdtree_get_point_count() const { return target_cloud_.points.size(); }
 	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
@@ -45,20 +49,18 @@ public:
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
-
 private:
 	size_t GetMajorityVote(const std::vector<size_t>& knn_result);
 	std::pair<std::vector<size_t>, std::vector<double>> FindClosestPoints(double knn_x, double knn_y, size_t num_results);
 
 	// members
 	std::unique_ptr<KDTree2D> kd_tree_;
-	pcl::PointCloud<pcl::PointXYZRGB> target_cloud_;
+	pcl::PointCloud<pcl::PointXYZL> target_cloud_;
 	double point_max_y_;
 	double point_max_x_;
 	size_t image_cols_;
 	size_t image_rows_;
 	std::function<size_t(const std::pair<double, double>&)> xy_hash_;
-	std::function<size_t(const Eigen::Vector3i&)> semantic_color_hash_;
 };
 
 } // namespace geom
