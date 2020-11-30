@@ -13,8 +13,6 @@ constexpr static unsigned int front_rgb_width = 640;
 constexpr static unsigned int front_rgb_height = 480;
 constexpr static unsigned int top_semseg_width = 1000;
 constexpr static unsigned int top_semseg_height = 1000;
-constexpr static unsigned int top_depth_width = 1000;
-constexpr static unsigned int top_depth_height = 1000;
 constexpr static unsigned int transform_length = 16;
 constexpr static unsigned int dataset_rank = 1;
 
@@ -24,10 +22,10 @@ constexpr static unsigned int comp_type_mask = 0b1100000;
 constexpr static unsigned int comp_lvl_mask  = 0b0011111;
 } // namespace statics
 struct MASSDataType {
-    char name[statics::name_length];
-    uint8 front_rgb[statics::front_rgb_channels][statics::front_rgb_height][statics::front_rgb_width];
-    uint8 top_semseg[statics::top_semseg_height][statics::top_semseg_width];
-    float top_depth[statics::top_depth_height][statics::top_depth_width];
+    unsigned int agent_id;
+    uint8 front_rgb[statics::front_rgb_channels * statics::front_rgb_height * statics::front_rgb_width];
+    uint8 top_semseg[statics::top_semseg_height * statics::top_semseg_width];
+    uint8 top_mask[statics::top_semseg_height * statics::top_semseg_width];
     float transform[statics::transform_length];
 };
 enum mode : unsigned int {
@@ -47,7 +45,8 @@ class HDF5Dataset
 {
 public:
     HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
-                unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size);
+                unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size,
+                unsigned int agent_count);
     HDF5Dataset(const HDF5Dataset&) = delete;
     HDF5Dataset& operator=(const HDF5Dataset&) = delete;
     HDF5Dataset& operator=(HDF5Dataset&&) = delete;

@@ -66,8 +66,8 @@ target_link_libraries(hdf5_dataset hdf5-static hdf5_cpp-static)
 set_target_properties(hdf5_dataset PROPERTIES CXX_STANDARD 17)
 
 # HDF5 api test -------------------------------------------------------------
-# add_executable(hdf5_test ${PROJECT_SOURCE_DIR}/src/hdf5_api/hdf5_test.cpp)
-# target_link_libraries(hdf5_test hdf5_dataset)
+add_executable(hdf5_test ${PROJECT_SOURCE_DIR}/src/hdf5_api/hdf5_test.cpp)
+target_link_libraries(hdf5_test hdf5_dataset)
 # add_executable(example ${PROJECT_SOURCE_DIR}/src/test.cpp)
 # target_link_libraries(example hdf5-static hdf5_cpp-static)
 

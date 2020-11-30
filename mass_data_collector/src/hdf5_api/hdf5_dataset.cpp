@@ -1,7 +1,12 @@
 #include "hdf5_api/hdf5_dataset.h"
+#include <H5ArrayType.h>
+#include <H5IntType.h>
+#include <H5PredType.h>
+#include <H5public.h>
 
-HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
-                         unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size) {
+HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags, // NOLINT
+                         unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size,
+                         unsigned int agent_count) {
     unsigned int hdf5_flags = 0;
     std::string file_action_str;
     switch (flags & statics::open_mask) {
@@ -23,15 +28,16 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
     InitializeCompoundType();
     switch (flags & statics::dset_mask) {
         case DSET_CREAT: {
+            // creating the dataset
             hsize_t initial_size[] = {init_size};
-            hsize_t maximum_size[] = {max_size};
+            hsize_t maximum_size[] = {max_size * agent_count};
             H5::DataSpace data_space(statics::dataset_rank, initial_size, maximum_size);
             H5::DSetCreatPropList dset_params;
             hsize_t chunk_dims[] = {chunk_size};
             dset_params.setChunk(1, chunk_dims);
             switch (compression & statics::comp_type_mask) {
             case compression::ZLIB:
-                dset_params.setDeflate(compression & statics::comp_lvl_mask);
+                dset_params.setDeflate(static_cast<int>(compression & statics::comp_lvl_mask));
                 break;
             case compression::SZIP:
                 dset_params.setSzip(H5_SZIP_NN_OPTION_MASK, compression & statics::comp_lvl_mask);
@@ -39,6 +45,12 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
             };
             dataset_ = h5file_.createDataSet(dset_name, comp_type_, data_space, dset_params);
             write_index_ = 0;
+            // creating the attribute
+            hsize_t attr_dims[] = {1};
+            unsigned int attr_data[] = {agent_count};
+            H5::DataSpace attr_dataspace(1, attr_dims);
+            H5::Attribute attribute = dataset_.createAttribute("agent_count", H5::PredType::STD_I32BE, attr_dataspace);
+            attribute.write(H5::PredType::NATIVE_UINT32, attr_data);
             break;
         }
         case DSET_OPEN: {
@@ -58,23 +70,20 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
 
 void HDF5Dataset::InitializeCompoundType() {
     // creating compound type
-    hsize_t name_dims[] = {statics::name_length};
-    H5::ArrayType name_array_type(H5::PredType::NATIVE_CHAR, 1, name_dims);
-    hsize_t frgb_dims[] = {statics::front_rgb_channels, statics::front_rgb_height, statics::front_rgb_width};
-    H5::ArrayType frgb_array_type(H5::PredType::NATIVE_UCHAR, 3, frgb_dims);
-    hsize_t tss_dims[] = {statics::top_semseg_width, statics::top_semseg_height};
-    H5::ArrayType tss_array_type(H5::PredType::NATIVE_USHORT, 2, tss_dims);
-    hsize_t tdepth_dims[] = {statics::top_depth_height, statics::top_depth_width};
-    H5::ArrayType tdepth_array_type(H5::PredType::NATIVE_FLOAT, 2, tdepth_dims);
+    // hsize_t name_dims[] = {statics::name_length};
+    // H5::ArrayType name_array_type(H5::PredType::NATIVE_CHAR, 1, name_dims);
+    hsize_t rgb_dims[] = {statics::front_rgb_channels * statics::front_rgb_height * statics::front_rgb_width};
+    H5::ArrayType rgb_array_type(H5::PredType::NATIVE_UCHAR, 1, rgb_dims);
+    hsize_t bev_dims[] = {statics::top_semseg_height * statics::top_semseg_width};
+    H5::ArrayType bev_array_type(H5::PredType::NATIVE_UCHAR, 1, bev_dims);
     hsize_t tf_dims[] = {statics::transform_length};
     H5::ArrayType tf_array_type(H5::PredType::NATIVE_FLOAT, 1, tf_dims);
     comp_type_ = H5::CompType(sizeof(MASSDataType));
-    comp_type_.insertMember("name", HOFFSET(MASSDataType, name), name_array_type);
-    comp_type_.insertMember("front_rgb", HOFFSET(MASSDataType, front_rgb), frgb_array_type);
-    comp_type_.insertMember("top_semseg", HOFFSET(MASSDataType, top_semseg), tss_array_type);
-    comp_type_.insertMember("top_depth", HOFFSET(MASSDataType, top_depth), tdepth_array_type);
-    comp_type_.insertMember("transform", HOFFSET(MASSDataType, transform), tf_array_type);
-    // std::cout << "created mass type: " << sizeof(MASSDataType) << std::endl;
+    comp_type_.insertMember("agent_id", HOFFSET(MASSDataType, agent_id), H5::PredType::NATIVE_UINT32); // NOLINT
+    comp_type_.insertMember("front_rgb", HOFFSET(MASSDataType, front_rgb), rgb_array_type); // NOLINT
+    comp_type_.insertMember("top_semseg", HOFFSET(MASSDataType, top_semseg), bev_array_type); // NOLINT
+    comp_type_.insertMember("top_mask", HOFFSET(MASSDataType, top_mask), bev_array_type); // NOLINT
+    comp_type_.insertMember("transform", HOFFSET(MASSDataType, transform), tf_array_type); // NOLINT
 }
 
 void HDF5Dataset::AppendElement(const MASSDataType* mass_data) {
@@ -96,7 +105,7 @@ void HDF5Dataset::Close() {
 }
 
 MASSDataType HDF5Dataset::ReadElement(size_t index) const {
-    MASSDataType read_out;
+    MASSDataType read_out{};
     auto dspace = dataset_.getSpace();
     // read_offset_[0] = {index};
     hsize_t count[] = {1};
