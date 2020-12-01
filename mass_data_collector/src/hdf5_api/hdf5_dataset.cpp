@@ -77,7 +77,7 @@ void HDF5Dataset::InitializeCompoundType() {
     hsize_t bev_dims[] = {statics::top_semseg_height * statics::top_semseg_width};
     H5::ArrayType bev_array_type(H5::PredType::NATIVE_UCHAR, 1, bev_dims);
     hsize_t tf_dims[] = {statics::transform_length};
-    H5::ArrayType tf_array_type(H5::PredType::NATIVE_FLOAT, 1, tf_dims);
+    H5::ArrayType tf_array_type(H5::PredType::NATIVE_DOUBLE, 1, tf_dims);
     comp_type_ = H5::CompType(sizeof(MASSDataType));
     comp_type_.insertMember("agent_id", HOFFSET(MASSDataType, agent_id), H5::PredType::NATIVE_UINT32); // NOLINT
     comp_type_.insertMember("front_rgb", HOFFSET(MASSDataType, front_rgb), rgb_array_type); // NOLINT

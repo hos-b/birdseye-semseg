@@ -21,10 +21,12 @@
 // CARLA stuff
 #include <carla/client/Map.h>
 #include <carla/client/World.h>
-
 #include <carla/client/TimeoutException.h>
 #include <carla/geom/Transform.h>
 #include <vector>
+
+// HDF5 stuff
+#include "hdf5_api/hdf5_dataset.h"
 
 namespace cc = carla::client;
 namespace agent {
@@ -41,11 +43,12 @@ public:
 	const MassAgent& operator=(const MassAgent&) = delete;
 	MassAgent(MassAgent&&) = delete;
 	const MassAgent& operator=(MassAgent&&) = delete;
+
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp);
-	void CaptureOnce(bool log = true);
-	void GenerateDataPoint();
 	void WriteMapToFile(const std::string& path);
+	void CaptureOnce(bool log = true);
+	[[nodiscard]] MASSDataType GenerateDataPoint();
 
 
 	[[nodiscard]] inline double carla_x() const;

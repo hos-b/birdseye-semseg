@@ -8,11 +8,13 @@
 
 namespace statics{
 constexpr static unsigned int name_length = 10;
-constexpr static unsigned int front_rgb_channels = 3;
+constexpr static unsigned int front_rgb_channels = 4;
 constexpr static unsigned int front_rgb_width = 640;
 constexpr static unsigned int front_rgb_height = 480;
+constexpr static unsigned int front_rgb_byte_count = front_rgb_height * front_rgb_width * front_rgb_channels;
 constexpr static unsigned int top_semseg_width = 1000;
 constexpr static unsigned int top_semseg_height = 1000;
+constexpr static unsigned int top_semseg_byte_count = top_semseg_width * top_semseg_height;
 constexpr static unsigned int transform_length = 16;
 constexpr static unsigned int dataset_rank = 1;
 
@@ -26,7 +28,7 @@ struct MASSDataType {
     uint8 front_rgb[statics::front_rgb_channels * statics::front_rgb_height * statics::front_rgb_width];
     uint8 top_semseg[statics::top_semseg_height * statics::top_semseg_width];
     uint8 top_mask[statics::top_semseg_height * statics::top_semseg_width];
-    float transform[statics::transform_length];
+    double transform[statics::transform_length];
 };
 enum mode : unsigned int {
     FILE_RD_ONLY    = 0b0001,

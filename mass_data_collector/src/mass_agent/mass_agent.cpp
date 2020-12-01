@@ -7,6 +7,7 @@
 #include <carla/client/Junction.h>
 
 #include "carla/road/Lane.h"
+#include "hdf5_api/hdf5_dataset.h"
 #include "mass_agent/sensors.h"
 #include "geometry/semantic_cloud.h"
 #include "config/agent_config.h"
@@ -225,12 +226,14 @@ void MassAgent::DestroyAgent() {
 	}
 }
 /* checks the buffers and creates a single data point from all the sensors */
-void MassAgent::GenerateDataPoint() {
+MASSDataType MassAgent::GenerateDataPoint() {
+	MASSDataType datapoint{};
 	if (datapoint_transforms_.empty()) {
 		std::cout << "GenerateDataPoint() called on agent " << id_
 				  << " with an empty queue" << std::endl;
-		return;
+		return datapoint;
 	}
+	// -------------------------- car transform --------------------------
 	auto car_transform = datapoint_transforms_.front();
 	// ---------------------- creating target cloud ----------------------
 	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
@@ -244,7 +247,7 @@ void MassAgent::GenerateDataPoint() {
 		} else {
 			std::cout << "ERROR: agent " + std::to_string(id_)
 					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
-			return;
+			return datapoint;
 		}
 	}
 	target_cloud.ProcessCloud();
@@ -257,7 +260,7 @@ void MassAgent::GenerateDataPoint() {
 	auto[succ, semantic, depth] = front_semantic_pc_->pop();
 	if (!succ) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
-		return;
+		return datapoint;
 	}
 	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), semantic, depth);
 	mask_cloud.ProcessCloud();
@@ -267,9 +270,9 @@ void MassAgent::GenerateDataPoint() {
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
-		return;
+		return datapoint;
 	}
-	auto bev = geom::SemanticCloud::ConvertToCityScapesPallete(semantic_bev);
+	/* auto bev = geom::SemanticCloud::ConvertToCityScapesPallete(semantic_bev);
 	cv::Mat masked_bev;
 	cv::copyTo(bev, masked_bev, bev_mask);
 	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb" + std::to_string(id_)
@@ -279,11 +282,38 @@ void MassAgent::GenerateDataPoint() {
 	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/masked_bev" + std::to_string(id_)
 				+ ".png", masked_bev);
 	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/mask" + std::to_string(id_)
-				+ ".png", bev_mask);
-
+				+ ".png", bev_mask); */
+	if (!rgb_image.isContinuous()) {
+		std::cout << "ERROR: rgb image is not a continuous byte array" << std::endl;
+		return datapoint;
+	}
+	if (!semantic_bev.isContinuous()) {
+		std::cout << "ERROR: BEV image is not a continuous byte array" << std::endl;
+		return datapoint;
+	}
+	if (!bev_mask.isContinuous()) {
+		std::cout << "ERROR: BEV mask is not a continuous byte array" << std::endl;
+		return datapoint;
+	}
+	// filling the datapoint
+	datapoint.agent_id = id_;
+	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
+		datapoint.front_rgb[i] = rgb_image.data[i]; // NOLINT
+	}
+	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
+		datapoint.top_semseg[i] = semantic_bev.data[i]; // NOLINT
+	}
+	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
+		datapoint.top_mask[i] = bev_mask.data[i]; // NOLINT
+	}
+	for (size_t i = 0; i < statics::transform_length; ++i) {
+		datapoint.transform[i] = car_transform.data()[i]; // NOLINT
+	}
+	// popping car transform
 	datapoint_transforms_.erase(datapoint_transforms_.begin());
+	return datapoint;
 }
-/* finding junctions and shit */
+/* writes an image of the map to file */
 void MassAgent::WriteMapToFile(const std::string& path) {
 	float minx = 0.0f, maxx = 0.0f;
 	float miny = 0.0f, maxy = 0.0f;

@@ -88,8 +88,8 @@ void SemanticCloud::ProcessCloud() {
 	new_target_cloud.width = new_target_cloud.points.size();
 	new_target_cloud.height = 1;
 	new_target_cloud.is_dense = true;
-	std::cout << "filtered " << target_cloud_.points.size() - new_target_cloud.points.size()
-			  << "/" << target_cloud_.points.size() << " points" << std::endl;
+	// std::cout << "filtered " << target_cloud_.points.size() - new_target_cloud.points.size()
+	// 		  << "/" << target_cloud_.points.size() << " points" << std::endl;
 	target_cloud_ = new_target_cloud;
 	// building kd-tree
 	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10));
