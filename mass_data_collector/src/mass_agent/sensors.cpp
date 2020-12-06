@@ -72,8 +72,8 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 		auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
 		if (save_) {
 			images_.emplace_back(mat.clone());
-			save_ = false;
 			cam_log("saving rgb:" << images_.size());
+			save_ = false;
 			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
 		}
 	});
@@ -98,14 +98,13 @@ size_t RGBCamera::count() const {
 }
 /* returns true and the oldest buffer element. false and empty element if empty */
 std::pair <bool, cv::Mat> RGBCamera::pop() {
-	cv::Mat oldest;
-	bool success = !images_.empty();
-	if (success) {
+	if (!images_.empty()) {
 		std::lock_guard<std::mutex> guard(buffer_mutex_);
-		oldest = images_.front();
+		cv::Mat rgb = std::move(images_.front());
 		images_.erase(images_.begin());
+		return std::make_pair(true, rgb);
 	}
-	return std::make_pair(success, oldest);
+	return std::make_pair(false, cv::Mat());
 }
 /* returns the camera geometry */
 std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() const {
@@ -178,10 +177,8 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
 			auto depth_mat = DecodeToDepthMat(image);
 			depth_images_.emplace_back(depth_mat.clone());
-			save_depth_ = false;
-			// cv::exp(depth_mat, depth_mat); // good for debugging
 			cam_log("saving depth: " << depth_images_.size());
-			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/d" + name_ + ".png", depth_mat);
+			save_depth_ = false;
 		}
 	});
 	// semantic camera ------------------------------------------------------------------------------------
@@ -204,8 +201,8 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 			std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
 			semantic_images_.emplace_back(DecodeToSemSegMat(image));
 			// add car transform, if haven't already in depth callback
-			save_semantics_ = false;
 			cam_log("saving semantics: " << semantic_images_.size());
+			save_semantics_ = false;
 		}
 	});
 	geometry_ = std::make_shared<geom::CameraGeometry>(mass_cam_node, camera_transform.location.x,
@@ -256,7 +253,7 @@ std::tuple<bool, cv::Mat, cv::Mat> SemanticPointCloudCamera::pop() {
 		cv::Mat depth = std::move(depth_images_.front());
 		semantic_images_.erase(semantic_images_.begin());
 		depth_images_.erase(depth_images_.begin());
-		return std::make_tuple(true, semantic.clone(), depth.clone());
+		return std::make_tuple(true, semantic, depth);
 	}
 	return std::make_tuple(false, cv::Mat(), cv::Mat());
 }

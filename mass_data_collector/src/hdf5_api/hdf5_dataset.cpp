@@ -67,11 +67,17 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
     // append parameter
     _mspace = H5::DataSpace (statics::dataset_rank, _count);
 }
-
+/* adds an attribute to the dataset */
+void HDF5Dataset::AddMaskAttribute(unsigned char* attr_data, size_t attr_size, const std::string& attr_name) {
+    // creating the attribute
+    hsize_t attr_dims[] = {attr_size};
+    H5::DataSpace attr_dataspace(1, attr_dims);
+    H5::Attribute attribute = dataset_.createAttribute(attr_name, H5::PredType::NATIVE_UINT8, attr_dataspace);
+    attribute.write(H5::PredType::NATIVE_UINT8, attr_data);
+}
+/* initializes the compound datatype used to write to the dataset */
 void HDF5Dataset::InitializeCompoundType() {
     // creating compound type
-    // hsize_t name_dims[] = {statics::name_length};
-    // H5::ArrayType name_array_type(H5::PredType::NATIVE_CHAR, 1, name_dims);
     hsize_t rgb_dims[] = {statics::front_rgb_channels * statics::front_rgb_height * statics::front_rgb_width};
     H5::ArrayType rgb_array_type(H5::PredType::NATIVE_UCHAR, 1, rgb_dims);
     hsize_t bev_dims[] = {statics::top_semseg_height * statics::top_semseg_width};
@@ -85,7 +91,7 @@ void HDF5Dataset::InitializeCompoundType() {
     comp_type_.insertMember("top_mask", HOFFSET(MASSDataType, top_mask), bev_array_type); // NOLINT
     comp_type_.insertMember("transform", HOFFSET(MASSDataType, transform), tf_array_type); // NOLINT
 }
-
+/* appends an element of the compund datatype to the dataset */
 void HDF5Dataset::AppendElement(const MASSDataType* mass_data) {
     write_offset_[0] = {write_index_++};
     auto dspace = dataset_.getSpace();
@@ -96,14 +102,14 @@ void HDF5Dataset::AppendElement(const MASSDataType* mass_data) {
     extension_[0] = write_index_ + 1;
     dataset_.extend(extension_);
 }
-
+/* closes the dataset and the hdf5 file */
 void HDF5Dataset::Close() {
     dataset_.close();
     // std::cout << "dataset closed" << std::endl;
     h5file_.close();
     // std::cout << "file closed" << std::endl;
 }
-
+/* reads an element from the dataset, given the index */
 MASSDataType HDF5Dataset::ReadElement(size_t index) const {
     MASSDataType read_out{};
     auto dspace = dataset_.getSpace();
@@ -114,6 +120,7 @@ MASSDataType HDF5Dataset::ReadElement(size_t index) const {
     dataset_.read(&read_out, comp_type_, _mspace, dspace);
     return read_out;
 }
+/* returns the current and maximum size of the dataset */
 std::pair<hsize_t, hsize_t> HDF5Dataset::GetCurrentSize() const {
     hsize_t dim[] = {0};
     hsize_t maxdim[] = {0};

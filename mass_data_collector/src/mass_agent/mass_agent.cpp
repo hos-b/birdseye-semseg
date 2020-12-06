@@ -250,8 +250,8 @@ MASSDataType MassAgent::GenerateDataPoint() {
 			return datapoint;
 		}
 	}
-	target_cloud.ProcessCloud();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(width_, length_);
+	target_cloud.BuildKDTree();
+	auto semantic_bev = target_cloud.GetSemanticBEV(32);
 	// ----------------------- creating mask cloud -----------------------
 	geom::SemanticCloud mask_cloud(config::kPointCloudMaxLocalX,
 								   config::kPointCloudMaxLocalY,
@@ -263,26 +263,14 @@ MASSDataType MassAgent::GenerateDataPoint() {
 		return datapoint;
 	}
 	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), semantic, depth);
-	mask_cloud.ProcessCloud();
+	mask_cloud.BuildKDTree();
 	cv::Mat bev_mask = mask_cloud.GetBEVMask(0.1);
-	bev_mask += vehicle_mask;
 	// ------------------------ getting rgb image ------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
 		return datapoint;
 	}
-	/* auto bev = geom::SemanticCloud::ConvertToCityScapesPallete(semantic_bev);
-	cv::Mat masked_bev;
-	cv::copyTo(bev, masked_bev, bev_mask);
-	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb" + std::to_string(id_)
-				+ ".png", rgb_image);
-	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/bev" + std::to_string(id_)
-				+ ".png", bev);
-	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/masked_bev" + std::to_string(id_)
-				+ ".png", masked_bev);
-	cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/mask" + std::to_string(id_)
-				+ ".png", bev_mask); */
 	if (!rgb_image.isContinuous()) {
 		std::cout << "ERROR: rgb image is not a continuous byte array" << std::endl;
 		return datapoint;
@@ -312,6 +300,44 @@ MASSDataType MassAgent::GenerateDataPoint() {
 	// popping car transform
 	datapoint_transforms_.erase(datapoint_transforms_.begin());
 	return datapoint;
+}
+/* captures one datapoint and creates a BEV mask containing the vehicle */
+cv::Mat MassAgent::CreateVehicleMask() {
+	CaptureOnce(false);
+	if (datapoint_transforms_.empty()) {
+		std::cout << "CreateVehicleMask() called on agent " << id_
+				  << " with an empty queue" << std::endl;
+	}
+	// ---------------------- creating target cloud ----------------------
+	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
+									 config::kPointCloudMaxLocalY,
+									 config::kSemanticBEVRows,
+									 config::kSemanticBEVCols);
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+		if (success) {
+			target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth,
+											   {config::kCARLAVehiclesSemanticID});
+		} else {
+			std::cout << "ERROR: agent " + std::to_string(id_)
+					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+		}
+	}
+	target_cloud.BuildKDTree();
+	cv::Mat vehicle_mask = target_cloud.CalculateVehicleMask(width_, length_, 3, 0.05);
+	// ----------------------- creating mask cloud -----------------------
+	auto[succ, semantic, depth] = front_semantic_pc_->pop();
+	if (!succ) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+	}
+	// ------------------------ getting rgb image ------------------------
+	auto[success, rgb_image] = front_rgb_->pop();
+	if (!success) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
+	}
+	// popping car transform
+	datapoint_transforms_.erase(datapoint_transforms_.begin());
+	return vehicle_mask;
 }
 /* writes an image of the map to file */
 void MassAgent::WriteMapToFile(const std::string& path) {

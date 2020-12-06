@@ -56,6 +56,7 @@ public:
     ~HDF5Dataset() = default;
 
     void AppendElement(const MASSDataType* mass_data);
+    void AddMaskAttribute(unsigned char* attr_data, size_t attr_size, const std::string& attr_name);
     [[nodiscard]] MASSDataType ReadElement(size_t index) const;
     [[nodiscard]] std::pair<hsize_t, hsize_t> GetCurrentSize() const;
     void Close();

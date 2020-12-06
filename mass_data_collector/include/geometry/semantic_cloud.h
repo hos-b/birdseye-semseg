@@ -26,15 +26,21 @@ public:
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 								cv::Mat semantic,
 								cv::Mat depth);
-	std::pair <cv::Mat, cv::Mat> GetSemanticBEV(double vehicle_width, double vehicle_length);
-	cv::Mat GetBEVMask(double stitching_threshold);
-	void ProcessCloud();
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+								cv::Mat semantic,
+								cv::Mat depth,
+								std::vector<unsigned int> filter);
+	[[nodiscard]] cv::Mat GetSemanticBEV(size_t knn_pt_count);
+	[[nodiscard]] cv::Mat GetBEVMask(double stitching_threshold);
+	[[nodiscard]] cv::Mat CalculateVehicleMask(double vehicle_width, double vehicle_length,
+											   size_t padding, double threshold) const;
+	void BuildKDTree();
 	static cv::Mat ConvertToCityScapesPallete(cv::Mat semantic_ids);
 
 	// debug functions
-	void PrintBoundaries();
-	void SaveCloud(const std::string& path);
-	std::tuple<double, double, double, double> GetVehicleBoundary();
+	void PrintBoundaries() const;
+	void SaveCloud(const std::string& path) const;
+	[[nodiscard]] std::tuple<double, double, double, double> GetVehicleBoundary() const;
 	void SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 						 const std::string& path, double pixel_limit);
 
@@ -49,8 +55,9 @@ public:
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
 private:
-	size_t GetMajorityVote(const std::vector<size_t>& knn_result);
-	std::pair<std::vector<size_t>, std::vector<double>> FindClosestPoints(double knn_x, double knn_y, size_t num_results);
+	[[nodiscard]] size_t GetMajorityVote(const std::vector<size_t>& knn_result) const;
+	[[nodiscard]] std::pair<std::vector<size_t>, std::vector<double>>
+	FindClosestPoints(double knn_x, double knn_y, size_t num_results) const;
 
 	// members
 	std::unique_ptr<KDTree2D> kd_tree_;
@@ -62,6 +69,7 @@ private:
 	size_t image_cols_;
 	size_t image_rows_;
 	std::function<size_t(const std::pair<double, double>&)> xy_hash_;
+	std::unordered_map<std::pair<double, double>, double, decltype(xy_hash_)> xy_map_;
 };
 
 } // namespace geom

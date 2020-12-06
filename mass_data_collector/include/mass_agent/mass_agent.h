@@ -23,7 +23,6 @@
 #include <carla/client/World.h>
 #include <carla/client/TimeoutException.h>
 #include <carla/geom/Transform.h>
-#include <vector>
 
 // HDF5 stuff
 #include "hdf5_api/hdf5_dataset.h"
@@ -47,9 +46,9 @@ public:
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp);
 	void WriteMapToFile(const std::string& path);
-	void CaptureOnce(bool log = true);
+	void CaptureOnce(bool log);
 	[[nodiscard]] MASSDataType GenerateDataPoint();
-
+	cv::Mat CreateVehicleMask();
 
 	[[nodiscard]] inline double carla_x() const;
 	[[nodiscard]] inline double carla_y() const;
@@ -68,6 +67,7 @@ public:
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const {return false;}
+	static std::unique_ptr<cc::Client>& carla_client();
 
 private:
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
@@ -78,7 +78,6 @@ private:
 	static std::vector<std::string> GetBlueprintNames();
 	static std::vector<const MassAgent*>& agents();
 	static std::vector<boost::shared_ptr<carla::client::Waypoint>>& kd_points();
-	static std::unique_ptr<cc::Client>& carla_client();
 	// state
 	uint16 id_;
 	Eigen::Matrix4d transform_;

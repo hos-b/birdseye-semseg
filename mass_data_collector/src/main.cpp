@@ -1,5 +1,6 @@
 #include <chrono>
 #include <cstdlib>
+#include <opencv2/imgcodecs.hpp>
 #include <thread>
 #include <csignal>
 #include <iomanip>
@@ -20,6 +21,51 @@ void inter(int signo) {
 	ros::shutdown();
 }
 
+/* 
+To Test:
+	[5.7187e+01, 1.9257e+02] # buildings look weird
+	[2.2314e+02, 2.0064e+02] # tunnel
+	[9.94530000, 138.730700] # inside
+	[9.97690000, 140.011500] # this one
+	[147.305500, 151.092400] # buildings look weird again
+
+	[1.6323e+02, 1.9390e+02] # end of junction leading to tunnel
+	[170.402800, 193.900000] # beginning of tunnel
+	[174.264400, 193.900000] # more inside the tunnel
+
+	[-1.489e+02, 7.9915e+01] # under tram line
+	[-1.4547e+02,8.0353e+01] # under tram line
+
+	[-74.1480, -79.5321] # fine but has a weird building artifact
+	[-71.1481, -79.5239] # to the right on a bike lane ?
+	[-69.5806, -79.5196] # to the right on the sidewalk!
+
+	[244.0300,  78.4943] # inside tunnel and another car
+	[244.2139,  86.0548] # inside tunnel
+	[244.0843,  80.7248] # inside tunnel
+	[234.0437,  99.7434] # ...
+	[234.2429, 107.9337] # ...
+	[234.1480, 104.0332] # ...
+
+	[ 84.2659, -68.3524] # fine
+	[ 85.3140, -70.1346] # to its left on gravel
+	[ 87.7725, -65.8354] # in front, on gravel
+
+	[ -35.6166, -177.2975] # gas station?
+	[ -29.9447, -174.1371] # yes?
+	[ -25.4275, -172.1239] # maybe
+
+	[248.6527, 147.9556] # tunnel and side lane
+	[251.6419, 148.2102] # tunnel and side lane
+	[250.8483, 154.8452] # tunnel
+
+	[-24.7947,  -5.7120] # fine
+	[-26.2067,  -7.1284] # to its left and on side lane
+	[-28.7932,  -5.2003] # side lane
+
+	[87.2907, 37.3840] # side lane
+	[105.7390,  78.6139] # side lane again
+ */
 
 int main(int argc, char **argv)
 {
@@ -47,11 +93,17 @@ int main(int argc, char **argv)
 	srand(RANDOM_SEED);
 	ROS_INFO("starting data collection with %zu agent(s) for %zu iterations", number_of_agents, max_data_count);
 	// dataset -----------------------------------------------------------------------------------------
-	HDF5Dataset dataset("/home/hosein/dataset_1.hdf5", "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
+	HDF5Dataset dataset("/home/hosein/test.hdf5", "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
 						compression::ZLIB | 6, 1, 20000, 32, number_of_agents);
-	// creating agents
+	// CARLA setup -------------------------------------------------------------------------------------
 	agent::MassAgent agents[number_of_agents];
 	boost::shared_ptr<carla::client::Waypoint> random_pose;
+	auto world = agent::MassAgent::carla_client()->GetWorld();
+	// addings vehicle masks to the dataset ------------------------------------------------------------
+	for (size_t i = 0; i < number_of_agents; ++i) {
+		auto vmask = agents[i].CreateVehicleMask();
+		cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/vmask_" + std::to_string(i) + ".png", vmask);
+	}
 	// timing ------------------------------------------------------------------------------------------
 	auto program_start = std::chrono::high_resolution_clock::now();
 	float avg_batch_time = 0.0f;
@@ -66,6 +118,7 @@ int main(int argc, char **argv)
 		for (size_t i = 1; i < number_of_agents; ++i) {
 			random_pose = agents[i].SetRandomPose(random_pose);
 		}
+		std::this_thread::sleep_for(100ms);
 		// gathering data
 		for (auto& agent : agents) {
 			agent.CaptureOnce(false);
