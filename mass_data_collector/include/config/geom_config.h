@@ -17,7 +17,6 @@ namespace config
 	const extern unsigned int kSemanticBEVRows; // pixels
 	const extern unsigned int kSemanticBEVCols; // pixels
 	const extern unsigned int kMaxAgentDistance; // centimeters
-	const extern float kMinimumAgentDistance; // meters
 
 
 } // namespace config

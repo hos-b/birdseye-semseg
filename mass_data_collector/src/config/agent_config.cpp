@@ -99,12 +99,12 @@ namespace config
         {kCARLATerrainSemanticID, cv::Vec3b(100, 170, 145)}
     });
     const std::unordered_map<unsigned int, bool> fileterd_semantics({ // NOLINT
-        {kCARLAUnknownSemanticID, false},
+        {kCARLAUnknownSemanticID, true}, // <-- hopefully empty
         {kCARLABuildingSemanticID, false},
-        {kCARLAFenceSemanticID, false},
+        {kCARLAFenceSemanticID, true}, // <-- who needs fences
         {kCARLAOtherSemanticID, false},
         {kCARLAPedestrianSemanticID, false},
-        {kCARLAPoleSemanticID, true},
+        {kCARLAPoleSemanticID, true}, // <-- over-hanging structure + kinda irrelevant
         {kCARLARoadLineSemanticID, false},
         {kCARLARoadSemanticID, false},
         {kCARLASideWalkSemanticID, false},
@@ -112,15 +112,30 @@ namespace config
         {kCARLAVehiclesSemanticID, false},
         {kCARLAWallSemanticID, false},
         {kCARLATrafficSignSemanticID, false},
-        {kCARLASkySemanticID, true},
+        {kCARLASkySemanticID, true}, // <-- won't happen anyway but meh
         {kCARLAGroundSemanticID, false},
         {kCARLABridgeSemanticID, false},
         {kCARLARailTrackSemanticID, false},
-        {kCARLAGuardRailSemanticID, false},
-        {kCARLATrafficLightSemanticID, true},
+        {kCARLAGuardRailSemanticID, true}, // <-- not important for top-down
+        {kCARLATrafficLightSemanticID, true}, // <-- over-hanging structure
         {kCARLAStaticSemanticID, false},
         {kCARLADynamicSemanticID, false},
         {kCARLAWaterSemanticID, false},
         {kCARLATerrainSemanticID, false}
     });
+    // perfect for town_0
+    const std::unordered_map<int, bool> town0_restricted_roads ({ // NOLINT
+        {499, true}, // junction lane leading to tunnel
+        {551, true}, // junction lane leading to tunnel
+        {510, true}, // junction lane leading to tunnel
+        {519, true}, // junction lane leading to tunnel
+        {1166, true},// junction lane leading to tunnel
+        {526, true}, // junction after the tunnel
+        {1165, true},// junction after the tunnel
+        {1158, true},// junction after the tunnel
+        {1156, true},// junction after the tunnel
+        {65, true},  // tunnel
+        {58, true},  // gas station
+    });
+
 } // namespace config

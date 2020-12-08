@@ -44,7 +44,7 @@ public:
 	[[nodiscard]] bool waiting() const;
 	[[nodiscard]] size_t count() const;
 	[[nodiscard]] std::shared_ptr<geom::CameraGeometry> geometry() const;
-	[[nodiscard]] std::pair <bool, cv::Mat> pop();
+	std::pair <bool, cv::Mat> pop(); // NOLINT
 private:
 	bool save_;
 	boost::shared_ptr<carla::client::Sensor> sensor_;
@@ -75,8 +75,8 @@ public:
 	[[nodiscard]] bool waiting() const;
 	[[nodiscard]] size_t depth_image_count() const;
 	[[nodiscard]] size_t semantic_image_count() const;
-	[[nodiscard]] std::tuple<bool, cv::Mat, cv::Mat> pop();
 	[[nodiscard]] std::shared_ptr<geom::CameraGeometry> geometry() const;
+	std::tuple<bool, cv::Mat, cv::Mat> pop(); // NOLINT
 private:
 	std::string name_;
 	bool save_depth_;

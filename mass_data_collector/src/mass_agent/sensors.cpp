@@ -175,8 +175,7 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_depth_) {
 			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
-			auto depth_mat = DecodeToDepthMat(image);
-			depth_images_.emplace_back(depth_mat.clone());
+			depth_images_.emplace_back(DecodeToDepthMat(image));
 			cam_log("saving depth: " << depth_images_.size());
 			save_depth_ = false;
 		}

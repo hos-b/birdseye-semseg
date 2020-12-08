@@ -43,12 +43,15 @@ public:
 	MassAgent(MassAgent&&) = delete;
 	const MassAgent& operator=(MassAgent&&) = delete;
 
-	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
-	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp);
-	void WriteMapToFile(const std::string& path);
+	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(const std::unordered_map<int, bool>& restricted_roads);
+	boost::shared_ptr<carla::client::Waypoint>
+	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
+				  const std::unordered_map<int, bool>& restricted_roads,
+				  size_t knn_pts = 0);
+	[[nodiscard]] cv::Mat GetMap();
 	void CaptureOnce(bool log);
+	void ExploreMap();
 	[[nodiscard]] MASSDataType GenerateDataPoint();
-	cv::Mat CreateVehicleMask();
 
 	[[nodiscard]] inline double carla_x() const;
 	[[nodiscard]] inline double carla_y() const;

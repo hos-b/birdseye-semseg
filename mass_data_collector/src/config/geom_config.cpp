@@ -18,7 +18,6 @@ namespace config
 	constexpr unsigned int kSemanticBEVRows = 1000; // pixels
 	constexpr unsigned int kSemanticBEVCols = 1000; // pixels
 	constexpr unsigned int kMaxAgentDistance = 400; // centimeters
-	constexpr float kMinimumAgentDistance = 0.7f; // meters
 
 
 } // namespace config

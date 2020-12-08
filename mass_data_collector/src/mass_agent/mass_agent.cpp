@@ -1,11 +1,13 @@
 #include "mass_agent/mass_agent.h"
 
+#include <bits/stdint-uintn.h>
 #include <carla/Memory.h>
 #include <carla/client/Map.h>
 #include <carla/client/Waypoint.h>
 #include <carla/geom/Transform.h>
 #include <carla/client/Junction.h>
 
+#include "carla/geom/Location.h"
 #include "carla/road/Lane.h"
 #include "hdf5_api/hdf5_dataset.h"
 #include "mass_agent/sensors.h"
@@ -87,9 +89,6 @@ MassAgent::MassAgent() {
 	YAML::Node boundaries = base[blueprint_name_];
 	width_ = std::max(boundaries["left"].as<double>(), boundaries["right"].as<double>()) * 2;
 	length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
-	// extra "padding"
-	width_ += 0.1;
-	length_ += 0.1;
 }
 /* destructor */
 MassAgent::~MassAgent() {
@@ -97,13 +96,17 @@ MassAgent::~MassAgent() {
 	DestroyAgent();
 }
 /* places the agent on a random point in the map and makes sure it doesn't collide with others [[blocking]] */
-boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
+boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::unordered_map<int, bool>& restricted_roads) { // NOLINT
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
 	bool admissable = false;
 	while (!admissable) {
 		admissable = true;
 		initial_wp = kd_points()[std::rand() % kd_points().size()]; // NOLINT
+		if (restricted_roads.find(initial_wp->GetRoadId()) != restricted_roads.end()) {
+			admissable = false;
+			continue;
+		}
 		tf = initial_wp->GetTransform();
 		for (const auto *agent : agents()) {
 			if (agent->id_ == id_) {
@@ -115,9 +118,9 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 									  (agent->carla_y() - tf.location.y) +
 									  (agent->carla_z() - tf.location.z) *
 									  (agent->carla_z() - tf.location.z));
-			if (distance < config::kMinimumAgentDistance) {
+			if (distance < length_ * 1.1) {
 				admissable = false;
-				break;
+				continue;
 			}
 		}
 	}
@@ -140,28 +143,63 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 	} while(true);
 	return initial_wp;
 }
-/* places the agent around the given waypoint and also makes sure it doesn't collide with others [[blocking]] */
-boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp) {
-	// getting candidates around the given waypoints
+/* expands the given waypoint by finding the points in its vicinity */
+static std::vector<boost::shared_ptr<carla::client::Waypoint>>
+ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
-	auto front_wps = initial_wp->GetNext(length_ + 0.15 + 
+	auto front_wps = wp->GetNext(min_dist +
 						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0)); // NOLINT
-	auto rear_wps = initial_wp->GetPrevious(length_ + 0.15 + 
+	auto rear_wps = wp->GetPrevious(min_dist +
 						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0)); // NOLINT
 	candidates.insert(candidates.end(), front_wps.begin(), front_wps.end());
 	candidates.insert(candidates.end(), rear_wps.begin(), rear_wps.end());
-	candidates.emplace_back(initial_wp->GetLeft());
-	candidates.emplace_back(initial_wp->GetRight());
+	candidates.emplace_back(wp->GetLeft());
+	candidates.emplace_back(wp->GetRight());
+	return candidates;
+}
+/* places the agent around the given waypoint and also makes sure it doesn't collide with others [[blocking]] */
+boost::shared_ptr<carla::client::Waypoint>
+MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
+						 const std::unordered_map<int, bool>& restricted_roads,
+						 size_t knn_pts) {
+	// getting candidates around the given waypoints
+	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
+	auto initial_expansion = ExpandWayoint(initial_wp, length_ * 1.35);
+	candidates.insert(candidates.end(), initial_expansion.begin(), initial_expansion.end());
+	if (knn_pts > 0) {
+		auto query_tfm = initial_wp->GetTransform();
+		double query[3] = {query_tfm.location.x, query_tfm.location.y, query_tfm.location.y};
+		std::vector<size_t> knn_ret_indices(knn_pts);
+		std::vector<double> knn_sqrd_dist(knn_pts);
+		knn_pts = kd_tree_->knnSearch(&query[0], knn_pts, &knn_ret_indices[0], &knn_sqrd_dist[0]);
+		knn_ret_indices.resize(knn_pts);
+		for (auto close_wp_idx : knn_ret_indices) {
+			auto expansion = ExpandWayoint(kd_points()[close_wp_idx], length_ * 1.35);
+			candidates.insert(candidates.end(), expansion.begin(), expansion.end());
+		}
+	}
 	boost::shared_ptr<carla::client::Waypoint> next_wp;
 	carla::geom::Transform tf;
 	bool admissable = false;
 	while (!admissable) {
 		admissable = true;
 		next_wp = candidates[std::rand() % candidates.size()]; // NOLINT
+		// nullptr happens if unavailable
 		if (next_wp == nullptr) {
 			admissable = false;
 			continue;
 		}
+		// if the randomed wp is not drivable (parking spaces, shoulder lanes, etc)
+		if ((static_cast<uint32_t>(next_wp->GetType()) &
+			 static_cast<uint32_t>(carla::road::Lane::LaneType::Driving)) == 0u) {
+			admissable = false;
+			continue;
+		}
+		if (restricted_roads.find(next_wp->GetRoadId()) != restricted_roads.end()) {
+			admissable = false;
+			continue;
+		}
+		// if it's in the restricted area
 		tf = next_wp->GetTransform();
 		for (const auto *agent : agents()) {
 			if (agent->id_ == id_) {
@@ -173,9 +211,9 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(boost::share
 									  (agent->carla_y() - tf.location.y) +
 									  (agent->carla_z() - tf.location.z) *
 									  (agent->carla_z() - tf.location.z));
-			if (distance < config::kMinimumAgentDistance) {
+			if (distance < length_ * 1.1) {
 				admissable = false;
-				break;
+				continue;
 			}
 		}
 	}
@@ -191,7 +229,8 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(boost::share
 	do {
 		auto transform = vehicle_->GetTransform();
 		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(transform.location.x - tf.location.x) + std::abs(transform.location.y - tf.location.y) < 1e-2) {
+		if (std::abs(transform.location.x - tf.location.x) +
+			std::abs(transform.location.y - tf.location.y) < 1e-2) {
 			break;
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
@@ -235,6 +274,19 @@ MASSDataType MassAgent::GenerateDataPoint() {
 	}
 	// -------------------------- car transform --------------------------
 	auto car_transform = datapoint_transforms_.front();
+	// ----------------------- creating mask cloud -----------------------
+	geom::SemanticCloud mask_cloud(config::kPointCloudMaxLocalX,
+								   config::kPointCloudMaxLocalY,
+								   config::kSemanticBEVRows,
+								   config::kSemanticBEVCols);
+	auto[succ, front_semantic, front_depth] = front_semantic_pc_->pop();
+	if (!succ) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+		return datapoint;
+	}
+	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), front_semantic, front_depth);
+	mask_cloud.BuildKDTree();
+	cv::Mat fov_mask = mask_cloud.GetFOVMask(0.1);
 	// ---------------------- creating target cloud ----------------------
 	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
 									 config::kPointCloudMaxLocalY,
@@ -251,20 +303,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 		}
 	}
 	target_cloud.BuildKDTree();
-	auto semantic_bev = target_cloud.GetSemanticBEV(32);
-	// ----------------------- creating mask cloud -----------------------
-	geom::SemanticCloud mask_cloud(config::kPointCloudMaxLocalX,
-								   config::kPointCloudMaxLocalY,
-								   config::kSemanticBEVRows,
-								   config::kSemanticBEVCols);
-	auto[succ, semantic, depth] = front_semantic_pc_->pop();
-	if (!succ) {
-		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
-		return datapoint;
-	}
-	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), semantic, depth);
-	mask_cloud.BuildKDTree();
-	cv::Mat bev_mask = mask_cloud.GetBEVMask(0.1);
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(32, width_, length_, 4);
 	// ------------------------ getting rgb image ------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {
@@ -279,7 +318,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 		std::cout << "ERROR: BEV image is not a continuous byte array" << std::endl;
 		return datapoint;
 	}
-	if (!bev_mask.isContinuous()) {
+	if (!fov_mask.isContinuous()) {
 		std::cout << "ERROR: BEV mask is not a continuous byte array" << std::endl;
 		return datapoint;
 	}
@@ -292,7 +331,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 		datapoint.top_semseg[i] = semantic_bev.data[i]; // NOLINT
 	}
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
-		datapoint.top_mask[i] = bev_mask.data[i]; // NOLINT
+		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i]; // NOLINT
 	}
 	for (size_t i = 0; i < statics::transform_length; ++i) {
 		datapoint.transform[i] = car_transform.data()[i]; // NOLINT
@@ -301,46 +340,8 @@ MASSDataType MassAgent::GenerateDataPoint() {
 	datapoint_transforms_.erase(datapoint_transforms_.begin());
 	return datapoint;
 }
-/* captures one datapoint and creates a BEV mask containing the vehicle */
-cv::Mat MassAgent::CreateVehicleMask() {
-	CaptureOnce(false);
-	if (datapoint_transforms_.empty()) {
-		std::cout << "CreateVehicleMask() called on agent " << id_
-				  << " with an empty queue" << std::endl;
-	}
-	// ---------------------- creating target cloud ----------------------
-	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
-									 config::kPointCloudMaxLocalY,
-									 config::kSemanticBEVRows,
-									 config::kSemanticBEVCols);
-	for (auto& semantic_depth_cam : semantic_pc_cams_) {
-		auto[success, semantic, depth] = semantic_depth_cam->pop();
-		if (success) {
-			target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth,
-											   {config::kCARLAVehiclesSemanticID});
-		} else {
-			std::cout << "ERROR: agent " + std::to_string(id_)
-					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
-		}
-	}
-	target_cloud.BuildKDTree();
-	cv::Mat vehicle_mask = target_cloud.CalculateVehicleMask(width_, length_, 3, 0.05);
-	// ----------------------- creating mask cloud -----------------------
-	auto[succ, semantic, depth] = front_semantic_pc_->pop();
-	if (!succ) {
-		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
-	}
-	// ------------------------ getting rgb image ------------------------
-	auto[success, rgb_image] = front_rgb_->pop();
-	if (!success) {
-		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
-	}
-	// popping car transform
-	datapoint_transforms_.erase(datapoint_transforms_.begin());
-	return vehicle_mask;
-}
-/* writes an image of the map to file */
-void MassAgent::WriteMapToFile(const std::string& path) {
+/* returns an image of the map */
+cv::Mat MassAgent::GetMap() {
 	float minx = 0.0f, maxx = 0.0f;
 	float miny = 0.0f, maxy = 0.0f;
 	// initialize waypoints if not done already
@@ -361,9 +362,9 @@ void MassAgent::WriteMapToFile(const std::string& path) {
 			maxy = transform.location.y;
 		}
 		// junction id = -1 if not leading to junction
-		// id is nonesense
+		// id is useless
 		// road id is the same as street name
-		// lane id: opendrive
+		// lane id: opendrive standard
 		// section id, mostly zero, rarely 1, barely 2
 	}
 	size_t rows = static_cast<size_t>(maxy - miny) * 10 + 10;
@@ -393,8 +394,7 @@ void MassAgent::WriteMapToFile(const std::string& path) {
 			}
 		}
 	}
-	cv::imwrite(path, map_img);
-	std::cout << "wrote image to " << path << std::endl;
+	return map_img;
 }
 /* returns vehicle blueprint names */
 std::vector<std::string> MassAgent::GetBlueprintNames() {
@@ -422,11 +422,11 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 /* initializes waypoints and builds a kd index on top of them */
 void MassAgent::InitializeKDTree() {
 	if (kd_points().empty()) {
-		auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(3);
+		auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(1.0);
 		kd_points().insert(kd_points().begin(), waypoints.begin(), waypoints.end());
 	}
 	if (kd_tree_ == nullptr) {
-		kd_tree_ = std::make_unique<WaypointKDTree>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(10));
+		kd_tree_ = std::make_unique<WaypointKDTree>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(20));
 		kd_tree_->buildIndex();
 	}
 }
@@ -492,4 +492,76 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	});
 	return carla_client;
 }
+[[deprecated("debug function")]]void MassAgent::ExploreMap() { // NOLINT
+	float poses[16][2] = {
+	// {5.7187e+01, 1.9257e+02}, // buildings look weird
+	// {147.305500, 151.092400}, // buildings look weird again
+	// {-74.1480, -79.5321}, // fine but has a weird building artifact
+	{2.2314e+02, 2.0064e+02}, // tunnel
+	{1.6323e+02, 1.9390e+02}, // end of junction leading to tunnel
+	{170.402800, 193.900000}, // beginning of tunnel
+	{174.264400, 193.900000}, // more inside the tunnel
+	{244.0300,  78.4943}, // inside tunnel and another car
+	{244.2139,  86.0548}, // inside tunnel
+	{244.0843,  80.7248}, // inside tunnel
+	{234.0437,  99.7434}, // tunnel
+	{234.2429, 107.9337}, // tunnel
+	{234.1480, 104.0332}, // tunnel
+	{ -35.6166, -177.2975}, // gas station?
+	{ -29.9447, -174.1371}, // yes?
+	{ -25.4275, -172.1239}, // maybe
+	{248.6527, 147.9556}, // tunnel and side lane
+	{251.6419, 148.2102}, // tunnel and side lane
+	{250.8483, 154.8452}, // tunnel
+	};
+	std::string strings[] = {
+		"tunnel",
+		"end of junction leading to tunnel",
+		"beginning of tunnel",
+		"more inside the tunnel",
+		"inside tunnel and another car",
+		"inside tunnel",
+		"inside tunnel",
+		"tunnel",
+		"tunnel",
+		"tunnel",
+		"gas station?",
+		"yes?",
+		"maybe",
+		"tunnel and side lane",
+		"tunnel and side lane",
+		"tunnel"
+	};
+	auto map = carla_client()->GetWorld().GetMap();
+	for (int i = 0; i < 33; ++i) {
+		auto wp = map->GetWaypoint(carla::geom::Location(poses[i][0], -poses[i][1], 0.0)); // NOLINT
+		std::cout << i << " " + strings[i] << ": " << wp->GetRoadId() << " X " << wp->GetLaneId() << std::endl; // NOLINT
+	}
+}
+/* 
+enum class LaneType : uint32_t {
+      None          = 0x1,
+      Driving       = 0x1 << 1,
+      Stop          = 0x1 << 2,
+      Shoulder      = 0x1 << 3,
+      Biking        = 0x1 << 4,
+      Sidewalk      = 0x1 << 5,
+      Border        = 0x1 << 6,
+      Restricted    = 0x1 << 7,
+      Parking       = 0x1 << 8,
+      Bidirectional = 0x1 << 9,
+      Median        = 0x1 << 10,
+      Special1      = 0x1 << 11,
+      Special2      = 0x1 << 12,
+      Special3      = 0x1 << 13,
+      RoadWorks     = 0x1 << 14,
+      Tram          = 0x1 << 15,
+      Rail          = 0x1 << 16,
+      Entry         = 0x1 << 17,
+      Exit          = 0x1 << 18,
+      OffRamp       = 0x1 << 19,
+      OnRamp        = 0x1 << 20,
+      Any           = 0xFFFFFFFE
+    };
+*/
 } // namespace agent
