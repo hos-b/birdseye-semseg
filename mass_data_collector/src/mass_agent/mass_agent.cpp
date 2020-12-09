@@ -303,7 +303,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 		}
 	}
 	target_cloud.BuildKDTree();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(32, width_, length_, 4);
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(32, width_, length_, 7);
 	// ------------------------ getting rgb image ------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {

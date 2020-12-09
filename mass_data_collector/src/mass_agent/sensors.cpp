@@ -336,6 +336,7 @@ cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd:
 	return ret_mat;
 }
 
+
 } // namespace data
 
 #undef cam_log

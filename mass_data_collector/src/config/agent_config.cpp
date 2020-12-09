@@ -123,6 +123,31 @@ namespace config
         {kCARLAWaterSemanticID, false},
         {kCARLATerrainSemanticID, false}
     });
+    const std::unordered_map<unsigned int, double> semantic_weight({ // NOLINT
+        {kCARLAUnknownSemanticID, 0.0},
+        {kCARLAFenceSemanticID, 0.0},
+        {kCARLAPoleSemanticID, 0.0},
+        {kCARLARailTrackSemanticID, 0.0},
+        {kCARLAGuardRailSemanticID, 0.0},
+        {kCARLATrafficLightSemanticID, 0.0},
+        {kCARLABuildingSemanticID, 1.0},
+        {kCARLAOtherSemanticID, 1.0},
+        {kCARLAPedestrianSemanticID, 0.0},
+        {kCARLARoadLineSemanticID, 1.0},
+        {kCARLARoadSemanticID, 1.0},
+        {kCARLASideWalkSemanticID, 1.0},
+        {kCARLAVegetationSemanticID, 1.0},
+        {kCARLAWallSemanticID, 1.0},
+        {kCARLATrafficSignSemanticID, 1.0},
+        {kCARLASkySemanticID, 1.0},
+        {kCARLAGroundSemanticID, 1.0},
+        {kCARLABridgeSemanticID, 1.0},
+        {kCARLAStaticSemanticID, 1.0},
+        {kCARLADynamicSemanticID, 1.0},
+        {kCARLAWaterSemanticID, 1.0},
+        {kCARLATerrainSemanticID, 1.0},
+        {kCARLAVehiclesSemanticID, 5.0}
+    });
     // perfect for town_0
     const std::unordered_map<int, bool> town0_restricted_roads ({ // NOLINT
         {499, true}, // junction lane leading to tunnel

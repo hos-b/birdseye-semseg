@@ -26,7 +26,7 @@ void inter(int signo) {
 	ros::shutdown();
 }
 void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update) { // NOLINT
-	uint32 remaining_s = 100000;
+	uint32 remaining_s = 0;
 	while (ros::ok()) {
 		if (*avg_batch_time == 0) {
 			std::cout << '\r'

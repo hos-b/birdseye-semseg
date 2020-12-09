@@ -89,7 +89,7 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 */
 void SemanticCloud::BuildKDTree() {
 	// building kd-tree
-	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(32));
+	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(128));
 	kd_tree_->buildIndex();
 }
 /* returns the orthographic bird's eye view image */
@@ -245,7 +245,8 @@ size_t SemanticCloud::GetMajorityVote(const std::vector<size_t>& knn_indices,
 		auto point = target_cloud_.points[knn_indices[i]];
 		unsigned int semantic_id = point.label;
 		auto it = map.find(semantic_id);
-		double additive_weight = 0.5 + (1.0 / std::sqrt(distances[i])) + point.z * 2;
+		double additive_weight = config::semantic_weight.at(semantic_id) +
+								 (1.0 / std::sqrt(distances[i])) + point.z * 100.0;
 		if (it != map.end()) {
 			map[semantic_id] = it->second + additive_weight;
 			if (it->second + additive_weight > max_weight) {

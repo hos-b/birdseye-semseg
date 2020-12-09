@@ -47,12 +47,13 @@ namespace config
 	extern const unsigned int kMassSkySemanticID;
 	extern const unsigned int kMassTerrainSemanticID;
 
-	// hash maps
+	// hash maps for semantic ids
 	extern const std::unordered_map<unsigned int, unsigned int> semantic_conversion_map;
 	extern const std::unordered_map<unsigned int, cv::Vec3b> semantic_palette_map;
 	extern const std::unordered_map<unsigned int, bool> fileterd_semantics;
+	extern const std::unordered_map<unsigned int, double> semantic_weight;
 
-	// restricted areas on map
+	// hash maps for restricted areas on map
 	extern const std::unordered_map<int, bool> town0_restricted_roads;
 } // namespace config
 
