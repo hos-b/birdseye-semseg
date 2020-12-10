@@ -7,7 +7,7 @@
 #include <thread>
 #include <csignal>
 #include <iomanip>
-
+#include <future>
 #include <ros/ros.h>
 #include <ros/package.h>
 
@@ -90,22 +90,25 @@ int main(int argc, char **argv)
 	std::thread time_thread(StatusThreadCallback, &data_count, max_data_count, &avg_batch_time, &update);
 	// data collection loop ----------------------------------------------------------------------------
 	while (ros::ok()) {
+		std::future<MASSDataType> promise[number_of_agents];
 		if (data_count == max_data_count) {
 			break;
 		}
 		auto batch_start = std::chrono::high_resolution_clock::now();
-		// gathering data
-		for (auto& agent : agents) {
-			agent.CaptureOnce(false);
-			MASSDataType datapoint = agent.GenerateDataPoint();
-			dataset.AppendElement(&datapoint);
-		}
 		// chain randoming poses
 		random_pose = agents[0].SetRandomPose(config::town0_restricted_roads);
 		for (size_t i = 1; i < number_of_agents; ++i) {
 			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
 		std::this_thread::sleep_for(100ms);
+		// gathering data (async)
+		for (unsigned int i = 0; i < number_of_agents; ++i) {
+			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i], 0.1, 32, 7);
+		}
+		for (unsigned int i = 0; i < number_of_agents; ++i) {
+			MASSDataType datapoint = promise[i].get();
+			dataset.AppendElement(&datapoint);
+		}
 		// timing stuff
 		++data_count;
 		auto batch_end = std::chrono::high_resolution_clock::now();

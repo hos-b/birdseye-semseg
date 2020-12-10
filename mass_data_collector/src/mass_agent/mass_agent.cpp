@@ -265,7 +265,10 @@ void MassAgent::DestroyAgent() {
 	}
 }
 /* checks the buffers and creates a single data point from all the sensors */
-MASSDataType MassAgent::GenerateDataPoint() {
+MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
+										  size_t knn_pt_count,
+										  size_t carmask_padding) {
+	CaptureOnce(false);
 	MASSDataType datapoint{};
 	if (datapoint_transforms_.empty()) {
 		std::cout << "GenerateDataPoint() called on agent " << id_
@@ -286,7 +289,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 	}
 	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
-	cv::Mat fov_mask = mask_cloud.GetFOVMask(0.1);
+	cv::Mat fov_mask = mask_cloud.GetFOVMask(fovmask_stitching_threshold);
 	// ---------------------- creating target cloud ----------------------
 	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
 									 config::kPointCloudMaxLocalY,
@@ -303,7 +306,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 		}
 	}
 	target_cloud.BuildKDTree();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(32, width_, length_, 7);
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, width_, length_, carmask_padding);
 	// ------------------------ getting rgb image ------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {

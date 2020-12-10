@@ -10,11 +10,11 @@ from data.color_map import semantic_to_cityscapes
 from data.dataloader import get_dataloader
 
 DATASET_DIR = "/home/hosein"
-PKG_NAME = "improved.hdf5"
+PKG_NAME = "async.hdf5"
 
 print("opening {}".format(PKG_NAME))
 file_path = os.path.join(DATASET_DIR, PKG_NAME)
-hdf5 = h5py.File(file_path, "r")        
+hdf5 = h5py.File(file_path, "r")
 dataset = hdf5["dataset_1"]
 agent_count = dataset.attrs["agent_count"][0]
 
@@ -26,8 +26,10 @@ loader = get_dataloader(file_path, batch_size=1, train=False)
 rows = agent_count
 columns = 4
 for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
+
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))
+
     for i in range(agent_count):
         # print(car_transforms[0, i, :3, 3])
         rgb = rgbs[0, i, :, :, :].permute(1, 2, 0)
@@ -55,7 +57,7 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         ax.append(fig.add_subplot(rows, columns, i * columns + 4))
         ax[-1].set_title(f"masked bev_{i}")
         plt.imshow(masked_bev)
-    plt.show()
 
+    plt.show()
 
 hdf5.close()

@@ -15,6 +15,7 @@ find_package(OpenCV 4 REQUIRED)
 find_package (Eigen3 3 REQUIRED)
 find_package(PCL 1.3 REQUIRED COMPONENTS common io)
 find_package(nanoflann)
+find_package(OpenMP REQUIRED)
 
 # CARLA related stuff -------------------------------------------------------
 if (NOT DEFINED ENV{CARLA_910_CXX_API})
@@ -90,6 +91,7 @@ target_link_libraries(${PROJECT_NAME}
 	${PCL_LIBRARIES}
 	${OpenCV_LIBS}
 	nanoflann::nanoflann
+	OpenMP::OpenMP_CXX
 	Eigen3::Eigen
 	hdf5_dataset
 	yaml-cpp

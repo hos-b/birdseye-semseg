@@ -49,9 +49,10 @@ public:
 				  const std::unordered_map<int, bool>& restricted_roads,
 				  size_t knn_pts = 0);
 	[[nodiscard]] cv::Mat GetMap();
-	void CaptureOnce(bool log);
 	void ExploreMap();
-	[[nodiscard]] MASSDataType GenerateDataPoint();
+	[[nodiscard]] MASSDataType GenerateDataPoint(double fovmask_stitching_threshold,
+												 size_t knn_pt_count,
+										  		 size_t carmask_padding);
 
 	[[nodiscard]] inline double carla_x() const;
 	[[nodiscard]] inline double carla_y() const;
@@ -76,6 +77,7 @@ private:
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors();
 	void DestroyAgent();
+	void CaptureOnce(bool log);
 	void InitializeKDTree();
 
 	static std::vector<std::string> GetBlueprintNames();
