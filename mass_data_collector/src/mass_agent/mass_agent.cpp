@@ -15,6 +15,7 @@
 #include "config/agent_config.h"
 #include "config/geom_config.h"
 
+#include <cassert>
 #include <chrono>
 #include <mutex>
 #include <opencv2/core.hpp>
@@ -23,6 +24,7 @@
 #include <tuple>
 #include <cmath>
 #include <cstdlib>
+#include <cassert>
 
 #include <Eigen/Dense>
 #include <ros/package.h>
@@ -32,13 +34,14 @@
 #include <opencv2/imgcodecs.hpp>
 #include <ros/ros.h>
 
+#define assertm(exp, msg) assert(((void)msg, exp))
 using namespace std::chrono_literals;
 
 namespace agent {
 /* constructor */
 MassAgent::MassAgent() {
 	// initialize some stuff & things
-	transform_.setZero();
+	transform_.setIdentity();
 	id_ = agents().size();
 	agents().emplace_back(this);
 	try {
@@ -55,8 +58,7 @@ MassAgent::MassAgent() {
 			vehicles = blueprint_library->Filter("vehicle.seat.leon");
 		}
 		carla::client::ActorBlueprint blueprint = (*vehicles)[0];
-		auto initial_pos = spawn_points[id_]; //kd_points()[0]->GetTransform();
-		transform_.setIdentity();
+		auto initial_pos = spawn_points[id_];
 		Eigen::Matrix3d rot;
 		rot = Eigen::AngleAxisd(initial_pos.rotation.roll	*  config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
 			  Eigen::AngleAxisd(initial_pos.rotation.pitch	* -config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
@@ -95,20 +97,21 @@ MassAgent::~MassAgent() {
 	// releasing resources
 	DestroyAgent();
 }
-/* places the agent on a random point in the map and makes sure it doesn't collide with others [[blocking]] */
+/* places the agent on a random point in the map and makes sure it doesn't collide with others [[blocking]] 
+   this function should only be called for the first car of the batch, because it does not check for collision
+   with other cars.
+*/
 boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::unordered_map<int, bool>& restricted_roads) { // NOLINT
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
-	bool admissable = false;
-	while (!admissable) {
-		admissable = true;
+	while (true) {
 		initial_wp = kd_points()[std::rand() % kd_points().size()]; // NOLINT
-		if (restricted_roads.find(initial_wp->GetRoadId()) != restricted_roads.end()) {
-			admissable = false;
-			continue;
+		// if not in a restricted area
+		if (restricted_roads.find(initial_wp->GetRoadId()) == restricted_roads.end()) {
+			tf = initial_wp->GetTransform();
+			break;
 		}
-		tf = initial_wp->GetTransform();
-		for (const auto *agent : agents()) {
+		/* for (const auto *agent : agents()) {
 			if (agent->id_ == id_) {
 				continue;
 			}
@@ -122,7 +125,7 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
 				admissable = false;
 				continue;
 			}
-		}
+		} */
 	}
 	Eigen::Matrix3d rot;
 	rot = Eigen::AngleAxisd(tf.rotation.roll * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
@@ -195,11 +198,11 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 			admissable = false;
 			continue;
 		}
+		// if it's in the restricted area
 		if (restricted_roads.find(next_wp->GetRoadId()) != restricted_roads.end()) {
 			admissable = false;
 			continue;
 		}
-		// if it's in the restricted area
 		tf = next_wp->GetTransform();
 		for (const auto *agent : agents()) {
 			if (agent->id_ == id_) {
@@ -218,9 +221,9 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		}
 	}
 	Eigen::Matrix3d rot;
-	rot = Eigen::AngleAxisd(tf.rotation.roll * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
+	rot = Eigen::AngleAxisd(tf.rotation.roll  *  config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
 		  Eigen::AngleAxisd(tf.rotation.pitch * -config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
-		  Eigen::AngleAxisd(tf.rotation.yaw * config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
+		  Eigen::AngleAxisd(tf.rotation.yaw   *  config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
     Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
@@ -269,6 +272,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 										  size_t knn_pt_count,
 										  size_t carmask_padding) {
 	CaptureOnce(false);
+	// AssertSize(1);
 	MASSDataType datapoint{};
 	if (datapoint_transforms_.empty()) {
 		std::cout << "GenerateDataPoint() called on agent " << id_
@@ -341,6 +345,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	}
 	// popping car transform
 	datapoint_transforms_.erase(datapoint_transforms_.begin());
+	// AssertSize(0);
 	return datapoint;
 }
 /* returns an image of the map */
@@ -567,4 +572,56 @@ enum class LaneType : uint32_t {
       Any           = 0xFFFFFFFE
     };
 */
+
+/* asserts that all the data containers have the same size */
+void MassAgent::AssertSize(size_t size) {
+	for (auto& spc_cam : semantic_pc_cams_) {
+		bool assertion = (spc_cam->depth_image_count() == spc_cam->semantic_image_count() &&
+						  spc_cam->depth_image_count() == size);
+		if (!assertion) {
+			std::cout << "\nassertion failed: " << spc_cam->name() << ": " << spc_cam->depth_image_count()
+					  << ", " << spc_cam->semantic_image_count() << " != " << size;
+		}
+	}
+	bool assertion = (front_semantic_pc_->depth_image_count() == front_semantic_pc_->semantic_image_count() &&
+					  front_semantic_pc_->depth_image_count() == size);
+	if (!assertion) {
+		std::cout << "\nassertion failed: front pc cam: " << front_semantic_pc_->depth_image_count()
+					<< ", " << front_semantic_pc_->semantic_image_count() << " != " << size;
+	}
+	if (front_rgb_->count() != size) {
+		std::cout << "\nassertion failed: front rgb: " << front_rgb_->count() << " != " << size;
+	}
+	if (datapoint_transforms_.size() != size) {
+		std::cout << "\nassertion failed: transforms: " << datapoint_transforms_.size() << " != " << size << std::endl;
+	}
+}
+
+void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
+	geom::SemanticCloud target_cloud(0, 0, 0, 0);
+	for (size_t i = 0; i < size; ++i) {
+		agents[i].CaptureOnce(false); // NOLINTs
+		// AssertSize(1);
+		if (agents[i].datapoint_transforms_.empty()) { // NOLINT
+			std::cout << "Debug() called on agent " << agents[i].id_ // NOLINT
+					<< " with an empty queue" << std::endl;
+			return;
+		}
+		// -------------------------- car transform --------------------------
+		auto car_transform = agents[i].datapoint_transforms_.front(); // NOLINT
+		// ---------------------- creating target cloud ----------------------
+		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) { // NOLINT
+			auto[success, semantic, depth] = semantic_depth_cam->pop();
+			if (success) {
+				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, car_transform);
+			} else {
+				std::cout << "ERROR: agent " + std::to_string(agents[i].id_) // NOLINT
+						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+				return;
+			}
+		}
+	}
+	target_cloud.SaveCloud(path);
+}
+
 } // namespace agent

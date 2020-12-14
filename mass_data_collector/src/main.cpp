@@ -101,14 +101,15 @@ int main(int argc, char **argv)
 			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
 		std::this_thread::sleep_for(100ms);
-		// gathering data (async)
-		for (unsigned int i = 0; i < number_of_agents; ++i) {
-			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i], 0.1, 32, 7);
-		}
-		for (unsigned int i = 0; i < number_of_agents; ++i) {
-			MASSDataType datapoint = promise[i].get();
-			dataset.AppendElement(&datapoint);
-		}
+		agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, "/home/hosein/cloud_" + std::to_string(data_count) + ".pcl");
+		// // gathering data (async)
+		// for (unsigned int i = 0; i < number_of_agents; ++i) {
+		// 	promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i], 0.1, 32, 7);
+		// }
+		// for (unsigned int i = 0; i < number_of_agents; ++i) {
+		// 	MASSDataType datapoint = promise[i].get();
+		// 	dataset.AppendElement(&datapoint);
+		// }
 		// timing stuff
 		++data_count;
 		auto batch_end = std::chrono::high_resolution_clock::now();

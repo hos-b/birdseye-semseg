@@ -24,8 +24,12 @@ public:
 	SemanticCloud(double max_x, double max_y, size_t img_rows, size_t img_cols);
 	~SemanticCloud();
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-								cv::Mat semantic,
-								cv::Mat depth);
+							   cv::Mat semantic,
+							   cv::Mat depth);
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   cv::Mat semantic,
+							   cv::Mat depth,
+							   Eigen::Matrix4d& transform);
 	[[nodiscard]] std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(size_t knn_pt_count, double vehicle_width, double vehicle_length, size_t padding) const;
 	[[nodiscard]] cv::Mat GetFOVMask(double stitching_threshold) const;
 	void BuildKDTree();

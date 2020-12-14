@@ -48,16 +48,23 @@ public:
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 				  const std::unordered_map<int, bool>& restricted_roads,
 				  size_t knn_pts = 0);
-	[[nodiscard]] cv::Mat GetMap();
-	void ExploreMap();
 	[[nodiscard]] MASSDataType GenerateDataPoint(double fovmask_stitching_threshold,
 												 size_t knn_pt_count,
 										  		 size_t carmask_padding);
-
+	// transform related
 	[[nodiscard]] inline double carla_x() const;
 	[[nodiscard]] inline double carla_y() const;
 	[[nodiscard]] inline double carla_z() const;
+	[[nodiscard]] inline Eigen::Matrix4d transform() {return transform_;}
 	
+	// static stuff
+	static std::unique_ptr<cc::Client>& carla_client();
+	static void DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path);
+
+	// debug functions
+	[[nodiscard]] cv::Mat GetMap();
+	void ExploreMap();
+
 	// obligatory kd-tree stuff
 	[[nodiscard]] inline size_t kdtree_get_point_count() const { return kd_points().size(); } // NOLINT
 	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const { // NOLINT
@@ -71,7 +78,7 @@ public:
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const {return false;}
-	static std::unique_ptr<cc::Client>& carla_client();
+
 
 private:
 	[[nodiscard]] std::tuple<float, float, float> GetPostion() const;
@@ -79,6 +86,7 @@ private:
 	void DestroyAgent();
 	void CaptureOnce(bool log);
 	void InitializeKDTree();
+	void AssertSize(size_t size);
 
 	static std::vector<std::string> GetBlueprintNames();
 	static std::vector<const MassAgent*>& agents();

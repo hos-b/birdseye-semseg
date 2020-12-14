@@ -8,7 +8,7 @@ import torchvision.transforms as transforms
 
 from data.color_map import semantic_to_cityscapes
 from data.dataloader import get_dataloader
-from data.image_warp import get_aggregate_mask
+from data.mask_warp import get_aggregate_mask
 
 DATASET_DIR = "/home/hosein"
 PKG_NAME = "async.hdf5"
@@ -31,6 +31,7 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
 
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))
+    # import pdb; pdb.set_trace()
 
     for i in range(agent_count):
         # print(car_transforms[0, i, :3, 3])
@@ -54,7 +55,7 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, PPM, 1000, 1000)
         aggregate_mask = aggregate_mask.squeeze().numpy()
         # import pdb; pdb.set_trace()
-        plt.imshow(aggregate_mask)
+        plt.imshow(mask.squeeze())
 
         masked_bev = semantic_img.copy()
         masked_bev[(mask == 0).squeeze(), :] = 0

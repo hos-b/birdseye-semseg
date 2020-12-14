@@ -83,6 +83,31 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
 }
+/* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
+void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+										  cv::Mat semantic,
+										  cv::Mat depth,
+										  Eigen::Matrix4d& transform) {
+	size_t old_size = target_cloud_.points.size();
+	size_t index = old_size;
+	target_cloud_.points.resize(old_size + (semantic.rows * semantic.cols));
+	for (int i = 0; i < semantic.rows; ++i) {
+		uchar* pixel_label = semantic.ptr<uchar>(i); // NOLINT
+		float* pixel_depth = depth.ptr<float>(i); // NOLINT
+		for (int j = 0; j < semantic.cols; ++j) {
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]); // NOLINT
+			target_cloud_[index].label = pixel_label[j]; // NOLINT
+			target_cloud_[index].x = pixel_3d_loc.x();
+			target_cloud_[index].y = pixel_3d_loc.y();
+			target_cloud_[index].z = pixel_3d_loc.z();
+			++index;
+		}
+	}
+	target_cloud_.points.resize(index);
+	target_cloud_.width = index;
+	target_cloud_.height = 1;
+	target_cloud_.is_dense = true;
+}
 /* removes overlapping or invisible points for the target cloud. initializes kd tree.
    filters unwanted labels (declared in config::filtered_semantics)
 */
@@ -275,7 +300,7 @@ void SemanticCloud::SaveCloud(const std::string& path) const {
 	rgb_cloud.points.resize(target_cloud_.points.size());
 	size_t size = 0;
 	cv::Scalar color;
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (size_t i = 0; i < target_cloud_.points.size(); ++i) { // NOLINT
 		rgb_cloud.points[size].x = target_cloud_.points[i].x;
 		rgb_cloud.points[size].y = target_cloud_.points[i].y;
