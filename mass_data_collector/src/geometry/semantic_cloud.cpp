@@ -31,6 +31,7 @@ SemanticCloud::SemanticCloud(double max_x, double max_y, size_t img_rows, size_t
 }
 /* converts all pixels in semantic image and their depth into 3D points [in the car transform] and adds them to the point cloud  */
 void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry, // NOLINT
+										  const Eigen::Matrix4d& car_transform,
                                           cv::Mat semantic,
                                           cv::Mat depth) {
     Eigen::Vector3d pixel_3d_loc;
@@ -45,7 +46,7 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
             target_cloud_[index].r = pixel_color_uc[0]; // NOLINT
             target_cloud_[index].g = pixel_color_uc[1]; // NOLINT
             target_cloud_[index].b = pixel_color_uc[2]; // NOLINT
-            pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+            pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), car_transform, depth.at<float>(i, j));
             target_cloud_[index].x = pixel_3d_loc.x(); // NOLINT
             target_cloud_[index].y = pixel_3d_loc.y(); // NOLINT
             target_cloud_[index].z = pixel_3d_loc.z(); // NOLINT

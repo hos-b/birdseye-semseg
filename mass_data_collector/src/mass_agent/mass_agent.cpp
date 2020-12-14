@@ -97,9 +97,9 @@ void MassAgent::SetRandomPose() {
 		}
 	}
 	Eigen::Matrix3d rot;
-	rot = Eigen::AngleAxisd(0.0 * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
-		  Eigen::AngleAxisd(0.0 * config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
-		  Eigen::AngleAxisd(yaw * config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
+	rot = Eigen::AngleAxisd(0.0 * config::kToRadians, Eigen::Vector3d::UnitX()) *
+		  Eigen::AngleAxisd(0.0 * config::kToRadians, Eigen::Vector3d::UnitY()) *
+		  Eigen::AngleAxisd(yaw						, Eigen::Vector3d::UnitZ());
     Eigen::Vector3d trans(x, y, z);
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
@@ -143,7 +143,6 @@ void MassAgent::DestroyAgent() {
 }
 /* checks the buffers and creates a single data point from all the sensors */
 void MassAgent::GenerateDataPoint() {
-	// TODO(hosein): find a better way of checking for an empty stack
 	if (datapoint_transforms_.empty()) {
 		return;
 	}
@@ -155,14 +154,14 @@ void MassAgent::GenerateDataPoint() {
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 		if (success) {
-			semantic_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+			semantic_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), car_transform, semantic, depth);
 			std::cout << semantic_depth_cam->name() << " added to pointcloud" << std::endl;
 		} else {
 			std::cout << semantic_depth_cam->name() << " unresponsive" << std::endl;
 		}
 	}
-	// semantic_cloud.SaveTargetCloud("/home/hosein/s2cloud.pcl");
-	// std::cout << "original point cloud saved" << std::endl;
+	semantic_cloud.SaveTargetCloud("/home/hosein/s2cloud.pcl");
+	std::cout << "original point cloud saved" << std::endl;
 	// semantic_cloud.SaveTargetCloud("/home/hosein/f2cloud.pcl");
 	// std::cout << "aux point clouds saved" << std::endl;
 	semantic_cloud.FilterCloud();

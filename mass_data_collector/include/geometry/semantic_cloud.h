@@ -20,8 +20,9 @@ class SemanticCloud
 public:
 	SemanticCloud(double max_x, double max_y, size_t img_rows, size_t img_cols);
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-								cv::Mat semantic,
-								cv::Mat depth);
+							   const Eigen::Matrix4d& car_transform,
+							   cv::Mat semantic,
+							   cv::Mat depth);
 	pcl::PointCloud<pcl::PointXYZRGB> GetMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry);
 	std::pair <cv::Mat, cv::Mat> GetSemanticBEV(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 						   double pixel_limit, double mask_dist_threshold);
