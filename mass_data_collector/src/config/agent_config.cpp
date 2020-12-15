@@ -146,7 +146,7 @@ namespace config
         {kCARLADynamicSemanticID, 1.0},
         {kCARLAWaterSemanticID, 1.0},
         {kCARLATerrainSemanticID, 1.0},
-        {kCARLAVehiclesSemanticID, 5.0}
+        {kCARLAVehiclesSemanticID, 6.0}
     });
     // perfect for town_0
     const std::unordered_map<int, bool> town0_restricted_roads ({ // NOLINT

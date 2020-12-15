@@ -55,10 +55,10 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, PPM, 1000, 1000)
         aggregate_mask = aggregate_mask.squeeze().numpy()
         # import pdb; pdb.set_trace()
-        plt.imshow(mask.squeeze())
+        plt.imshow(aggregate_mask)
 
         masked_bev = semantic_img.copy()
-        masked_bev[(mask == 0).squeeze(), :] = 0
+        masked_bev[(aggregate_mask == 0).squeeze(), :] = 0
         ax.append(fig.add_subplot(rows, columns, i * columns + 4))
         ax[-1].set_title(f"masked bev_{i}")
         plt.imshow(masked_bev)

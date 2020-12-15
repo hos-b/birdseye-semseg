@@ -125,11 +125,11 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	// get the correct pose of the camera
 	auto camera_transform = cg::Transform{
 		cg::Location{mass_cam_node["x"].as<float>(),
-					mass_cam_node["y"].as<float>(),
-					mass_cam_node["z"].as<float>()},
+					 mass_cam_node["y"].as<float>(),
+					 mass_cam_node["z"].as<float>()},
 		cg::Rotation{mass_cam_node["pitch"].as<float>(),
-					mass_cam_node["yaw"].as<float>(),
-					mass_cam_node["roll"].as<float>()}};
+					 mass_cam_node["yaw"].as<float>(),
+					 mass_cam_node["roll"].as<float>()}};
 	switch (position) {
 	case FRONTLEFT:
 		camera_transform.location.y -= config::kCamLRHover;

@@ -1,6 +1,5 @@
 #include "mass_agent/mass_agent.h"
 
-#include <bits/stdint-uintn.h>
 #include <carla/Memory.h>
 #include <carla/client/Map.h>
 #include <carla/client/Waypoint.h>
@@ -60,10 +59,10 @@ MassAgent::MassAgent() {
 		carla::client::ActorBlueprint blueprint = (*vehicles)[0];
 		auto initial_pos = spawn_points[id_];
 		Eigen::Matrix3d rot;
-		rot = Eigen::AngleAxisd(initial_pos.rotation.roll	*  config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
-			  Eigen::AngleAxisd(initial_pos.rotation.pitch	* -config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
-			  Eigen::AngleAxisd(initial_pos.rotation.yaw	*  config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
-    	Eigen::Vector3d trans(initial_pos.location.x, -initial_pos.location.y, initial_pos.location.z);
+		rot = Eigen::AngleAxisd(-initial_pos.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+			  Eigen::AngleAxisd(-initial_pos.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+			  Eigen::AngleAxisd(-initial_pos.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
+    	Eigen::Vector3d trans(initial_pos.location.x, initial_pos.location.y, initial_pos.location.z);
     	transform_.block<3, 3>(0, 0) = rot;
     	transform_.block<3, 1>(0, 3) = trans;
 		auto actor = world.TrySpawnActor(blueprint, initial_pos);
@@ -128,18 +127,19 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
 		} */
 	}
 	Eigen::Matrix3d rot;
-	rot = Eigen::AngleAxisd(tf.rotation.roll * config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
-		  Eigen::AngleAxisd(tf.rotation.pitch * -config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
-		  Eigen::AngleAxisd(tf.rotation.yaw * config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
+	rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+		  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+		  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
     Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
 	vehicle_->SetTransform(tf);
 	// blocking until moved
 	do {
-		auto transform = vehicle_->GetTransform();
+		auto current_tf = vehicle_->GetTransform();
 		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(transform.location.x - tf.location.x) + std::abs(transform.location.y - tf.location.y) < 1e-2) {
+		if (std::abs(current_tf.location.x - tf.location.x) +
+			std::abs(current_tf.location.y - tf.location.y) < 1e-2) {
 			break;
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
@@ -221,19 +221,19 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		}
 	}
 	Eigen::Matrix3d rot;
-	rot = Eigen::AngleAxisd(tf.rotation.roll  *  config::kToRadians * M_PI, Eigen::Vector3d::UnitX()) *
-		  Eigen::AngleAxisd(tf.rotation.pitch * -config::kToRadians * M_PI, Eigen::Vector3d::UnitY()) *
-		  Eigen::AngleAxisd(tf.rotation.yaw   *  config::kToRadians * M_PI, Eigen::Vector3d::UnitZ());
+	rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+		  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+		  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
     Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
 	vehicle_->SetTransform(tf);
 	// blocking until moved
 	do {
-		auto transform = vehicle_->GetTransform();
+		auto current_tf = vehicle_->GetTransform();
 		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(transform.location.x - tf.location.x) +
-			std::abs(transform.location.y - tf.location.y) < 1e-2) {
+		if (std::abs(current_tf.location.x - tf.location.x) +
+			std::abs(current_tf.location.y - tf.location.y) < 1e-2) {
 			break;
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
@@ -247,7 +247,6 @@ void MassAgent::CaptureOnce(bool log) {
 	for (auto& semantic_cam : semantic_pc_cams_) {
 		semantic_cam->CaputreOnce();
 	}
-	datapoint_transforms_.emplace_back(transform_);
 	if (log) {
 		std::cout << "captured once" << std::endl;
 	}
@@ -272,15 +271,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 										  size_t knn_pt_count,
 										  size_t carmask_padding) {
 	CaptureOnce(false);
-	// AssertSize(1);
 	MASSDataType datapoint{};
-	if (datapoint_transforms_.empty()) {
-		std::cout << "GenerateDataPoint() called on agent " << id_
-				  << " with an empty queue" << std::endl;
-		return datapoint;
-	}
-	// -------------------------- car transform --------------------------
-	auto car_transform = datapoint_transforms_.front();
 	// ----------------------- creating mask cloud -----------------------
 	geom::SemanticCloud mask_cloud(config::kPointCloudMaxLocalX,
 								   config::kPointCloudMaxLocalY,
@@ -341,10 +332,8 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i]; // NOLINT
 	}
 	for (size_t i = 0; i < statics::transform_length; ++i) {
-		datapoint.transform[i] = car_transform.data()[i]; // NOLINT
+		datapoint.transform[i] = transform_.data()[i]; // NOLINT
 	}
-	// popping car transform
-	datapoint_transforms_.erase(datapoint_transforms_.begin());
 	// AssertSize(0);
 	return datapoint;
 }
@@ -592,28 +581,33 @@ void MassAgent::AssertSize(size_t size) {
 	if (front_rgb_->count() != size) {
 		std::cout << "\nassertion failed: front rgb: " << front_rgb_->count() << " != " << size;
 	}
-	if (datapoint_transforms_.size() != size) {
-		std::cout << "\nassertion failed: transforms: " << datapoint_transforms_.size() << " != " << size << std::endl;
-	}
 }
 
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
-	geom::SemanticCloud target_cloud(0, 0, 0, 0);
+	geom::SemanticCloud target_cloud(1000, 1000, 1000, 1000);
+	std::vector<Eigen::Matrix4d> mats;
+	for (size_t i = 0; i < size; ++i) {
+		Eigen::Matrix4d mat;
+		auto tf = agents[i].vehicle_->GetTransform(); // NOLINT
+		Eigen::Matrix3d rot;
+		rot = Eigen::AngleAxisd(-tf.rotation.roll   * config::kToRadians, Eigen::Vector3d::UnitX()) *
+			  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+			  Eigen::AngleAxisd(-tf.rotation.yaw    * config::kToRadians, Eigen::Vector3d::UnitZ());
+    	Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
+		mat.setIdentity();
+		mat.block<3, 3>(0, 0) = rot;
+    	mat.block<3, 1>(0, 3) = trans;
+		mats.emplace_back(mat);
+	}
 	for (size_t i = 0; i < size; ++i) {
 		agents[i].CaptureOnce(false); // NOLINTs
-		// AssertSize(1);
-		if (agents[i].datapoint_transforms_.empty()) { // NOLINT
-			std::cout << "Debug() called on agent " << agents[i].id_ // NOLINT
-					<< " with an empty queue" << std::endl;
-			return;
-		}
-		// -------------------------- car transform --------------------------
-		auto car_transform = agents[i].datapoint_transforms_.front(); // NOLINT
 		// ---------------------- creating target cloud ----------------------
 		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) { // NOLINT
 			auto[success, semantic, depth] = semantic_depth_cam->pop();
 			if (success) {
-				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, car_transform);
+				// Eigen::Matrix4d tf = mats[0].inverse() * mats[i]; // NOLINT
+				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_; // NOLINT
+				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
 			} else {
 				std::cout << "ERROR: agent " + std::to_string(agents[i].id_) // NOLINT
 						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;

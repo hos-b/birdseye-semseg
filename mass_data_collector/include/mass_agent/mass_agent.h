@@ -96,8 +96,6 @@ private:
 	Eigen::Matrix4d transform_;
 	std::string blueprint_name_;
 	double width_, length_;
-	// data
-	std::vector<Eigen::Matrix4d> datapoint_transforms_;
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	// carla sensors

@@ -8,7 +8,7 @@ namespace geom
 CameraGeometry::CameraGeometry(const YAML::Node& cam_node, float x, float y, float z, float rr, float pp, float yy) {
     width_ = cam_node["image_size_x"].as<double>();
     height_ = cam_node["image_size_y"].as<double>();
-    // from normal coordinates to a camera looking in +z, x down, y left
+    // from normal coordinates to an affine camera looking in +z, x down, y left
     Eigen::Matrix3d affine_rotation;
     affine_rotation = Eigen::AngleAxisd(0.0       , Eigen::Vector3d::UnitX()) *
                       Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d::UnitY()) *
