@@ -87,7 +87,7 @@ private:
 	void CaptureOnce(bool log);
 	void InitializeKDTree();
 	void AssertSize(size_t size);
-
+	geom::SemanticCloud::Settings& sc_settings();
 	static std::vector<std::string> GetBlueprintNames();
 	static std::vector<const MassAgent*>& agents();
 	static std::vector<boost::shared_ptr<carla::client::Waypoint>>& kd_points();
@@ -95,7 +95,7 @@ private:
 	uint16 id_;
 	Eigen::Matrix4d transform_;
 	std::string blueprint_name_;
-	double width_, length_;
+	double vehicle_width_, vehicle_length_;
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	// carla sensors

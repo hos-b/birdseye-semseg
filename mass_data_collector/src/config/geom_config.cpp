@@ -13,10 +13,6 @@ namespace config
 	constexpr float kCamFBHover = 5.0f; // meters
 
 	// boundaries, sizes
-	constexpr double kPointCloudMaxLocalX = 10.0; // meters
-	constexpr double kPointCloudMaxLocalY = 10.0; // meters
-	constexpr unsigned int kSemanticBEVRows = 1000; // pixels
-	constexpr unsigned int kSemanticBEVCols = 1000; // pixels
 	constexpr unsigned int kMaxAgentDistance = 400; // centimeters
 
 

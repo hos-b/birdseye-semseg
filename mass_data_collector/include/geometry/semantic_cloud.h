@@ -19,9 +19,19 @@ class SemanticCloud // NOLINT
 {
 using KDTree2D = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, SemanticCloud>,
 													 SemanticCloud, 2>;
-
 public:
-	SemanticCloud(double max_x, double max_y, size_t img_rows, size_t img_cols);
+	struct Settings {
+		float max_point_x;
+		float min_point_x;
+		float max_point_y;
+		float min_point_y;
+		float image_rows;
+		float image_cols;
+		float sitching_threhsold;
+		float vehicle_mask_padding;
+		unsigned int knn_count;
+	};
+	SemanticCloud(SemanticCloud::Settings settings);
 	~SemanticCloud();
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							   cv::Mat semantic,
@@ -52,6 +62,7 @@ public:
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
+
 private:
 	[[nodiscard]] size_t GetMajorityVote(const std::vector<size_t>& knn_indices,
 										 const std::vector<double>& distances) const;
@@ -61,12 +72,9 @@ private:
 	// members
 	std::unique_ptr<KDTree2D> kd_tree_;
 	pcl::PointCloud<pcl::PointXYZL> target_cloud_;
-	double point_max_y_;
-	double point_max_x_;
+	Settings cfg_;
 	double pixel_w_;
 	double pixel_h_;
-	size_t image_cols_;
-	size_t image_rows_;
 	std::function<size_t(const std::pair<double, double>&)> xy_hash_;
 	std::unordered_map<std::pair<double, double>, double, decltype(xy_hash_)> xy_map_;
 };

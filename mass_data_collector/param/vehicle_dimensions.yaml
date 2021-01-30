@@ -1,3 +1,5 @@
+# this file contains the approximate metric size of vehicle models
+# and is used to restrict the search region of the vehicle mask
 vehicle.audi.a2:
   front: 1.85437
   back: 1.82387

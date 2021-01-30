@@ -20,20 +20,17 @@
 namespace geom
 {
 /* constructor */
-SemanticCloud::SemanticCloud(double max_x, double max_y, size_t img_rows, size_t img_cols) {
-	point_max_x_ = max_x;
-	point_max_y_ = max_y;
-	image_rows_ = img_rows;
-	image_cols_ = img_cols;
+SemanticCloud::SemanticCloud(SemanticCloud::Settings settings) {
+	cfg_ = settings;
 	kd_tree_ = nullptr;
 	xy_hash_ = [](const std::pair<double, double>& pair) -> size_t {
 		return std::hash<double>()(pair.first * 1e4) ^ std::hash<double>()(pair.second);
 	};
-	pixel_w_ = 2 * point_max_y_ / static_cast<double>(image_cols_);
-	pixel_h_ = 2 * point_max_x_ / static_cast<double>(image_rows_);
-
+	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
+	pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x) / static_cast<double>(cfg_.image_rows);
 	xy_map_ = std::unordered_map<std::pair<double, double>, double, decltype(xy_hash_)>(150000, xy_hash_);
 }
+
 /* destructor: cleans containers */
 SemanticCloud::~SemanticCloud() {
 	if (kd_tree_) {
@@ -42,6 +39,7 @@ SemanticCloud::~SemanticCloud() {
 	}
 	target_cloud_.points.clear();
 }
+
 /* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud  */
 void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 										  cv::Mat semantic,
@@ -50,17 +48,17 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 	size_t index = old_size;
 	target_cloud_.points.resize(old_size + (semantic.rows * semantic.cols));
 	for (int i = 0; i < semantic.rows; ++i) {
-		uchar* pixel_label = semantic.ptr<uchar>(i); // NOLINT
-		float* pixel_depth = depth.ptr<float>(i); // NOLINT
+		uchar* pixel_label = semantic.ptr<uchar>(i);
+		float* pixel_depth = depth.ptr<float>(i);
 		for (int j = 0; j < semantic.cols; ++j) {
-			auto label = pixel_label[j]; // NOLINT
+			auto label = pixel_label[j];
 			// filter if it belongs to a traffic light or pole
 			if (config::fileterd_semantics.at(label)) {
 				continue;
 			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), pixel_depth[j]); // NOLINT
-			if (pixel_3d_loc.y() < -point_max_y_ || pixel_3d_loc.y() > point_max_y_ ||
-				pixel_3d_loc.x() < -point_max_x_ || pixel_3d_loc.x() > point_max_x_) {
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), pixel_depth[j]);
+			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
+				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
 				continue;
 			}
 			// skip if repetitive or lower height, surprisingly this never triggers
@@ -83,6 +81,7 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
 }
+
 /* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
 void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 										  cv::Mat semantic,
@@ -92,11 +91,11 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 	size_t index = old_size;
 	target_cloud_.points.resize(old_size + (semantic.rows * semantic.cols));
 	for (int i = 0; i < semantic.rows; ++i) {
-		uchar* pixel_label = semantic.ptr<uchar>(i); // NOLINT
-		float* pixel_depth = depth.ptr<float>(i); // NOLINT
+		uchar* pixel_label = semantic.ptr<uchar>(i);
+		float* pixel_depth = depth.ptr<float>(i);
 		for (int j = 0; j < semantic.cols; ++j) {
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]); // NOLINT
-			target_cloud_[index].label = pixel_label[j]; // NOLINT
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]);
+			target_cloud_[index].label = pixel_label[j];
 			target_cloud_[index].x = pixel_3d_loc.x();
 			target_cloud_[index].y = pixel_3d_loc.y();
 			target_cloud_[index].z = pixel_3d_loc.z();
@@ -108,6 +107,7 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
 }
+
 /* removes overlapping or invisible points for the target cloud. initializes kd tree.
    filters unwanted labels (declared in config::filtered_semantics)
 */
@@ -116,58 +116,61 @@ void SemanticCloud::BuildKDTree() {
 	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(128));
 	kd_tree_->buildIndex();
 }
+
 /* returns the orthographic bird's eye view image */
 std::tuple<cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(size_t knn_pt_count, double vehicle_width, double vehicle_length, size_t padding) const {
 	// ego roi
-	cv::Point mid(image_cols_ / 2, image_rows_ / 2);
+	cv::Point mid(cfg_.image_cols / 2, cfg_.image_rows / 2);
 	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - padding, mid.y - (vehicle_length / (2 * pixel_h_)) - padding);
 	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + padding, mid.y + (vehicle_length / (2 * pixel_h_)) + padding);
 	cv::Rect2d vhc_rect(topleft, botright);
 	// the output images
-	cv::Mat semantic_bev(image_rows_, image_cols_, CV_8UC1);
-	cv::Mat vehicle_mask = cv::Mat::zeros(image_rows_, image_cols_, CV_8UC1);
+	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	cv::Mat vehicle_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	#pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic_bev.rows; ++i) {
-		// uchar* semantic_row = semantic_bev.ptr<uchar>(i); // NOLINT
-		// uchar* mask_row = vehicle_mask.ptr<uchar>(i); // NOLINT
+		// uchar* semantic_row = semantic_bev.ptr<uchar>(i);
+		// uchar* mask_row = vehicle_mask.ptr<uchar>(i);
 		for (int j = 0; j < semantic_bev.cols; ++j) {
 			// get the center of the square that is to be mapped to a pixel
-			double knn_x = point_max_x_ - i * pixel_h_ + 0.5 * pixel_h_;
-			double knn_y = point_max_y_ - j * pixel_w_ + 0.5 * pixel_w_;
+			double knn_x = cfg_.max_point_x - i * pixel_h_ + 0.5 * pixel_h_;
+			double knn_y = cfg_.max_point_y - j * pixel_w_ + 0.5 * pixel_w_;
 			// ------------------------ majority voting for semantic id ------------------------
 			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, knn_pt_count);
 			auto mv_winner = target_cloud_.points[GetMajorityVote(knn_ret_index, knn_sqrd_dist)];
-			semantic_bev.at<uchar>(i, j) = static_cast<unsigned char>(mv_winner.label); // NOLINT
+			semantic_bev.at<uchar>(i, j) = static_cast<unsigned char>(mv_winner.label);
 			// if the point belongs to the car itself
 			if (mv_winner.label == config::kCARLAVehiclesSemanticID &&
 				vhc_rect.contains(cv::Point(j, i))) {
-				vehicle_mask.at<uchar>(i, j) = 255; // NOLINT
+				vehicle_mask.at<uchar>(i, j) = 255;
 				continue;
 			}
 		}
 	}
 	return std::make_tuple(semantic_bev, vehicle_mask);
 }
-/* returns the BEV mask visible from the camera. this method assumes the point cloud only
-   consists of points captured with the front camera */
+
+/* returns the BEV mask visible from the camera. this method assumes the kd tree
+   is populated only with points captured with the front camera */
 cv::Mat SemanticCloud::GetFOVMask(double stitching_threshold) const {
-	cv::Mat bev_mask = cv::Mat::zeros(image_rows_, image_cols_, CV_8UC1);
+	cv::Mat bev_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	#pragma omp parallel for collapse(2)
 	for (int i = 0; i < bev_mask.rows; ++i) {
-		// uchar* mask_row = bev_mask.ptr<uchar>(i); // NOLINT
+		// uchar* mask_row = bev_mask.ptr<uchar>(i);
 		for (int j = 0; j < bev_mask.cols; ++j) {
 			// get the center of the square that is to be mapped to a pixel
-			double knn_x = point_max_x_ - i * pixel_h_ + 0.5 * pixel_h_;
-			double knn_y = point_max_y_ - j * pixel_w_ + 0.5 * pixel_w_;
+			double knn_x = cfg_.max_point_x - i * pixel_h_ + 0.5 * pixel_h_;
+			double knn_y = cfg_.max_point_y - j * pixel_w_ + 0.5 * pixel_w_;
 			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 32);
 			// if the point is close enough
 			if (knn_sqrd_dist[0] <= stitching_threshold) {
-				bev_mask.at<uchar>(i, j) = 255; // NOLINT
+				bev_mask.at<uchar>(i, j) = 255;
 			}
 		}
 	}
 	return bev_mask;
 }
+
 /* simple kd-tree look up. only use whe the cloud is  */
 std::pair<std::vector<size_t>, std::vector<double>>
 SemanticCloud::FindClosestPoints(double knn_x, double knn_y, size_t num_results) const {
@@ -180,6 +183,7 @@ SemanticCloud::FindClosestPoints(double knn_x, double knn_y, size_t num_results)
 	knn_sqrd_dist.resize(num_results);
 	return std::make_pair(knn_ret_index, knn_sqrd_dist);
 }
+
 /* returns the boundaries of the car (calculated from filtered point cloud) */
 [[deprecated("deprecated function")]] std::tuple<double, double, double, double>
 SemanticCloud::GetVehicleBoundary() const {
@@ -234,6 +238,7 @@ SemanticCloud::GetVehicleBoundary() const {
 	}
 	return std::make_tuple(front, std::abs(back), left, std::abs(right));
 }
+
 /* returns the visible points in the cloud that are visible in the given camera geometry */
 void SemanticCloud::SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 									const std::string& path, double pixel_limit) {
@@ -242,7 +247,7 @@ void SemanticCloud::SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_ge
 	size_t size = 0;
 	cv::Scalar color;
 	#pragma omp parallel for
-	for (size_t i = 0; i < target_cloud_.points.size(); ++i) { // NOLINT
+	for (size_t i = 0; i < target_cloud_.points.size(); ++i) {
 		if (rgb_geometry->IsInView(target_cloud_.points[i], pixel_limit)) {
 			visible_cloud.points[size].x = target_cloud_.points[i].x;
 			visible_cloud.points[size].y = target_cloud_.points[i].y;
@@ -260,6 +265,7 @@ void SemanticCloud::SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_ge
 	visible_cloud.is_dense = true;
 	pcl::io::savePCDFile(path, visible_cloud);
 }
+
 /* gets the majority vote based on the results of a knn search */
 size_t SemanticCloud::GetMajorityVote(const std::vector<size_t>& knn_indices,
 									  const std::vector<double>& distances) const {
@@ -290,6 +296,7 @@ size_t SemanticCloud::GetMajorityVote(const std::vector<size_t>& knn_indices,
 	}
 	return winner_index;
 }
+
 /* saves the color coded point cloud */
 void SemanticCloud::SaveCloud(const std::string& path) const {
 	if (target_cloud_.empty()) {
@@ -301,7 +308,7 @@ void SemanticCloud::SaveCloud(const std::string& path) const {
 	size_t size = 0;
 	cv::Scalar color;
 	// #pragma omp parallel for
-	for (size_t i = 0; i < target_cloud_.points.size(); ++i) { // NOLINT
+	for (size_t i = 0; i < target_cloud_.points.size(); ++i) {
 		rgb_cloud.points[size].x = target_cloud_.points[i].x;
 		rgb_cloud.points[size].y = target_cloud_.points[i].y;
 		rgb_cloud.points[size].z = target_cloud_.points[i].z;
@@ -316,19 +323,21 @@ void SemanticCloud::SaveCloud(const std::string& path) const {
 	rgb_cloud.is_dense = true;
 	pcl::io::savePCDFile(path, rgb_cloud);
 }
+
 /* converts the smenatic mat to an RGB image */
 cv::Mat SemanticCloud::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 	cv::Mat rgb_mat(semantic_ids.rows, semantic_ids.cols, CV_8UC3);
 	#pragma omp parallel for
 	for (int i = 0; i < semantic_ids.rows; ++i) {
-		cv::Vec3b* rgb_row = rgb_mat.ptr<cv::Vec3b>(i); // NOLINT
-		uchar* semantic_row = semantic_ids.ptr<uchar>(i); // NOLINT
+		cv::Vec3b* rgb_row = rgb_mat.ptr<cv::Vec3b>(i);
+		uchar* semantic_row = semantic_ids.ptr<uchar>(i);
 		for (int j = 0; j < semantic_ids.cols; ++j) {
-			rgb_row[j] = config::semantic_palette_map.at(semantic_row[j]); // NOLINT
+			rgb_row[j] = config::semantic_palette_map.at(semantic_row[j]);
 		}
 	}
 	return rgb_mat;
 }
+
 /* debug function that prints the x,y boundaries of the cloud */
 void SemanticCloud::PrintBoundaries() const {
 	float minx = 0, miny = 0, maxx = 0, maxy = 0;
@@ -346,4 +355,5 @@ void SemanticCloud::PrintBoundaries() const {
 	}
 	std::cout << "(" << minx << ", " << miny << ") - (" << maxx << ", " << maxy << ")" << std::endl;
 }
+
 } // namespace geom

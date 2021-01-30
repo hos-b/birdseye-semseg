@@ -14,8 +14,6 @@
 #include "config/agent_config.h"
 #include "hdf5_api/hdf5_dataset.h"
 #include "mass_agent/mass_agent.h"
-#include "ros/init.h"
-
 #define RANDOM_SEED 135
 
 using namespace std::chrono_literals;
@@ -25,6 +23,7 @@ void inter(int signo) {
 	std::cout << "shutting down" << std::endl;
 	ros::shutdown();
 }
+
 void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update) { // NOLINT
 	uint32 remaining_s = 0;
 	while (ros::ok()) {
@@ -100,8 +99,8 @@ int main(int argc, char **argv)
 		for (size_t i = 1; i < number_of_agents; ++i) {
 			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
+		// mandatory delay
 		std::this_thread::sleep_for(100ms);
-		// agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, "/home/hosein/cloud_" + std::to_string(data_count) + ".pcl");
 		// gathering data (async)
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
 			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i], 0.1, 35, 7);

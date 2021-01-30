@@ -5,33 +5,25 @@
 #include <carla/client/Waypoint.h>
 #include <carla/geom/Transform.h>
 #include <carla/client/Junction.h>
+#include <carla/geom/Location.h>
+#include <carla/road/Lane.h>
 
-#include "carla/geom/Location.h"
-#include "carla/road/Lane.h"
 #include "hdf5_api/hdf5_dataset.h"
 #include "mass_agent/sensors.h"
-#include "geometry/semantic_cloud.h"
 #include "config/agent_config.h"
 #include "config/geom_config.h"
 
 #include <cassert>
-#include <chrono>
-#include <mutex>
-#include <opencv2/core.hpp>
-#include <string>
-#include <thread>
-#include <tuple>
-#include <cmath>
 #include <cstdlib>
-#include <cassert>
+#include <opencv2/core.hpp>
 
+#include <ros/ros.h>
 #include <Eigen/Dense>
 #include <ros/package.h>
 #include <pcl/io/pcd_io.h>
 #include <yaml-cpp/yaml.h>
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
-#include <ros/ros.h>
 
 #define assertm(exp, msg) assert(((void)msg, exp))
 using namespace std::chrono_literals;
@@ -85,17 +77,19 @@ MassAgent::MassAgent() {
 	SetupSensors();
 	// reading the dimensions of the vehicle
 	std::string yaml_path = ros::package::getPath("mass_data_collector");
-	yaml_path += "/param/dimensions.yaml";
+	yaml_path += "/param/vehicle_dimensions.yaml";
 	YAML::Node base = YAML::LoadFile(yaml_path);
 	YAML::Node boundaries = base[blueprint_name_];
-	width_ = std::max(boundaries["left"].as<double>(), boundaries["right"].as<double>()) * 2;
-	length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
+	vehicle_width_ = std::max(boundaries["left"].as<double>(), boundaries["right"].as<double>()) * 2;
+	vehicle_length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
 }
+
 /* destructor */
 MassAgent::~MassAgent() {
 	// releasing resources
 	DestroyAgent();
 }
+
 /* places the agent on a random point in the map and makes sure it doesn't collide with others [[blocking]] 
    this function should only be called for the first car of the batch, because it does not check for collision
    with other cars.
@@ -110,21 +104,6 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
 			tf = initial_wp->GetTransform();
 			break;
 		}
-		/* for (const auto *agent : agents()) {
-			if (agent->id_ == id_) {
-				continue;
-			}
-			auto distance = std::sqrt((agent->carla_x() - tf.location.x) *
-									  (agent->carla_x() - tf.location.x) +
-									  (agent->carla_y() - tf.location.y) *
-									  (agent->carla_y() - tf.location.y) +
-									  (agent->carla_z() - tf.location.z) *
-									  (agent->carla_z() - tf.location.z));
-			if (distance < length_ * 1.1) {
-				admissable = false;
-				continue;
-			}
-		} */
 	}
 	Eigen::Matrix3d rot;
 	rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
@@ -146,6 +125,7 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
 	} while(true);
 	return initial_wp;
 }
+
 /* expands the given waypoint by finding the points in its vicinity */
 static std::vector<boost::shared_ptr<carla::client::Waypoint>>
 ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
@@ -160,6 +140,7 @@ ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
 	candidates.emplace_back(wp->GetRight());
 	return candidates;
 }
+
 /* places the agent around the given waypoint and also makes sure it doesn't collide with others [[blocking]] */
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
@@ -167,7 +148,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 						 size_t knn_pts) {
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
-	auto initial_expansion = ExpandWayoint(initial_wp, length_ * 1.35);
+	auto initial_expansion = ExpandWayoint(initial_wp, vehicle_length_ * 1.35);
 	candidates.insert(candidates.end(), initial_expansion.begin(), initial_expansion.end());
 	if (knn_pts > 0) {
 		auto query_tfm = initial_wp->GetTransform();
@@ -177,7 +158,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		knn_pts = kd_tree_->knnSearch(&query[0], knn_pts, &knn_ret_indices[0], &knn_sqrd_dist[0]);
 		knn_ret_indices.resize(knn_pts);
 		for (auto close_wp_idx : knn_ret_indices) {
-			auto expansion = ExpandWayoint(kd_points()[close_wp_idx], length_ * 1.35);
+			auto expansion = ExpandWayoint(kd_points()[close_wp_idx], vehicle_length_ * 1.35);
 			candidates.insert(candidates.end(), expansion.begin(), expansion.end());
 		}
 	}
@@ -214,7 +195,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 									  (agent->carla_y() - tf.location.y) +
 									  (agent->carla_z() - tf.location.z) *
 									  (agent->carla_z() - tf.location.z));
-			if (distance < length_ * 1.1) {
+			if (distance < vehicle_length_ * 1.1) {
 				admissable = false;
 				continue;
 			}
@@ -240,6 +221,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 	} while(true);
 	return next_wp;
 }
+
 /* caputres one frame for all sensors [[blocking]] */
 void MassAgent::CaptureOnce(bool log) {
 	front_rgb_->CaputreOnce();
@@ -251,6 +233,7 @@ void MassAgent::CaptureOnce(bool log) {
 		std::cout << "captured once" << std::endl;
 	}
 }
+
 /* destroys the agent in the simulation & its sensors. */
 void MassAgent::DestroyAgent() {
 	std::cout << "destroying mass-agent-" << id_ << std::endl;
@@ -266,6 +249,7 @@ void MassAgent::DestroyAgent() {
 		vehicle_ = nullptr;
 	}
 }
+
 /* checks the buffers and creates a single data point from all the sensors */
 MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 										  size_t knn_pt_count,
@@ -273,10 +257,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	CaptureOnce(false);
 	MASSDataType datapoint{};
 	// ----------------------- creating mask cloud -----------------------
-	geom::SemanticCloud mask_cloud(config::kPointCloudMaxLocalX,
-								   config::kPointCloudMaxLocalY,
-								   config::kSemanticBEVRows,
-								   config::kSemanticBEVCols);
+	geom::SemanticCloud mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_semantic_pc_->pop();
 	if (!succ) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
@@ -286,10 +267,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask(fovmask_stitching_threshold);
 	// ---------------------- creating target cloud ----------------------
-	geom::SemanticCloud target_cloud(config::kPointCloudMaxLocalX,
-									 config::kPointCloudMaxLocalY,
-									 config::kSemanticBEVRows,
-									 config::kSemanticBEVCols);
+	geom::SemanticCloud target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 		if (success) {
@@ -301,7 +279,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 		}
 	}
 	target_cloud.BuildKDTree();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, width_, length_, carmask_padding);
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, vehicle_width_, vehicle_length_, carmask_padding);
 	// ------------------------ getting rgb image ------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {
@@ -337,6 +315,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	// AssertSize(0);
 	return datapoint;
 }
+
 /* returns an image of the map */
 cv::Mat MassAgent::GetMap() {
 	float minx = 0.0f, maxx = 0.0f;
@@ -393,6 +372,7 @@ cv::Mat MassAgent::GetMap() {
 	}
 	return map_img;
 }
+
 /* returns vehicle blueprint names */
 std::vector<std::string> MassAgent::GetBlueprintNames() {
 	static const std::vector<std::string> vehicle_names = {
@@ -416,6 +396,7 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 	};
 	return vehicle_names; // NOLINT
 }
+
 /* initializes waypoints and builds a kd index on top of them */
 void MassAgent::InitializeKDTree() {
 	if (kd_points().empty()) {
@@ -427,18 +408,22 @@ void MassAgent::InitializeKDTree() {
 		kd_tree_->buildIndex();
 	}
 }
+
 /* returns carla's x coordinate */
 double MassAgent::carla_x() const {
 	return transform_(0, 3);
 }
+
 /* returns carla's y coordinate */
 double MassAgent::carla_y() const {
 	return -transform_(1, 3);
 }
+
 /* returns carla's z coordinate */
 double MassAgent::carla_z() const {
 	return transform_(2, 3);
 }
+
 /* initializes the structures for the camera, lidar & depth measurements */
 void MassAgent::SetupSensors() {
 	std::string yaml_path = ros::package::getPath("mass_data_collector");
@@ -471,14 +456,20 @@ void MassAgent::SetupSensors() {
 		std::cout << "ERROR: mass camera node is not defined in sensor definition file" << std::endl;
 	}
 }
+
+/* returns the static vector of active agents */
 std::vector<const MassAgent*>& MassAgent::agents() {
 	static std::vector<const MassAgent*> activte_agents;
 	return activte_agents;
 }
+
+/* returns the static waypoint vector of possible vehicle poses */
 std::vector<boost::shared_ptr<carla::client::Waypoint>>& MassAgent::kd_points() {
 	static std::vector<boost::shared_ptr<carla::client::Waypoint>> kd_points;
 	return kd_points;
 }
+
+/* returns the static carla client. only one is needed for all agents */
 std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	static std::unique_ptr<cc::Client> carla_client = std::make_unique<cc::Client>("127.0.0.1", 2000);
 	static std::once_flag flag;
@@ -489,7 +480,35 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	});
 	return carla_client;
 }
-[[deprecated("debug function")]]void MassAgent::ExploreMap() { // NOLINT
+
+/* used to explore the map to find the road ID of corrupt samples */
+[[deprecated("debug function")]] void MassAgent::ExploreMap() { // NOLINT
+	/* 
+	enum class LaneType : uint32_t {
+		None          = 0x1,
+		Driving       = 0x1 << 1,
+		Stop          = 0x1 << 2,
+		Shoulder      = 0x1 << 3,
+		Biking        = 0x1 << 4,
+		Sidewalk      = 0x1 << 5,
+		Border        = 0x1 << 6,
+		Restricted    = 0x1 << 7,
+		Parking       = 0x1 << 8,
+		Bidirectional = 0x1 << 9,
+		Median        = 0x1 << 10,
+		Special1      = 0x1 << 11,
+		Special2      = 0x1 << 12,
+		Special3      = 0x1 << 13,
+		RoadWorks     = 0x1 << 14,
+		Tram          = 0x1 << 15,
+		Rail          = 0x1 << 16,
+		Entry         = 0x1 << 17,
+		Exit          = 0x1 << 18,
+		OffRamp       = 0x1 << 19,
+		OnRamp        = 0x1 << 20,
+		Any           = 0xFFFFFFFE
+		};
+	*/
 	float poses[16][2] = {
 	// {5.7187e+01, 1.9257e+02}, // buildings look weird
 	// {147.305500, 151.092400}, // buildings look weird again
@@ -535,34 +554,8 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 		std::cout << i << " " + strings[i] << ": " << wp->GetRoadId() << " X " << wp->GetLaneId() << std::endl; // NOLINT
 	}
 }
-/* 
-enum class LaneType : uint32_t {
-      None          = 0x1,
-      Driving       = 0x1 << 1,
-      Stop          = 0x1 << 2,
-      Shoulder      = 0x1 << 3,
-      Biking        = 0x1 << 4,
-      Sidewalk      = 0x1 << 5,
-      Border        = 0x1 << 6,
-      Restricted    = 0x1 << 7,
-      Parking       = 0x1 << 8,
-      Bidirectional = 0x1 << 9,
-      Median        = 0x1 << 10,
-      Special1      = 0x1 << 11,
-      Special2      = 0x1 << 12,
-      Special3      = 0x1 << 13,
-      RoadWorks     = 0x1 << 14,
-      Tram          = 0x1 << 15,
-      Rail          = 0x1 << 16,
-      Entry         = 0x1 << 17,
-      Exit          = 0x1 << 18,
-      OffRamp       = 0x1 << 19,
-      OnRamp        = 0x1 << 20,
-      Any           = 0xFFFFFFFE
-    };
-*/
 
-/* asserts that all the data containers have the same size */
+/* asserts that all the sensor data containers have the same size */
 void MassAgent::AssertSize(size_t size) {
 	for (auto& spc_cam : semantic_pc_cams_) {
 		bool assertion = (spc_cam->depth_image_count() == spc_cam->semantic_image_count() &&
@@ -583,16 +576,17 @@ void MassAgent::AssertSize(size_t size) {
 	}
 }
 
+/* create a single cloud using all cameras of all agents */
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
-	geom::SemanticCloud target_cloud(1000, 1000, 1000, 1000);
+	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0, 0, 0.1, 7, 32});
 	std::vector<Eigen::Matrix4d> mats;
 	for (size_t i = 0; i < size; ++i) {
 		Eigen::Matrix4d mat;
 		auto tf = agents[i].vehicle_->GetTransform(); // NOLINT
 		Eigen::Matrix3d rot;
-		rot = Eigen::AngleAxisd(-tf.rotation.roll   * config::kToRadians, Eigen::Vector3d::UnitX()) *
+		rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
 			  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
-			  Eigen::AngleAxisd(-tf.rotation.yaw    * config::kToRadians, Eigen::Vector3d::UnitZ());
+			  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
     	Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
 		mat.setIdentity();
 		mat.block<3, 3>(0, 0) = rot;
@@ -616,6 +610,30 @@ void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::
 		}
 	}
 	target_cloud.SaveCloud(path);
+}
+
+/* returns the cloud geometry settings */
+geom::SemanticCloud::Settings& MassAgent::sc_settings() {
+	static geom::SemanticCloud::Settings semantic_cloud_settings;
+	static std::once_flag flag;
+	std::call_once(flag, [&]() {
+		std::string yaml_path = ros::package::getPath("mass_data_collector") +
+								"/param/sc_settings.yaml";
+		YAML::Node base = YAML::LoadFile(yaml_path);
+		YAML::Node cloud = base["cloud"];
+		YAML::Node bev = base["bev"];
+		YAML::Node mask = base["mask"];
+		semantic_cloud_settings.max_point_x = cloud["max_point_x"].as<double>();
+		semantic_cloud_settings.min_point_x = cloud["min_point_x"].as<double>();
+		semantic_cloud_settings.max_point_y = cloud["max_point_y"].as<double>();
+		semantic_cloud_settings.min_point_y = cloud["min_point_y"].as<double>();
+		semantic_cloud_settings.image_rows = bev["image_rows"].as<size_t>();
+		semantic_cloud_settings.image_cols = bev["image_cols"].as<size_t>();
+		semantic_cloud_settings.sitching_threhsold = mask["sitching_threhsold"].as<double>();
+		semantic_cloud_settings.vehicle_mask_padding = mask["vehicle_mask_padding"].as<size_t>();
+		semantic_cloud_settings.knn_count = mask["knn_count"].as<size_t>();
+	});
+	return semantic_cloud_settings;
 }
 
 } // namespace agent

@@ -12,10 +12,6 @@ namespace config
 	const extern float kCamFBHover; // meters
 
 	// boundaries, sizes
-	const extern double kPointCloudMaxLocalX; // meters
-	const extern double kPointCloudMaxLocalY; // meters
-	const extern unsigned int kSemanticBEVRows; // pixels
-	const extern unsigned int kSemanticBEVCols; // pixels
 	const extern unsigned int kMaxAgentDistance; // centimeters
 
 
