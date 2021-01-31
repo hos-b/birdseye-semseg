@@ -24,13 +24,20 @@ int main(int argc, char **argv)
 	ros::init(argc, argv, "mass_data_collector");
 	std::shared_ptr<ros::NodeHandle> node_handle = std::make_shared<ros::NodeHandle>();
 	signal(SIGINT, inter);
-	// reading command line args -----------------------------------------------------------------------
+	bool debug_mode = false;
+	// reading command line args --------------------------------------------------------------------------------
 	size_t number_of_agents = 0;
 	size_t max_data_count = 0;
 	size_t data_count = 0;
 	if (argc == 2) {
-		number_of_agents = 1;
-		max_data_count = 100;
+		if (std::strcmp(argv[1], "--debug") == 0) {
+			number_of_agents = 3;
+			max_data_count = 1;
+			debug_mode = true;
+		} else {
+			number_of_agents = 1;
+			max_data_count = 100;
+		}
 	} else if (argc == 3) {
 		number_of_agents = std::atoi(argv[2]);
 		max_data_count = 100;
@@ -45,18 +52,32 @@ int main(int argc, char **argv)
 	dset_name += ".hdf5";
 	srand(RANDOM_SEED);
 	ROS_INFO("starting data collection with %zu agent(s) for %zu iterations", number_of_agents, max_data_count);
-	// dataset -----------------------------------------------------------------------------------------
+	// dataset --------------------------------------------------------------------------------------------------
 	HDF5Dataset dataset("/home/hosein/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
 						compression::ZLIB | 6, 1, max_data_count + 32, 32, number_of_agents);
-	// CARLA setup -------------------------------------------------------------------------------------
+	// CARLA setup ----------------------------------------------------------------------------------------------
 	agent::MassAgent agents[number_of_agents];
 	boost::shared_ptr<carla::client::Waypoint> random_pose;
 	auto world = agent::MassAgent::carla_client()->GetWorld();
-	// some timing stuff -------------------------------------------------------------------------------
+	// some timing stuff ----------------------------------------------------------------------------------------
 	float avg_batch_time = 0.0f;
 	bool update = false;
-	std::thread time_thread(StatusThreadCallback, &data_count, max_data_count, &avg_batch_time, &update);
-	// data collection loop ----------------------------------------------------------------------------
+	std::thread *time_thread = nullptr;
+	if (!debug_mode) {
+		time_thread = new std::thread(StatusThreadCallback, &data_count, 
+									  max_data_count, &avg_batch_time, &update);
+	}
+	// debugging ------------------------------------------------------------------------------------------------
+	if (debug_mode) {
+		std::cout << "creating uniform pointcloud" << std::endl;
+		random_pose = agents[0].SetRandomPose(config::town0_restricted_roads);
+		for (size_t i = 1; i < number_of_agents; ++i) {
+			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
+		}
+		agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, "/home/hosein/debugcloud.pcl");
+		ros::shutdown();
+	}
+	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
 		std::future<MASSDataType> promise[number_of_agents];
 		if (data_count == max_data_count) {
@@ -88,7 +109,9 @@ int main(int argc, char **argv)
 	}
 	std::cout << "\ndone, closing dataset..." << std::endl;
 	dataset.Close();
-	time_thread.join();
+	if (time_thread) {
+		time_thread->join();
+	}
 	return 0;
 }
 
