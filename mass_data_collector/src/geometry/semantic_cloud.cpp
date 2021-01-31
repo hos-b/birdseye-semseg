@@ -120,7 +120,8 @@ void SemanticCloud::BuildKDTree() {
 /* returns the orthographic bird's eye view image */
 std::tuple<cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(size_t knn_pt_count, double vehicle_width, double vehicle_length, size_t padding) const {
 	// ego roi
-	cv::Point mid(cfg_.image_cols / 2, cfg_.image_rows / 2);
+	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
+	cv::Point mid(cfg_.image_cols / 2, ego_row_px);
 	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - padding, mid.y - (vehicle_length / (2 * pixel_h_)) - padding);
 	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + padding, mid.y + (vehicle_length / (2 * pixel_h_)) + padding);
 	cv::Rect2d vhc_rect(topleft, botright);
