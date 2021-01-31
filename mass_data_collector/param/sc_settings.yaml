@@ -1,13 +1,14 @@
 # this file is read into a `SemanticCloud::Settings` struct and used withinSemanticCloud
+
 cloud:
-  max_point_x: 10
-  min_point_x: -10
+  max_point_x: 20
+  min_point_x: -5
   max_point_y: 10
   min_point_y: -10
 
 bev:
   image_rows: 1000 # to be subsampled to 256
-  image_cols: 1000 # to be subsampled to 205 (204.8)
+  image_cols: 800 # to be subsampled to 205 (204.8)
 
 mask:
   # distance of the closest point to the pixel center

@@ -12,18 +12,23 @@ from data.mask_warp import get_aggregate_mask
 
 DATASET_DIR = "/home/hosein"
 PKG_NAME = "tp.hdf5"
-PPM = 1000.0 / 20.0
+PPM = 1000.0 / 25.0
 
+image_resize = True
+NEW_SIZE = (205, 256)
+
+# opening hdf5 file for metadata
 print("opening {}".format(PKG_NAME))
 file_path = os.path.join(DATASET_DIR, PKG_NAME)
 hdf5 = h5py.File(file_path, "r")
 dataset = hdf5["dataset_1"]
 agent_count = dataset.attrs["agent_count"][0]
-
 print(f"found {(dataset.shape[0] - 1) // agent_count} samples")
 print(f"agent_count attribute: {agent_count}")
 
+# opening hdf5 file for the dataset
 loader = get_dataloader(file_path, batch_size=1, train=False)
+
 # plot stuff
 rows = agent_count
 columns = 4
@@ -39,29 +44,37 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         rgb = (rgb + 1) / 2
         mask = ((masks[0, i, :, :] / 255.0).unsqueeze(2)).numpy()
 
-        ax = []
         # create subplot and append to ax
+        ax = []
         ax.append(fig.add_subplot(rows, columns, i * columns + 1))
+
+        # front RGB image
         ax[-1].set_title(f"rgb_{i}")
         plt.imshow(rgb)
 
+        # semantic BEV image
         ax.append(fig.add_subplot(rows, columns, i * columns + 2))
         ax[-1].set_title(f"semseg_{i}")
         semantic_img = semantic_to_cityscapes(semsegs[0, i, :, :])
         plt.imshow(semantic_img)
 
+        # aggregating the masks
         ax.append(fig.add_subplot(rows, columns, i * columns + 3))
         ax[-1].set_title(f"mask_{i}")
-        aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, PPM, 1000, 1000)
+        aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, PPM, 1000, 800)
         aggregate_mask = aggregate_mask.squeeze().numpy()
         # import pdb; pdb.set_trace()
+        if image_resize:
+            aggregate_mask = cv2.resize(aggregate_mask, NEW_SIZE, interpolation=cv2.INTER_LINEAR)
         plt.imshow(aggregate_mask)
 
-        masked_bev = semantic_img.copy()
-        masked_bev[(aggregate_mask == 0).squeeze(), :] = 0
+        # masking the semantic BEV
+        if image_resize:
+            semantic_img = cv2.resize(semantic_img, NEW_SIZE, interpolation=cv2.INTER_LINEAR)
+        semantic_img[(aggregate_mask == 0).squeeze(), :] = 0
         ax.append(fig.add_subplot(rows, columns, i * columns + 4))
         ax[-1].set_title(f"masked bev_{i}")
-        plt.imshow(masked_bev)
+        plt.imshow(semantic_img)
 
     plt.show()
 

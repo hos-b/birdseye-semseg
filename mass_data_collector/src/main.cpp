@@ -21,6 +21,7 @@ void AssertDataDimensions();
 
 int main(int argc, char **argv)
 {
+	AssertDataDimensions();
 	ros::init(argc, argv, "mass_data_collector");
 	std::shared_ptr<ros::NodeHandle> node_handle = std::make_shared<ros::NodeHandle>();
 	signal(SIGINT, inter);
@@ -31,7 +32,7 @@ int main(int argc, char **argv)
 	size_t data_count = 0;
 	if (argc == 2) {
 		if (std::strcmp(argv[1], "--debug") == 0) {
-			number_of_agents = 3;
+			number_of_agents = 1;
 			max_data_count = 1;
 			debug_mode = true;
 		} else {
@@ -53,8 +54,11 @@ int main(int argc, char **argv)
 	srand(RANDOM_SEED);
 	ROS_INFO("starting data collection with %zu agent(s) for %zu iterations", number_of_agents, max_data_count);
 	// dataset --------------------------------------------------------------------------------------------------
-	HDF5Dataset dataset("/home/hosein/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
-						compression::ZLIB | 6, 1, max_data_count + 32, 32, number_of_agents);
+	HDF5Dataset* dataset = nullptr;
+	if (!debug_mode) {
+		dataset = new HDF5Dataset("/home/hosein/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
+								  compression::ZLIB | 6, 1, max_data_count + 32, 32, number_of_agents);
+	}
 	// CARLA setup ----------------------------------------------------------------------------------------------
 	agent::MassAgent agents[number_of_agents];
 	boost::shared_ptr<carla::client::Waypoint> random_pose;
@@ -97,7 +101,7 @@ int main(int argc, char **argv)
 		}
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
 			MASSDataType datapoint = promise[i].get();
-			dataset.AppendElement(&datapoint);
+			dataset->AppendElement(&datapoint);
 		}
 		// timing stuff
 		++data_count;
@@ -107,9 +111,9 @@ int main(int argc, char **argv)
 										  (batch_duration.count() - avg_batch_time);
 		update = true;
 	}
-	std::cout << "\ndone, closing dataset..." << std::endl;
-	dataset.Close();
-	if (time_thread) {
+	if (!debug_mode) {
+		std::cout << "\ndone, closing dataset..." << std::endl;
+		dataset->Close();
 		time_thread->join();
 	}
 	return 0;
@@ -156,8 +160,24 @@ void AssertDataDimensions() {
 	yaml_path = ros::package::getPath("mass_data_collector")
 				+ "/param/sc_settings.yaml";
 	YAML::Node sconfig_base = YAML::LoadFile(yaml_path);
-	assert(sensors_base["camera-front"]["image_size_x"].as<size_t>() == statics::front_rgb_width);
-	assert(sensors_base["camera-front"]["image_size_y"].as<size_t>() == statics::front_rgb_height);
-	assert(sconfig_base["bev"]["image_rows"].as<size_t>() == statics::top_semseg_height);
-	assert(sconfig_base["bev"]["image_cols"].as<size_t>() == statics::top_semseg_width);
+	bool failed = false;
+	if (sensors_base["camera-front"]["image_size_x"].as<size_t>() != statics::front_rgb_width) {
+		failed = true;
+		std::cout << "rgb image width doesn't match the dataset struct size" << std::endl;
+	}
+	if (sensors_base["camera-front"]["image_size_y"].as<size_t>() != statics::front_rgb_height) {
+		failed = true;
+		std::cout << "rgb image height doesn't match the dataset struct size" << std::endl;
+	}
+	if (sconfig_base["bev"]["image_rows"].as<size_t>() != statics::top_semseg_height) {
+		failed = true;
+		std::cout << "bev image height doesn't match the dataset struct size" << std::endl;
+	}
+	if (sconfig_base["bev"]["image_cols"].as<size_t>() != statics::top_semseg_width) {
+		failed = true;
+		std::cout << "bev image width doesn't match the dataset struct size" << std::endl;
+	}
+	if (failed) {
+		std::exit(EXIT_FAILURE);
+	}
 }

@@ -225,7 +225,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 /* caputres one frame for all sensors [[blocking]] */
 void MassAgent::CaptureOnce(bool log) {
 	front_rgb_->CaputreOnce();
-	front_semantic_pc_->CaputreOnce();
+	front_mask_pc_->CaputreOnce();
 	for (auto& semantic_cam : semantic_pc_cams_) {
 		semantic_cam->CaputreOnce();
 	}
@@ -238,7 +238,7 @@ void MassAgent::CaptureOnce(bool log) {
 void MassAgent::DestroyAgent() {
 	std::cout << "destroying mass-agent-" << id_ << std::endl;
 	front_rgb_->Destroy();
-	front_semantic_pc_->Destroy();
+	front_mask_pc_->Destroy();
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		if (semantic_depth_cam) {
 			semantic_depth_cam->Destroy();
@@ -258,12 +258,12 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud mask_cloud(sc_settings());
-	auto[succ, front_semantic, front_depth] = front_semantic_pc_->pop();
+	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
 	if (!succ) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
 		return datapoint;
 	}
-	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), front_semantic, front_depth);
+	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask(fovmask_stitching_threshold);
 	// ---------------------------------------- creating target cloud ----------------------------------------
@@ -432,26 +432,49 @@ void MassAgent::SetupSensors() {
 	auto bp_library = vehicle_->GetWorld().GetBlueprintLibrary();
 	YAML::Node base = YAML::LoadFile(yaml_path);
 	YAML::Node front_rgb_node = base["camera-front"];
-	// front rgb & semantic pc cam
+	YAML::Node front_msk_node = base["camera-mask"];
+	// front rgb cam
 	if (front_rgb_node.IsDefined()) {
 		front_rgb_ = std::make_unique<data::RGBCamera>(front_rgb_node, bp_library, vehicle_, false);
-		front_semantic_pc_ = std::make_unique<data::SemanticPointCloudCamera>(front_rgb_node,
-															bp_library,
-															vehicle_,
-															data::CameraPosition::CENTER,
-															false);
 	} else {
 		std::cout << "ERROR: front camera node is not defined in sensor definition file" << std::endl;
+	}
+	// front semantic cam for mask generation. i'm a fucking genius
+	if (front_msk_node.IsDefined()) {
+		front_mask_pc_ = std::make_unique<data::SemanticPointCloudCamera>(front_msk_node,
+															bp_library,
+															vehicle_,
+															0, // no x hover
+															0, // no y hover
+															false);
+	} else {
+		std::cout << "ERROR: front mask camera node is not defined in sensor definition file" << std::endl;
 	}
 	// depth camera
 	YAML::Node mass_cam_node = base["camera-mass"];
 	if (mass_cam_node.IsDefined()) {
-		for (size_t i = 0; i <= static_cast<size_t>(data::CameraPosition::REARRIGHT); ++i) {
-			semantic_pc_cams_.emplace_back(std::make_unique<data::SemanticPointCloudCamera>(mass_cam_node,
-															bp_library,
-															vehicle_,
-															static_cast<data::CameraPosition>(i),
-															false));
+		// reading camera grid file
+		std::string yaml_path = ros::package::getPath("mass_data_collector")
+							+ "/param/camera_grid.yaml";
+		YAML::Node camera_grid = YAML::LoadFile(yaml_path);
+		size_t rows = camera_grid["rows"].as<size_t>();
+		size_t cols = camera_grid["cols"].as<size_t>();
+		for (size_t i = 0; i < rows; ++i) {
+			auto row_str = "row-" + std::to_string(i);
+			for (size_t j = 0; j < cols; ++j) {
+				auto col_str = "col-" + std::to_string(j);
+				if (!camera_grid[row_str][col_str]["enabled"].as<bool>()) {
+					continue;
+				}
+				auto delta_x = camera_grid[row_str][col_str]["x"].as<float>();
+				auto delta_y = camera_grid[row_str][col_str]["y"].as<float>();
+				semantic_pc_cams_.emplace_back(std::make_unique<data::SemanticPointCloudCamera>(mass_cam_node,
+																bp_library,
+																vehicle_,
+																delta_x,
+																delta_y,
+																false));
+			}
 		}
 	} else {
 		std::cout << "ERROR: mass camera node is not defined in sensor definition file" << std::endl;
@@ -492,11 +515,11 @@ void MassAgent::AssertSize(size_t size) {
 					  << ", " << spc_cam->semantic_image_count() << " != " << size;
 		}
 	}
-	bool assertion = (front_semantic_pc_->depth_image_count() == front_semantic_pc_->semantic_image_count() &&
-					  front_semantic_pc_->depth_image_count() == size);
+	bool assertion = (front_mask_pc_->depth_image_count() == front_mask_pc_->semantic_image_count() &&
+					  front_mask_pc_->depth_image_count() == size);
 	if (!assertion) {
-		std::cout << "\nassertion failed: front pc cam: " << front_semantic_pc_->depth_image_count()
-					<< ", " << front_semantic_pc_->semantic_image_count() << " != " << size;
+		std::cout << "\nassertion failed: front pc cam: " << front_mask_pc_->depth_image_count()
+					<< ", " << front_mask_pc_->semantic_image_count() << " != " << size;
 	}
 	if (front_rgb_->count() != size) {
 		std::cout << "\nassertion failed: front rgb: " << front_rgb_->count() << " != " << size;
@@ -506,27 +529,12 @@ void MassAgent::AssertSize(size_t size) {
 /* create a single cloud using all cameras of all agents */
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
 	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0, 0, 0.1, 7, 32});
-	std::vector<Eigen::Matrix4d> mats;
-	for (size_t i = 0; i < size; ++i) {
-		Eigen::Matrix4d mat;
-		auto tf = agents[i].vehicle_->GetTransform();
-		Eigen::Matrix3d rot;
-		rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
-			  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
-			  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
-    	Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
-		mat.setIdentity();
-		mat.block<3, 3>(0, 0) = rot;
-    	mat.block<3, 1>(0, 3) = trans;
-		mats.emplace_back(mat);
-	}
 	for (size_t i = 0; i < size; ++i) {
 		agents[i].CaptureOnce(false);
 		// ---------------------- creating target cloud ----------------------
 		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();
 			if (success) {
-				// Eigen::Matrix4d tf = mats[0].inverse() * mats[i];
 				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_;
 				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
 			} else {
@@ -537,8 +545,8 @@ void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::
 		}
 	}
 	auto [minx, maxx, miny, maxy] = target_cloud.GetBoundaries();
-	std::cout << "boundaries: (" << minx << ", " << miny << ") - ("
-								 << maxx << ", " << maxy << std::endl;
+	std::cout << "cloud boundaries: x in (" << minx << ", " << maxx << "), y in ("
+								 			<< miny << ", " << maxy << ")" << std::endl;
 	target_cloud.SaveCloud(path);
 }
 

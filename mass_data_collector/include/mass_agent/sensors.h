@@ -53,19 +53,13 @@ private:
 	std::mutex buffer_mutex_;
 };
 
-enum CameraPosition : unsigned int {
-	CENTER = 0,
-	FRONTLEFT = 1,
-	FRONTRIGHT = 2,
-	REARLEFT = 3,
-	REARRIGHT = 4,
-};
 class SemanticPointCloudCamera {
 public:
 	SemanticPointCloudCamera(const YAML::Node& mass_cam_node,
 			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
 			boost::shared_ptr<carla::client::Vehicle> vehicle,					
-			CameraPosition position,
+			float delta_x,
+			float delta_y,
 			bool log = true);
 	void CaputreOnce();
 	void Destroy();

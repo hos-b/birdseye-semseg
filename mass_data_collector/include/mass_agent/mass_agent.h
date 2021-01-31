@@ -101,7 +101,7 @@ private:
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	// carla sensors
 	std::unique_ptr<data::RGBCamera> front_rgb_;
-	std::unique_ptr<data::SemanticPointCloudCamera> front_semantic_pc_;
+	std::unique_ptr<data::SemanticPointCloudCamera> front_mask_pc_;
 	std::vector<std::unique_ptr<data::SemanticPointCloudCamera>> semantic_pc_cams_;
 	// lookup containers
 	std::unique_ptr<WaypointKDTree> kd_tree_;

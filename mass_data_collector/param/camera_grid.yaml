@@ -1,0 +1,64 @@
+# 5 cameras with 1 in center, 4 on the diagonals with dx, dy = 5.0m
+# pointcloud boundaries: x in (-12.5316, 12.5274), y in (-14.9908, 15.015)
+
+# enabled can be set to false for some cameras in order to create non-uniform grids
+# +x = forward
+# +y = right
+
+rows: 4
+cols: 3
+
+# 2 cameras 15m in front of the car on each side
+row-0:
+  col-0:
+    enabled: true
+    x: +15.0
+    y: -5.0
+  col-1:
+    enabled: false
+  col-2:
+    enabled: true
+    x: +15.0
+    y: +5.0
+
+# 2 cameras 10m in front of the car on each side
+row-1:
+  col-0:
+    enabled: true
+    x: +10.0
+    y: -5.0
+  col-1:
+    enabled: false
+  col-2:
+    enabled: true
+    x: +10.0
+    y: +5.0
+
+# 2 cameras 5m in front of the car on each side
+row-2:
+  row-1:
+  col-0:
+    enabled: true
+    x: +5.0
+    y: -5.0
+  col-1:
+    enabled: false
+  col-2:
+    enabled: true
+    x: +5.0
+    y: +5.0
+
+# 1 camera on top of the car, 2 on each side
+row-3:
+  col-0:
+    enabled: true  
+    x: 0.0
+    y: -5.0
+  col-1:
+    enabled: true
+    x: 0.0
+    y: 0.0
+  col-2:
+    enabled: true
+    x: 0.0
+    y: +5.0

@@ -18,22 +18,6 @@ namespace cc = carla::client;
 namespace cg = carla::geom;
 namespace data
 {
-static std::string ToString(CameraPosition position) {
-	switch (position) {
-	case FRONTLEFT:
-		return "front-left";
-	case FRONTRIGHT:
-		return "front-right";
-	case REARLEFT:
-		return "rear-left";
-	case REARRIGHT:
-		return "rear-right";
-	case CENTER:
-		return "center";
-	default:
-		return "unknown";
-	}
-}
 
 RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
@@ -114,50 +98,30 @@ std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() const {
 bool RGBCamera::waiting() const {
 	return save_;
 }
-// ------------------------ SemnaticPointCloudCamera -----------------------------
+// --------------------------------------- SemnaticPointCloudCamera ---------------------------------------
 SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_node,
 			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
 			boost::shared_ptr<carla::client::Vehicle> vehicle,
-			CameraPosition position,
+			float delta_x,
+			float delta_y,
 			bool log) {
-	name_ = "semantic_depth_" + ToString(position);
+	name_ = "semantic_depth_" + std::to_string(delta_x) + "_" + std::to_string(delta_y);
 	cam_log("setting up " + name_);
 	// get the correct pose of the camera
 	auto camera_transform = cg::Transform{
-		cg::Location{mass_cam_node["x"].as<float>(),
-					 mass_cam_node["y"].as<float>(),
+		cg::Location{mass_cam_node["x"].as<float>() + delta_x,
+					 mass_cam_node["y"].as<float>() + delta_y,
 					 mass_cam_node["z"].as<float>()},
 		cg::Rotation{mass_cam_node["pitch"].as<float>(),
 					 mass_cam_node["yaw"].as<float>(),
 					 mass_cam_node["roll"].as<float>()}};
-	switch (position) {
-	case FRONTLEFT:
-		camera_transform.location.y -= config::kCamLRHover;
-		camera_transform.location.x += config::kCamFBHover;
-		break;
-	case FRONTRIGHT:
-		camera_transform.location.y += config::kCamLRHover;
-		camera_transform.location.x += config::kCamFBHover;
-		break;
-	case REARLEFT:
-		camera_transform.location.y -= config::kCamLRHover;
-		camera_transform.location.x -= config::kCamFBHover;
-		break;
-	case REARRIGHT:
-		camera_transform.location.y += config::kCamLRHover;
-		camera_transform.location.x -= config::kCamFBHover;
-		break;
-	case CENTER:
-	default:
-		break;
-	}
 	cam_log("\tlocation: (" << camera_transform.location.x << ", "
 							<< camera_transform.location.y << ", "
 							<< camera_transform.location.z << ")");
 	cam_log("\trotation: (" << camera_transform.rotation.roll << ", "
 							<< camera_transform.rotation.pitch << ", "
 							<< camera_transform.rotation.yaw << ")");
-	// depth camera -------------------------------------------------------------------------------------
+	// depth camera ---------------------------------------------------------------------------------------
 	auto dcam_blueprint = *bp_library->Find("sensor.camera.depth");
 	// setting camera attributes from the yaml
 	for (YAML::const_iterator it = mass_cam_node.begin(); it != mass_cam_node.end(); ++it) {
