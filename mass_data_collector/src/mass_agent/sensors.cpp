@@ -273,7 +273,7 @@ std::string SemanticPointCloudCamera::name() const {
 /* converts an rgb coded matrix into an OpenCV mat containg real depth values
    returns CV_32FC1
 */
-cv::Mat DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+cv::Mat DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) {
 	auto color_coded_depth = cv::Mat(carla_image->GetHeight(),
 									 carla_image->GetWidth(),
 									 CV_8UC4,
@@ -288,13 +288,13 @@ cv::Mat DecodeToDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_ima
 	splits[1].convertTo(G, CV_32FC1);
 	splits[2].convertTo(R, CV_32FC1);
 	// carla's color coded depth to real depth conversion
-	real_depth = ((R + G * 256.0f + B * (256.0f * 256.0f)) / (256.0f * 256.0f * 256.0f - 1.0f)) * 1000.0f; // NOLINT
+	real_depth = ((R + G * 256.0f + B * (256.0f * 256.0f)) / (256.0f * 256.0f * 256.0f - 1.0f)) * 1000.0f;
 	return real_depth.clone();
 }
 /* converts an rgb coded depth image into an OpenCV mat containg logarithmic depth values (good for visualization)
    returns CV_8UC1
 */
-cv::Mat DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+cv::Mat DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) {
 	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image),
 																	  carla::image::ColorConverter::LogarithmicDepth());
 	static_assert(sizeof(decltype(image_view)::value_type) == 1, "single channel");
@@ -309,7 +309,7 @@ cv::Mat DecodeToLogarithmicDepthMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>
 /* extractss the red channel of the BGRA image which contains semantic data
    returns CV_8UC1
  */
-cv::Mat DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+cv::Mat DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) {
 	auto semseg_mat_4c = cv::Mat(carla_image->GetHeight(), carla_image->GetWidth(), CV_8UC4, carla_image->data());
 	std::vector<cv::Mat> splits;
 	cv::split(semseg_mat_4c, splits);
@@ -318,7 +318,7 @@ cv::Mat DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_im
 /* converts the semantic data to an RGB image with cityscapes' semantic pallete
    returns CV_8UC3
 */
-cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) { // NOLINT
+cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) {
 	// TODO(hosein): do the pallete yourself with opencv to avoid double copy
 	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image), 
 																	  carla::image::ColorConverter::CityScapesPalette());

@@ -7,7 +7,6 @@
 #include <tiff.h>
 
 namespace statics{
-constexpr static unsigned int name_length = 10;
 constexpr static unsigned int front_rgb_channels = 4;
 constexpr static unsigned int front_rgb_width = 640;
 constexpr static unsigned int front_rgb_height = 480;

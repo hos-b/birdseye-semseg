@@ -1,9 +1,6 @@
 #include <chrono>
-#include <cstdlib>
 #include <limits>
 #include <opencv2/imgcodecs.hpp>
-#include <ostream>
-#include <string>
 #include <thread>
 #include <csignal>
 #include <iomanip>
@@ -14,42 +11,14 @@
 #include "config/agent_config.h"
 #include "hdf5_api/hdf5_dataset.h"
 #include "mass_agent/mass_agent.h"
+
 #define RANDOM_SEED 135
 
 using namespace std::chrono_literals;
+void inter(int signo);
+void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update);
+void AssertDataDimensions();
 
-void inter(int signo) {
-	(void)signo;
-	std::cout << "shutting down" << std::endl;
-	ros::shutdown();
-}
-
-void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update) { // NOLINT
-	uint32 remaining_s = 0;
-	while (ros::ok()) {
-		if (*avg_batch_time == 0) {
-			std::cout << '\r'
-					  << "gathering " << *data_count + 1 << "/" << max_data_count
-					  << "\testimating remaining time..." << std::flush;
-			std::this_thread::sleep_for(1s);
-		} else {
-			std::cout << '\r'
-					<< "gathering " << *data_count + 1 << "/" << max_data_count
-					<< std::setw(20) << std::setfill(' ') << "avg. itr: " << *avg_batch_time << "s"
-					<< std::setw(30) << std::setfill(' ') << "estimated remaining time: " << remaining_s / 60 << "m "
-					<< remaining_s % 60 << "s   " << std::flush;
-			std::this_thread::sleep_for(1s);
-			remaining_s = std::max<int>(0, remaining_s - 1);
-		}
-		if (*update) {
-			if (*data_count == max_data_count) {
-				break;
-			}
-			*update = false;
-			remaining_s = (*avg_batch_time) * (max_data_count - (*data_count)); // NOLINT
-		}
-	}
-}
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "mass_data_collector");
@@ -63,16 +32,16 @@ int main(int argc, char **argv)
 		number_of_agents = 1;
 		max_data_count = 100;
 	} else if (argc == 3) {
-		number_of_agents = std::atoi(argv[2]); // NOLINT
+		number_of_agents = std::atoi(argv[2]);
 		max_data_count = 100;
 	} else if (argc ==  4) {
-		number_of_agents = std::atoi(argv[2]); // NOLINT
-		max_data_count = std::atoi(argv[3]); // NOLINT
+		number_of_agents = std::atoi(argv[2]);
+		max_data_count = std::atoi(argv[3]);
 	} else {
 		std::cout << "use: rosrun mass_data_collector dataset_name <number of agents> <data count>" << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
-	std::string dset_name(argv[1]); // NOLINT
+	std::string dset_name(argv[1]);
 	dset_name += ".hdf5";
 	srand(RANDOM_SEED);
 	ROS_INFO("starting data collection with %zu agent(s) for %zu iterations", number_of_agents, max_data_count);
@@ -121,4 +90,51 @@ int main(int argc, char **argv)
 	dataset.Close();
 	time_thread.join();
 	return 0;
+}
+
+/* keybord interrupt handler */
+void inter(int signo) {
+	(void)signo;
+	std::cout << "shutting down" << std::endl;
+	ros::shutdown();
+}
+/* prints the status of data collection */
+void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update) {
+	uint32 remaining_s = 0;
+	while (ros::ok()) {
+		if (*avg_batch_time == 0) {
+			std::cout << '\r'
+					  << "gathering " << *data_count + 1 << "/" << max_data_count
+					  << "\testimating remaining time..." << std::flush;
+			std::this_thread::sleep_for(1s);
+		} else {
+			std::cout << '\r'
+					<< "gathering " << *data_count + 1 << "/" << max_data_count
+					<< std::setw(20) << std::setfill(' ') << "avg. itr: " << *avg_batch_time << "s"
+					<< std::setw(30) << std::setfill(' ') << "estimated remaining time: " << remaining_s / 60 << "m "
+					<< remaining_s % 60 << "s   " << std::flush;
+			std::this_thread::sleep_for(1s);
+			remaining_s = std::max<int>(0, remaining_s - 1);
+		}
+		if (*update) {
+			if (*data_count == max_data_count) {
+				break;
+			}
+			*update = false;
+			remaining_s = (*avg_batch_time) * (max_data_count - (*data_count));
+		}
+	}
+}
+/* asserts that the dataset image size is equal to that of the gathered samples */
+void AssertDataDimensions() {
+	std::string yaml_path = ros::package::getPath("mass_data_collector")
+							+ "/param/sensors.yaml";
+	YAML::Node sensors_base = YAML::LoadFile(yaml_path);
+	yaml_path = ros::package::getPath("mass_data_collector")
+				+ "/param/sc_settings.yaml";
+	YAML::Node sconfig_base = YAML::LoadFile(yaml_path);
+	assert(sensors_base["camera-front"]["image_size_x"].as<size_t>() == statics::front_rgb_width);
+	assert(sensors_base["camera-front"]["image_size_y"].as<size_t>() == statics::front_rgb_height);
+	assert(sconfig_base["bev"]["image_rows"].as<size_t>() == statics::top_semseg_height);
+	assert(sconfig_base["bev"]["image_cols"].as<size_t>() == statics::top_semseg_width);
 }

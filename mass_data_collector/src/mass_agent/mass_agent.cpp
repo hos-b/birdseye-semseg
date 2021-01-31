@@ -94,11 +94,11 @@ MassAgent::~MassAgent() {
    this function should only be called for the first car of the batch, because it does not check for collision
    with other cars.
 */
-boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::unordered_map<int, bool>& restricted_roads) { // NOLINT
+boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::unordered_map<int, bool>& restricted_roads) {
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
 	while (true) {
-		initial_wp = kd_points()[std::rand() % kd_points().size()]; // NOLINT
+		initial_wp = kd_points()[std::rand() % kd_points().size()];
 		// if not in a restricted area
 		if (restricted_roads.find(initial_wp->GetRoadId()) == restricted_roads.end()) {
 			tf = initial_wp->GetTransform();
@@ -131,9 +131,9 @@ static std::vector<boost::shared_ptr<carla::client::Waypoint>>
 ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
 	auto front_wps = wp->GetNext(min_dist +
-						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0)); // NOLINT
+						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0));
 	auto rear_wps = wp->GetPrevious(min_dist +
-						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0)); // NOLINT
+						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0));
 	candidates.insert(candidates.end(), front_wps.begin(), front_wps.end());
 	candidates.insert(candidates.end(), rear_wps.begin(), rear_wps.end());
 	candidates.emplace_back(wp->GetLeft());
@@ -167,7 +167,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 	bool admissable = false;
 	while (!admissable) {
 		admissable = true;
-		next_wp = candidates[std::rand() % candidates.size()]; // NOLINT
+		next_wp = candidates[std::rand() % candidates.size()];
 		// nullptr happens if unavailable
 		if (next_wp == nullptr) {
 			admissable = false;
@@ -301,16 +301,16 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	// filling the datapoint
 	datapoint.agent_id = id_;
 	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
-		datapoint.front_rgb[i] = rgb_image.data[i]; // NOLINT
+		datapoint.front_rgb[i] = rgb_image.data[i];
 	}
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
-		datapoint.top_semseg[i] = semantic_bev.data[i]; // NOLINT
+		datapoint.top_semseg[i] = semantic_bev.data[i];
 	}
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
-		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i]; // NOLINT
+		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i];
 	}
 	for (size_t i = 0; i < statics::transform_length; ++i) {
-		datapoint.transform[i] = transform_.data()[i]; // NOLINT
+		datapoint.transform[i] = transform_.data()[i];
 	}
 	// AssertSize(0);
 	return datapoint;
@@ -394,7 +394,7 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 		"vehicle.audi.etron",
 		"vehicle.seat.leon",
 	};
-	return vehicle_names; // NOLINT
+	return vehicle_names;
 }
 
 /* initializes waypoints and builds a kd index on top of them */
@@ -482,7 +482,7 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 }
 
 /* used to explore the map to find the road ID of corrupt samples */
-[[deprecated("debug function")]] void MassAgent::ExploreMap() { // NOLINT
+[[deprecated("debug function")]] void MassAgent::ExploreMap() {
 	/* 
 	enum class LaneType : uint32_t {
 		None          = 0x1,
@@ -550,8 +550,8 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	};
 	auto map = carla_client()->GetWorld().GetMap();
 	for (int i = 0; i < 33; ++i) {
-		auto wp = map->GetWaypoint(carla::geom::Location(poses[i][0], -poses[i][1], 0.0)); // NOLINT
-		std::cout << i << " " + strings[i] << ": " << wp->GetRoadId() << " X " << wp->GetLaneId() << std::endl; // NOLINT
+		auto wp = map->GetWaypoint(carla::geom::Location(poses[i][0], -poses[i][1], 0.0));
+		std::cout << i << " " + strings[i] << ": " << wp->GetRoadId() << " X " << wp->GetLaneId() << std::endl;
 	}
 }
 
@@ -582,7 +582,7 @@ void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::
 	std::vector<Eigen::Matrix4d> mats;
 	for (size_t i = 0; i < size; ++i) {
 		Eigen::Matrix4d mat;
-		auto tf = agents[i].vehicle_->GetTransform(); // NOLINT
+		auto tf = agents[i].vehicle_->GetTransform();
 		Eigen::Matrix3d rot;
 		rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
 			  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
@@ -594,16 +594,16 @@ void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::
 		mats.emplace_back(mat);
 	}
 	for (size_t i = 0; i < size; ++i) {
-		agents[i].CaptureOnce(false); // NOLINTs
+		agents[i].CaptureOnce(false);
 		// ---------------------- creating target cloud ----------------------
-		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) { // NOLINT
+		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();
 			if (success) {
-				// Eigen::Matrix4d tf = mats[0].inverse() * mats[i]; // NOLINT
-				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_; // NOLINT
+				// Eigen::Matrix4d tf = mats[0].inverse() * mats[i];
+				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_;
 				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
 			} else {
-				std::cout << "ERROR: agent " + std::to_string(agents[i].id_) // NOLINT
+				std::cout << "ERROR: agent " + std::to_string(agents[i].id_)
 						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
 				return;
 			}

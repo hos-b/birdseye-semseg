@@ -15,7 +15,7 @@
 namespace geom 
 {
 
-class SemanticCloud // NOLINT
+class SemanticCloud
 {
 using KDTree2D = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor<double, SemanticCloud>,
 													 SemanticCloud, 2>;

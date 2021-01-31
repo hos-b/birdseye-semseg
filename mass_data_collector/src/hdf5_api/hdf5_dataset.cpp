@@ -4,7 +4,7 @@
 #include <H5PredType.h>
 #include <H5public.h>
 
-HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags, // NOLINT
+HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
                          unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size,
                          unsigned int agent_count) {
     unsigned int hdf5_flags = 0;
@@ -85,11 +85,11 @@ void HDF5Dataset::InitializeCompoundType() {
     hsize_t tf_dims[] = {statics::transform_length};
     H5::ArrayType tf_array_type(H5::PredType::NATIVE_DOUBLE, 1, tf_dims);
     comp_type_ = H5::CompType(sizeof(MASSDataType));
-    comp_type_.insertMember("agent_id", HOFFSET(MASSDataType, agent_id), H5::PredType::NATIVE_UINT32); // NOLINT
-    comp_type_.insertMember("front_rgb", HOFFSET(MASSDataType, front_rgb), rgb_array_type); // NOLINT
-    comp_type_.insertMember("top_semseg", HOFFSET(MASSDataType, top_semseg), bev_array_type); // NOLINT
-    comp_type_.insertMember("top_mask", HOFFSET(MASSDataType, top_mask), bev_array_type); // NOLINT
-    comp_type_.insertMember("transform", HOFFSET(MASSDataType, transform), tf_array_type); // NOLINT
+    comp_type_.insertMember("agent_id", HOFFSET(MASSDataType, agent_id), H5::PredType::NATIVE_UINT32);
+    comp_type_.insertMember("front_rgb", HOFFSET(MASSDataType, front_rgb), rgb_array_type);
+    comp_type_.insertMember("top_semseg", HOFFSET(MASSDataType, top_semseg), bev_array_type);
+    comp_type_.insertMember("top_mask", HOFFSET(MASSDataType, top_mask), bev_array_type);
+    comp_type_.insertMember("transform", HOFFSET(MASSDataType, transform), tf_array_type);
 }
 /* appends an element of the compund datatype to the dataset */
 void HDF5Dataset::AppendElement(const MASSDataType* mass_data) {

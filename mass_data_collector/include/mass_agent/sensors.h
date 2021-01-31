@@ -35,8 +35,8 @@ cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd:
 class RGBCamera {
 public:
 	RGBCamera(const YAML::Node& rgb_cam_node,
-			  boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
-			  boost::shared_ptr<carla::client::Vehicle> vehicle,					// NOLINT
+			  boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
+			  boost::shared_ptr<carla::client::Vehicle> vehicle,				
 			  bool log = true);
 	void CaputreOnce();
 	void Destroy();
@@ -44,7 +44,7 @@ public:
 	[[nodiscard]] bool waiting() const;
 	[[nodiscard]] size_t count() const;
 	[[nodiscard]] std::shared_ptr<geom::CameraGeometry> geometry() const;
-	std::pair <bool, cv::Mat> pop(); // NOLINT
+	std::pair <bool, cv::Mat> pop();
 private:
 	bool save_;
 	boost::shared_ptr<carla::client::Sensor> sensor_;
@@ -63,8 +63,8 @@ enum CameraPosition : unsigned int {
 class SemanticPointCloudCamera {
 public:
 	SemanticPointCloudCamera(const YAML::Node& mass_cam_node,
-			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,	// NOLINT
-			boost::shared_ptr<carla::client::Vehicle> vehicle,						// NOLINT
+			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
+			boost::shared_ptr<carla::client::Vehicle> vehicle,					
 			CameraPosition position,
 			bool log = true);
 	void CaputreOnce();
@@ -76,7 +76,7 @@ public:
 	[[nodiscard]] size_t depth_image_count() const;
 	[[nodiscard]] size_t semantic_image_count() const;
 	[[nodiscard]] std::shared_ptr<geom::CameraGeometry> geometry() const;
-	std::tuple<bool, cv::Mat, cv::Mat> pop(); // NOLINT
+	std::tuple<bool, cv::Mat, cv::Mat> pop();
 private:
 	std::string name_;
 	bool save_depth_;

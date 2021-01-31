@@ -66,8 +66,8 @@ public:
 	void ExploreMap();
 
 	// obligatory kd-tree stuff
-	[[nodiscard]] inline size_t kdtree_get_point_count() const { return kd_points().size(); } // NOLINT
-	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const { // NOLINT
+	[[nodiscard]] inline size_t kdtree_get_point_count() const { return kd_points().size(); }
+	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
 		if (dim == 0) {
 			return kd_points()[idx]->GetTransform().location.x;
 		}
@@ -87,10 +87,11 @@ private:
 	void CaptureOnce(bool log);
 	void InitializeKDTree();
 	void AssertSize(size_t size);
-	geom::SemanticCloud::Settings& sc_settings();
 	static std::vector<std::string> GetBlueprintNames();
 	static std::vector<const MassAgent*>& agents();
 	static std::vector<boost::shared_ptr<carla::client::Waypoint>>& kd_points();
+	geom::SemanticCloud::Settings& sc_settings();
+
 	// state
 	uint16 id_;
 	Eigen::Matrix4d transform_;

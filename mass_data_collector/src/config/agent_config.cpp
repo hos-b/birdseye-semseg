@@ -47,7 +47,7 @@ namespace config
     constexpr unsigned int kMassTerrainSemanticID = 10;
 
     // converting from CARLA to ours
-    const std::unordered_map<unsigned int, unsigned int> semantic_conversion_map({ // NOLINT
+    const std::unordered_map<unsigned int, unsigned int> semantic_conversion_map({
 		{kCARLAUnknownSemanticID, kMassUnknownSemanticID},
 		{kCARLABuildingSemanticID, kMassBuildingSemanticID},
 		{kCARLAFenceSemanticID, kMassBuildingSemanticID},
@@ -73,7 +73,7 @@ namespace config
 		{kCARLATerrainSemanticID, kMassTerrainSemanticID}
     });
     // CARLA's semantic id -> BGR (Cityescapes?)
-    const std::unordered_map<unsigned int, cv::Vec3b> semantic_palette_map({ // NOLINT
+    const std::unordered_map<unsigned int, cv::Vec3b> semantic_palette_map({
         {kCARLAUnknownSemanticID, cv::Vec3b(0, 0, 0)},
         {kCARLABuildingSemanticID, cv::Vec3b(70, 70, 70)},
         {kCARLAFenceSemanticID, cv::Vec3b(40, 40, 100)},
@@ -98,7 +98,7 @@ namespace config
         {kCARLAWaterSemanticID, cv::Vec3b(150, 60, 45)},
         {kCARLATerrainSemanticID, cv::Vec3b(100, 170, 145)}
     });
-    const std::unordered_map<unsigned int, bool> fileterd_semantics({ // NOLINT
+    const std::unordered_map<unsigned int, bool> fileterd_semantics({
         {kCARLAUnknownSemanticID, true}, // <-- hopefully empty
         {kCARLABuildingSemanticID, false},
         {kCARLAFenceSemanticID, true}, // <-- who needs fences
@@ -123,7 +123,7 @@ namespace config
         {kCARLAWaterSemanticID, false},
         {kCARLATerrainSemanticID, false}
     });
-    const std::unordered_map<unsigned int, double> semantic_weight({ // NOLINT
+    const std::unordered_map<unsigned int, double> semantic_weight({
         {kCARLAUnknownSemanticID, 0.0},
         {kCARLAFenceSemanticID, 0.0},
         {kCARLAPoleSemanticID, 0.0},
@@ -149,7 +149,7 @@ namespace config
         {kCARLAVehiclesSemanticID, 6.0}
     });
     // perfect for town_0
-    const std::unordered_map<int, bool> town0_restricted_roads ({ // NOLINT
+    const std::unordered_map<int, bool> town0_restricted_roads ({
         {499, true}, // junction lane leading to tunnel
         {551, true}, // junction lane leading to tunnel
         {510, true}, // junction lane leading to tunnel
