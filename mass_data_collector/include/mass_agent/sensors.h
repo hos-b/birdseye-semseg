@@ -41,9 +41,9 @@ public:
 	void CaputreOnce();
 	void Destroy();
 
-	[[nodiscard]] bool waiting() const;
-	[[nodiscard]] size_t count() const;
-	[[nodiscard]] std::shared_ptr<geom::CameraGeometry> geometry() const;
+	bool waiting() const;
+	size_t count() const;
+	std::shared_ptr<geom::CameraGeometry> geometry() const;
 	std::pair <bool, cv::Mat> pop();
 private:
 	bool save_;
@@ -70,12 +70,12 @@ public:
 	void CaputreOnce();
 	void Destroy();
 
-	[[nodiscard]] std::string name() const;
-	[[nodiscard]] size_t count() const;
-	[[nodiscard]] bool waiting() const;
-	[[nodiscard]] size_t depth_image_count() const;
-	[[nodiscard]] size_t semantic_image_count() const;
-	[[nodiscard]] std::shared_ptr<geom::CameraGeometry> geometry() const;
+	std::string name() const;
+	size_t count() const;
+	bool waiting() const;
+	size_t depth_image_count() const;
+	size_t semantic_image_count() const;
+	std::shared_ptr<geom::CameraGeometry> geometry() const;
 	std::tuple<bool, cv::Mat, cv::Mat> pop();
 private:
 	std::string name_;

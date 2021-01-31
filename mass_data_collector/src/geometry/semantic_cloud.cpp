@@ -338,8 +338,8 @@ cv::Mat SemanticCloud::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 	return rgb_mat;
 }
 
-/* debug function that prints the x,y boundaries of the cloud */
-void SemanticCloud::PrintBoundaries() const {
+/* debug function that returns the x,y boundaries of the cloud */
+std::tuple<double, double, double, double> SemanticCloud::GetBoundaries() const {
 	float minx = 0, miny = 0, maxx = 0, maxy = 0;
 	for (const auto& point : target_cloud_.points) {
 		if (point.x < minx) {
@@ -353,7 +353,7 @@ void SemanticCloud::PrintBoundaries() const {
 			maxy = point.y;
 		}
 	}
-	std::cout << "(" << minx << ", " << miny << ") - (" << maxx << ", " << maxy << ")" << std::endl;
+	return std::make_tuple(minx, maxx, miny, maxy);
 }
 
 } // namespace geom

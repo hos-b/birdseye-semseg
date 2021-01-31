@@ -40,21 +40,22 @@ public:
 							   cv::Mat semantic,
 							   cv::Mat depth,
 							   Eigen::Matrix4d& transform);
-	[[nodiscard]] std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(size_t knn_pt_count, double vehicle_width, double vehicle_length, size_t padding) const;
-	[[nodiscard]] cv::Mat GetFOVMask(double stitching_threshold) const;
+	std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(size_t knn_pt_count, double vehicle_width,
+												double vehicle_length, size_t padding) const;
+	cv::Mat GetFOVMask(double stitching_threshold) const;
 	void BuildKDTree();
 	static cv::Mat ConvertToCityScapesPallete(cv::Mat semantic_ids);
 
 	// debug functions
-	void PrintBoundaries() const;
+	std::tuple<double, double, double, double> GetBoundaries() const;
 	void SaveCloud(const std::string& path) const;
-	[[nodiscard]] std::tuple<double, double, double, double> GetVehicleBoundary() const;
+	std::tuple<double, double, double, double> GetVehicleBoundary() const;
 	void SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 						 const std::string& path, double pixel_limit);
 
 	// mandatory kd-tree stuff
-	[[nodiscard]] inline size_t kdtree_get_point_count() const { return target_cloud_.points.size(); }
-	[[nodiscard]] inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
+	inline size_t kdtree_get_point_count() const { return target_cloud_.points.size(); }
+	inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
 		if (dim == 0) {
 			return target_cloud_.points[idx].x;
 		}
@@ -64,10 +65,11 @@ public:
 	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
 
 private:
-	[[nodiscard]] size_t GetMajorityVote(const std::vector<size_t>& knn_indices,
-										 const std::vector<double>& distances) const;
-	[[nodiscard]] std::pair<std::vector<size_t>, std::vector<double>>
-	FindClosestPoints(double knn_x, double knn_y, size_t num_results) const;
+	size_t GetMajorityVote(const std::vector<size_t>& knn_indices,
+						   const std::vector<double>& distances) const;
+	std::pair<std::vector<size_t>, std::vector<double>> FindClosestPoints(double knn_x,
+																		  double knn_y,
+																		  size_t num_results) const;
 
 	// members
 	std::unique_ptr<KDTree2D> kd_tree_;

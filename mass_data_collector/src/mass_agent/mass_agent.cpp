@@ -256,7 +256,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 										  size_t carmask_padding) {
 	CaptureOnce(false);
 	MASSDataType datapoint{};
-	// ----------------------- creating mask cloud -----------------------
+	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_semantic_pc_->pop();
 	if (!succ) {
@@ -266,7 +266,7 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	mask_cloud.AddSemanticDepthImage(front_semantic_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask(fovmask_stitching_threshold);
-	// ---------------------- creating target cloud ----------------------
+	// ---------------------------------------- creating target cloud ----------------------------------------
 	geom::SemanticCloud target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
@@ -279,8 +279,9 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 		}
 	}
 	target_cloud.BuildKDTree();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, vehicle_width_, vehicle_length_, carmask_padding);
-	// ------------------------ getting rgb image ------------------------
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, vehicle_width_,
+																   vehicle_length_, carmask_padding);
+	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	if (!success) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
@@ -481,6 +482,90 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	return carla_client;
 }
 
+/* asserts that all the sensor data containers have the same size */
+void MassAgent::AssertSize(size_t size) {
+	for (auto& spc_cam : semantic_pc_cams_) {
+		bool assertion = (spc_cam->depth_image_count() == spc_cam->semantic_image_count() &&
+						  spc_cam->depth_image_count() == size);
+		if (!assertion) {
+			std::cout << "\nassertion failed: " << spc_cam->name() << ": " << spc_cam->depth_image_count()
+					  << ", " << spc_cam->semantic_image_count() << " != " << size;
+		}
+	}
+	bool assertion = (front_semantic_pc_->depth_image_count() == front_semantic_pc_->semantic_image_count() &&
+					  front_semantic_pc_->depth_image_count() == size);
+	if (!assertion) {
+		std::cout << "\nassertion failed: front pc cam: " << front_semantic_pc_->depth_image_count()
+					<< ", " << front_semantic_pc_->semantic_image_count() << " != " << size;
+	}
+	if (front_rgb_->count() != size) {
+		std::cout << "\nassertion failed: front rgb: " << front_rgb_->count() << " != " << size;
+	}
+}
+
+/* create a single cloud using all cameras of all agents */
+void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
+	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0, 0, 0.1, 7, 32});
+	std::vector<Eigen::Matrix4d> mats;
+	for (size_t i = 0; i < size; ++i) {
+		Eigen::Matrix4d mat;
+		auto tf = agents[i].vehicle_->GetTransform();
+		Eigen::Matrix3d rot;
+		rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+			  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+			  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
+    	Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
+		mat.setIdentity();
+		mat.block<3, 3>(0, 0) = rot;
+    	mat.block<3, 1>(0, 3) = trans;
+		mats.emplace_back(mat);
+	}
+	for (size_t i = 0; i < size; ++i) {
+		agents[i].CaptureOnce(false);
+		// ---------------------- creating target cloud ----------------------
+		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) {
+			auto[success, semantic, depth] = semantic_depth_cam->pop();
+			if (success) {
+				// Eigen::Matrix4d tf = mats[0].inverse() * mats[i];
+				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_;
+				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
+			} else {
+				std::cout << "ERROR: agent " + std::to_string(agents[i].id_)
+						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+				return;
+			}
+		}
+	}
+	auto [minx, maxx, miny, maxy] = target_cloud.GetBoundaries();
+	std::cout << "boundaries: (" << minx << ", " << miny << ") - ("
+								 << maxx << ", " << maxy << std::endl;
+	target_cloud.SaveCloud(path);
+}
+
+/* returns the cloud geometry settings */
+geom::SemanticCloud::Settings& MassAgent::sc_settings() {
+	static geom::SemanticCloud::Settings semantic_cloud_settings;
+	static std::once_flag flag;
+	std::call_once(flag, [&]() {
+		std::string yaml_path = ros::package::getPath("mass_data_collector") +
+								"/param/sc_settings.yaml";
+		YAML::Node base = YAML::LoadFile(yaml_path);
+		YAML::Node cloud = base["cloud"];
+		YAML::Node bev = base["bev"];
+		YAML::Node mask = base["mask"];
+		semantic_cloud_settings.max_point_x = cloud["max_point_x"].as<double>();
+		semantic_cloud_settings.min_point_x = cloud["min_point_x"].as<double>();
+		semantic_cloud_settings.max_point_y = cloud["max_point_y"].as<double>();
+		semantic_cloud_settings.min_point_y = cloud["min_point_y"].as<double>();
+		semantic_cloud_settings.image_rows = bev["image_rows"].as<size_t>();
+		semantic_cloud_settings.image_cols = bev["image_cols"].as<size_t>();
+		semantic_cloud_settings.sitching_threhsold = mask["sitching_threhsold"].as<double>();
+		semantic_cloud_settings.vehicle_mask_padding = mask["vehicle_mask_padding"].as<size_t>();
+		semantic_cloud_settings.knn_count = mask["knn_count"].as<size_t>();
+	});
+	return semantic_cloud_settings;
+}
+
 /* used to explore the map to find the road ID of corrupt samples */
 [[deprecated("debug function")]] void MassAgent::ExploreMap() {
 	/* 
@@ -554,86 +639,4 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 		std::cout << i << " " + strings[i] << ": " << wp->GetRoadId() << " X " << wp->GetLaneId() << std::endl;
 	}
 }
-
-/* asserts that all the sensor data containers have the same size */
-void MassAgent::AssertSize(size_t size) {
-	for (auto& spc_cam : semantic_pc_cams_) {
-		bool assertion = (spc_cam->depth_image_count() == spc_cam->semantic_image_count() &&
-						  spc_cam->depth_image_count() == size);
-		if (!assertion) {
-			std::cout << "\nassertion failed: " << spc_cam->name() << ": " << spc_cam->depth_image_count()
-					  << ", " << spc_cam->semantic_image_count() << " != " << size;
-		}
-	}
-	bool assertion = (front_semantic_pc_->depth_image_count() == front_semantic_pc_->semantic_image_count() &&
-					  front_semantic_pc_->depth_image_count() == size);
-	if (!assertion) {
-		std::cout << "\nassertion failed: front pc cam: " << front_semantic_pc_->depth_image_count()
-					<< ", " << front_semantic_pc_->semantic_image_count() << " != " << size;
-	}
-	if (front_rgb_->count() != size) {
-		std::cout << "\nassertion failed: front rgb: " << front_rgb_->count() << " != " << size;
-	}
-}
-
-/* create a single cloud using all cameras of all agents */
-void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
-	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0, 0, 0.1, 7, 32});
-	std::vector<Eigen::Matrix4d> mats;
-	for (size_t i = 0; i < size; ++i) {
-		Eigen::Matrix4d mat;
-		auto tf = agents[i].vehicle_->GetTransform();
-		Eigen::Matrix3d rot;
-		rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
-			  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
-			  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
-    	Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
-		mat.setIdentity();
-		mat.block<3, 3>(0, 0) = rot;
-    	mat.block<3, 1>(0, 3) = trans;
-		mats.emplace_back(mat);
-	}
-	for (size_t i = 0; i < size; ++i) {
-		agents[i].CaptureOnce(false);
-		// ---------------------- creating target cloud ----------------------
-		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) {
-			auto[success, semantic, depth] = semantic_depth_cam->pop();
-			if (success) {
-				// Eigen::Matrix4d tf = mats[0].inverse() * mats[i];
-				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_;
-				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
-			} else {
-				std::cout << "ERROR: agent " + std::to_string(agents[i].id_)
-						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
-				return;
-			}
-		}
-	}
-	target_cloud.SaveCloud(path);
-}
-
-/* returns the cloud geometry settings */
-geom::SemanticCloud::Settings& MassAgent::sc_settings() {
-	static geom::SemanticCloud::Settings semantic_cloud_settings;
-	static std::once_flag flag;
-	std::call_once(flag, [&]() {
-		std::string yaml_path = ros::package::getPath("mass_data_collector") +
-								"/param/sc_settings.yaml";
-		YAML::Node base = YAML::LoadFile(yaml_path);
-		YAML::Node cloud = base["cloud"];
-		YAML::Node bev = base["bev"];
-		YAML::Node mask = base["mask"];
-		semantic_cloud_settings.max_point_x = cloud["max_point_x"].as<double>();
-		semantic_cloud_settings.min_point_x = cloud["min_point_x"].as<double>();
-		semantic_cloud_settings.max_point_y = cloud["max_point_y"].as<double>();
-		semantic_cloud_settings.min_point_y = cloud["min_point_y"].as<double>();
-		semantic_cloud_settings.image_rows = bev["image_rows"].as<size_t>();
-		semantic_cloud_settings.image_cols = bev["image_cols"].as<size_t>();
-		semantic_cloud_settings.sitching_threhsold = mask["sitching_threhsold"].as<double>();
-		semantic_cloud_settings.vehicle_mask_padding = mask["vehicle_mask_padding"].as<size_t>();
-		semantic_cloud_settings.knn_count = mask["knn_count"].as<size_t>();
-	});
-	return semantic_cloud_settings;
-}
-
 } // namespace agent
