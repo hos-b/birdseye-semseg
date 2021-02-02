@@ -1,6 +1,6 @@
-scripts/data/
 **/.vscode/
 **/.ccls-cache/
+**/__pycache__/
 **/build/
 **/Debug/
 **/compile_commands.json
