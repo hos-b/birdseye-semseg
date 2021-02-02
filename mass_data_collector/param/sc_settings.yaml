@@ -1,5 +1,6 @@
 # this file is read into a `SemanticCloud::Settings` struct and used withinSemanticCloud
 
+# +x: forward, +y: left
 cloud:
   max_point_x: 20
   min_point_x: -5

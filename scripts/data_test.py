@@ -1,21 +1,26 @@
-import h5py
 import os
+import h5py
+
 import numpy as np
-import cv2
 import matplotlib.pyplot as plt
+
+import cv2
 import torch
 import torchvision.transforms as transforms
 
 from data.color_map import semantic_to_cityscapes
 from data.dataloader import get_dataloader
 from data.mask_warp import get_aggregate_mask
+from data.config import SemanticCloudConfig
 
 DATASET_DIR = "/home/hosein"
 PKG_NAME = "tp.hdf5"
-PPM = 1000.0 / 25.0
 
 image_resize = False
 NEW_SIZE = (205, 256)
+
+# opening semantic cloud settings file
+cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
 
 # opening hdf5 file for metadata
 print("opening {}".format(PKG_NAME))
@@ -33,10 +38,8 @@ loader = get_dataloader(file_path, batch_size=1, train=False)
 rows = agent_count
 columns = 6
 for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
-
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))
-
     for i in range(agent_count):
         # print(car_transforms[0, i, :3, 3])
         rgb = rgbs[0, i, :, :, :].permute(1, 2, 0)
@@ -73,7 +76,8 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         # aggregating the masks
         ax.append(fig.add_subplot(rows, columns, i * columns + 5))
         ax[-1].set_title(f"agg_masked_{i}")
-        aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, PPM, 1000, 800, 400, 500)
+        aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, cfg.pix_per_m, \
+                                            cfg.image_rows, cfg.image_cols, cfg.center_x, cfg.center_y)
         aggregate_mask = aggregate_mask.squeeze().numpy()
         if image_resize:
             aggregate_mask = cv2.resize(aggregate_mask, NEW_SIZE, interpolation=cv2.INTER_LINEAR)
