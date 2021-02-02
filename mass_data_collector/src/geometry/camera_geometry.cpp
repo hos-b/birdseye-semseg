@@ -14,10 +14,11 @@ CameraGeometry::CameraGeometry(const YAML::Node& cam_node, float x, float y, flo
                       Eigen::AngleAxisd(M_PI / 2.0, Eigen::Vector3d::UnitY()) *
                       Eigen::AngleAxisd(0.0       , Eigen::Vector3d::UnitZ());
     // creating transform matrix
-    // left handed -> y & pitch flipped
-    rotation_ = Eigen::AngleAxisd(rr *  config::kToRadians, Eigen::Vector3d::UnitX()) *
+    // left handed -> clockwise rpy if rotation vector is pointing towards the observer
+    // unreal is left handeded, but our math is in right handed because we're not idiots
+    rotation_ = Eigen::AngleAxisd(rr * -config::kToRadians, Eigen::Vector3d::UnitX()) *
                 Eigen::AngleAxisd(pp * -config::kToRadians, Eigen::Vector3d::UnitY()) *
-                Eigen::AngleAxisd(yy *  config::kToRadians, Eigen::Vector3d::UnitZ());
+                Eigen::AngleAxisd(yy * -config::kToRadians, Eigen::Vector3d::UnitZ());
     rotation_ = affine_rotation * rotation_;
     translation_ = Eigen::Vector3d(x, -y, z);
     cam_transform_.setIdentity();

@@ -35,11 +35,11 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 	// spawn the camera attached to the vehicle
 	auto camera_transform = cg::Transform{
 		cg::Location{rgb_cam_node["x"].as<float>(),
-					rgb_cam_node["y"].as<float>(),
-					rgb_cam_node["z"].as<float>()},
+					 rgb_cam_node["y"].as<float>(),
+					 rgb_cam_node["z"].as<float>()},
 		cg::Rotation{rgb_cam_node["pitch"].as<float>(),
-					rgb_cam_node["yaw"].as<float>(),
-					rgb_cam_node["roll"].as<float>()}};
+					 rgb_cam_node["yaw"].as<float>(),
+					 rgb_cam_node["roll"].as<float>()}};
 	auto generic_actor = vehicle->GetWorld().SpawnActor(cam_blueprint, camera_transform, vehicle.get());
 	sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
 	geometry_ = std::make_shared<geom::CameraGeometry>(rgb_cam_node, camera_transform.location.x,
