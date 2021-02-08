@@ -9,7 +9,7 @@ import torch.nn.functional as F
 #pylint: disable=E1101
 #pylint: disable=not-callable 
 
-__all__ = ['FastSCNN', 'get_fast_scnn']
+__all__ = ['FastSCNN']
 
 
 class FastSCNN(nn.Module):
@@ -45,11 +45,11 @@ class FastSCNN(nn.Module):
         return tuple(outputs)
 
 
-class _ConvBNReLU(nn.Module):
+class ConvBNReLU(nn.Module):
     """Conv-BN-ReLU"""
 
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, **kwargs):
-        super(_ConvBNReLU, self).__init__()
+        super(ConvBNReLU, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -60,11 +60,11 @@ class _ConvBNReLU(nn.Module):
         return self.conv(x)
 
 
-class _DSConv(nn.Module):
+class DSConv(nn.Module):
     """Depthwise Separable Convolutions"""
 
     def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
-        super(_DSConv, self).__init__()
+        super(DSConv, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(dw_channels, dw_channels, 3, stride, 1, groups=dw_channels, bias=False),
             nn.BatchNorm2d(dw_channels),
@@ -78,9 +78,9 @@ class _DSConv(nn.Module):
         return self.conv(x)
 
 
-class _DWConv(nn.Module):
+class DWConv(nn.Module):
     def __init__(self, dw_channels, out_channels, stride=1, **kwargs):
-        super(_DWConv, self).__init__()
+        super(DWConv, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(dw_channels, out_channels, 3, stride, 1, groups=dw_channels, bias=False),
             nn.BatchNorm2d(out_channels),
@@ -99,9 +99,9 @@ class LinearBottleneck(nn.Module):
         self.use_shortcut = stride == 1 and in_channels == out_channels
         self.block = nn.Sequential(
             # pw
-            _ConvBNReLU(in_channels, in_channels * t, 1),
+            ConvBNReLU(in_channels, in_channels * t, 1),
             # dw
-            _DWConv(in_channels * t, in_channels * t, stride),
+            DWConv(in_channels * t, in_channels * t, stride),
             # pw-linear
             nn.Conv2d(in_channels * t, out_channels, 1, bias=False),
             nn.BatchNorm2d(out_channels)
@@ -120,11 +120,11 @@ class PyramidPooling(nn.Module):
     def __init__(self, in_channels, out_channels, **kwargs):
         super(PyramidPooling, self).__init__()
         inter_channels = int(in_channels / 4)
-        self.conv1 = _ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
-        self.conv2 = _ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
-        self.conv3 = _ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
-        self.conv4 = _ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
-        self.out = _ConvBNReLU(in_channels * 2, out_channels, 1)
+        self.conv1 = ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
+        self.conv2 = ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
+        self.conv3 = ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
+        self.conv4 = ConvBNReLU(in_channels, inter_channels, 1, **kwargs)
+        self.out = ConvBNReLU(in_channels * 2, out_channels, 1)
 
     def pool(self, x, size):
         avgpool = nn.AdaptiveAvgPool2d(size)
@@ -149,9 +149,9 @@ class LearningToDownsample(nn.Module):
 
     def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
         super(LearningToDownsample, self).__init__()
-        self.conv = _ConvBNReLU(3, dw_channels1, 3, 2)
-        self.dsconv1 = _DSConv(dw_channels1, dw_channels2, 2)
-        self.dsconv2 = _DSConv(dw_channels2, out_channels, 2)
+        self.conv = ConvBNReLU(3, dw_channels1, 3, 2)
+        self.dsconv1 = DSConv(dw_channels1, dw_channels2, 2)
+        self.dsconv2 = DSConv(dw_channels2, out_channels, 2)
 
     def forward(self, x):
         x = self.conv(x)
@@ -174,7 +174,7 @@ class GlobalFeatureExtractor(nn.Module):
     def _make_layer(self, block, inplanes, planes, blocks, t=6, stride=1):
         layers = []
         layers.append(block(inplanes, planes, t, stride))
-        for i in range(1, blocks):
+        for _ in range(1, blocks):
             layers.append(block(planes, planes, t, 1))
         return nn.Sequential(*layers)
 
@@ -192,7 +192,7 @@ class FeatureFusionModule(nn.Module):
     def __init__(self, highter_in_channels, lower_in_channels, out_channels, scale_factor=4, **kwargs):
         super(FeatureFusionModule, self).__init__()
         self.scale_factor = scale_factor
-        self.dwconv = _DWConv(lower_in_channels, out_channels, 1)
+        self.dwconv = DWConv(lower_in_channels, out_channels, 1)
         self.conv_lower_res = nn.Sequential(
             nn.Conv2d(out_channels, out_channels, 1),
             nn.BatchNorm2d(out_channels)
@@ -218,8 +218,8 @@ class Classifer(nn.Module):
 
     def __init__(self, dw_channels, num_classes, stride=1, **kwargs):
         super(Classifer, self).__init__()
-        self.dsconv1 = _DSConv(dw_channels, dw_channels, stride)
-        self.dsconv2 = _DSConv(dw_channels, dw_channels, stride)
+        self.dsconv1 = DSConv(dw_channels, dw_channels, stride)
+        self.dsconv2 = DSConv(dw_channels, dw_channels, stride)
         self.conv = nn.Sequential(
             nn.Dropout(0.1),
             nn.Conv2d(dw_channels, num_classes, 1)
@@ -232,25 +232,5 @@ class Classifer(nn.Module):
         return x
 
 
-def get_fast_scnn(dataset='citys', pretrained=False, root='./weights', map_cpu=False, **kwargs):
-    acronyms = {
-        'pascal_voc': 'voc',
-        'pascal_aug': 'voc',
-        'ade20k': 'ade',
-        'coco': 'coco',
-        'citys': 'citys',
-    }
-    from data_loader import datasets
-    model = FastSCNN(datasets[dataset].NUM_CLASS, **kwargs)
-    if pretrained:
-        if(map_cpu):
-            model.load_state_dict(torch.load(os.path.join(root, 'fast_scnn_%s.pth' % acronyms[dataset]), map_location='cpu'))
-        else:
-            model.load_state_dict(torch.load(os.path.join(root, 'fast_scnn_%s.pth' % acronyms[dataset])))
-    return model
-
-
 if __name__ == '__main__':
     img = torch.randn(2, 3, 256, 512)
-    model = get_fast_scnn('citys')
-    outputs = model(img)
