@@ -78,20 +78,6 @@ class DWConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
-class LearningToDownsample(nn.Module):
-    """Learning to downsample module"""
-
-    def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
-        super(LearningToDownsample, self).__init__()
-        self.conv = ConvBNReLU(3, dw_channels1, 3, 2)
-        self.dsconv1 = DSConv(dw_channels1, dw_channels2, 2)
-        self.dsconv2 = DSConv(dw_channels2, out_channels, 2)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.dsconv1(x)
-        x = self.dsconv2(x)
-        return x
 
 class LinearBottleneck(nn.Module):
     """LinearBottleneck used in MobileNetV2"""
@@ -143,6 +129,23 @@ class PyramidPooling(nn.Module):
         x = torch.cat([x, feat1, feat2, feat3, feat4], dim=1)
         x = self.out(x)
         return x
+
+
+class LearningToDownsample(nn.Module):
+    """Learning to downsample module"""
+
+    def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
+        super(LearningToDownsample, self).__init__()
+        self.conv = ConvBNReLU(3, dw_channels1, 3, 2)
+        self.dsconv1 = DSConv(dw_channels1, dw_channels2, 2)
+        self.dsconv2 = DSConv(dw_channels2, out_channels, 2)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.dsconv1(x)
+        x = self.dsconv2(x)
+        return x
+
 
 class GlobalFeatureExtractor(nn.Module):
     """Global feature extractor module"""
