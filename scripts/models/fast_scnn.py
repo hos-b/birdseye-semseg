@@ -20,14 +20,6 @@ class FastSCNN(nn.Module):
         self.global_feature_extractor = GlobalFeatureExtractor(64, [64, 96, 128], 128, 6, [3, 3, 3])
         self.feature_fusion = FeatureFusionModule(64, 128, 128)
         self.classifier = Classifer(128, num_classes)
-        if self.aux:
-            self.auxlayer = nn.Sequential(
-                nn.Conv2d(64, 32, 3, padding=1, bias=False),
-                nn.BatchNorm2d(32),
-                nn.ReLU(True),
-                nn.Dropout(0.1),
-                nn.Conv2d(32, num_classes, 1)
-            )
 
     def forward(self, x):
         size = x.size()[2:]
@@ -38,10 +30,6 @@ class FastSCNN(nn.Module):
         outputs = []
         x = F.interpolate(x, size, mode='bilinear', align_corners=True)
         outputs.append(x)
-        if self.aux:
-            auxout = self.auxlayer(higher_res_features)
-            auxout = F.interpolate(auxout, size, mode='bilinear', align_corners=True)
-            outputs.append(auxout)
         return tuple(outputs)
 
 
