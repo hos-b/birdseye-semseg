@@ -78,6 +78,20 @@ class DWConv(nn.Module):
     def forward(self, x):
         return self.conv(x)
 
+class LearningToDownsample(nn.Module):
+    """Learning to downsample module"""
+
+    def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
+        super(LearningToDownsample, self).__init__()
+        self.conv = ConvBNReLU(3, dw_channels1, 3, 2)
+        self.dsconv1 = DSConv(dw_channels1, dw_channels2, 2)
+        self.dsconv2 = DSConv(dw_channels2, out_channels, 2)
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.dsconv1(x)
+        x = self.dsconv2(x)
+        return x
 
 class LinearBottleneck(nn.Module):
     """LinearBottleneck used in MobileNetV2"""
@@ -100,7 +114,6 @@ class LinearBottleneck(nn.Module):
         if self.use_shortcut:
             out = x + out
         return out
-
 
 class PyramidPooling(nn.Module):
     """Pyramid pooling module"""
@@ -131,23 +144,6 @@ class PyramidPooling(nn.Module):
         x = self.out(x)
         return x
 
-
-class LearningToDownsample(nn.Module):
-    """Learning to downsample module"""
-
-    def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64, **kwargs):
-        super(LearningToDownsample, self).__init__()
-        self.conv = ConvBNReLU(3, dw_channels1, 3, 2)
-        self.dsconv1 = DSConv(dw_channels1, dw_channels2, 2)
-        self.dsconv2 = DSConv(dw_channels2, out_channels, 2)
-
-    def forward(self, x):
-        x = self.conv(x)
-        x = self.dsconv1(x)
-        x = self.dsconv2(x)
-        return x
-
-
 class GlobalFeatureExtractor(nn.Module):
     """Global feature extractor module"""
 
@@ -159,11 +155,11 @@ class GlobalFeatureExtractor(nn.Module):
         self.bottleneck3 = self._make_layer(LinearBottleneck, block_channels[1], block_channels[2], num_blocks[2], t, 1)
         self.ppm = PyramidPooling(block_channels[2], out_channels)
 
-    def _make_layer(self, block, inplanes, planes, blocks, t=6, stride=1):
+    def _make_layer(self, block, in_channels, out_channels, blocks, t=6, stride=1):
         layers = []
-        layers.append(block(inplanes, planes, t, stride))
+        layers.append(block(in_channels, out_channels, t, stride))
         for _ in range(1, blocks):
-            layers.append(block(planes, planes, t, 1))
+            layers.append(block(out_channels, out_channels, t, 1))
         return nn.Sequential(*layers)
 
     def forward(self, x):
@@ -177,16 +173,16 @@ class GlobalFeatureExtractor(nn.Module):
 class FeatureFusionModule(nn.Module):
     """Feature fusion module"""
 
-    def __init__(self, highter_in_channels, lower_in_channels, out_channels, scale_factor=4, **kwargs):
+    def __init__(self, hires_in_channels, lores_in_channels, out_channels, scale_factor=4, **kwargs):
         super(FeatureFusionModule, self).__init__()
         self.scale_factor = scale_factor
-        self.dwconv = DWConv(lower_in_channels, out_channels, 1)
+        self.dwconv = DWConv(lores_in_channels, out_channels, 1)
         self.conv_lower_res = nn.Sequential(
             nn.Conv2d(out_channels, out_channels, 1),
             nn.BatchNorm2d(out_channels)
         )
         self.conv_higher_res = nn.Sequential(
-            nn.Conv2d(highter_in_channels, out_channels, 1),
+            nn.Conv2d(hires_in_channels, out_channels, 1),
             nn.BatchNorm2d(out_channels)
         )
         self.relu = nn.ReLU(True)
