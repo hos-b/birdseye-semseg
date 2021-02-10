@@ -34,8 +34,16 @@ def get_centered_img_transform(transforms: torch.Tensor, pixels_per_meter, h, w,
 
 def get_relative_img_transform(transforms: torch.Tensor, agent_id, pixels_per_meter, h, w, center_x, center_y) -> torch.Tensor:
     """
-    input: tensor of shape A x 4 x 4, transforms of agents w.r.t. origin
-    output: tensor of shape A x 3 x 2, transforms of agents w.r.t. given agent
+    input: 
+        - tensor of shape A x 4 x 4, transforms of agents w.r.t. origin
+        - index of the agent to be considered
+        - pixels per meter
+        - image height
+        - image width
+        - x_center in image frame
+        - y_center in image frame
+    output: 
+        - tensor of shape A x 3 x 2, transforms of agents w.r.t. given agent
     """
     assert len(transforms.shape) == 3, f"transforms should have the dimensions Ax3x3 but got {transforms.shape}"
     assert transforms.shape[1:3] == torch.Size([4, 4]), f"transforms should be 4x4 but they're {transforms.shape[1:3]}"
