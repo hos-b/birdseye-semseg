@@ -32,7 +32,7 @@ print(f"found {(dataset.shape[0] - 1) // agent_count} samples")
 print(f"agent_count attribute: {agent_count}")
 
 # opening hdf5 file for the dataset
-loader = get_dataloader(file_path, batch_size=1, train=False)
+loader = get_dataloader(file_path, batch_size=1)
 
 # plot stuff
 rows = agent_count
