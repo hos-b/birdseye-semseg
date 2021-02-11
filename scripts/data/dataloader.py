@@ -2,9 +2,11 @@ import h5py
 import numpy as np
 import os
 
+import cv2
 import torch
 import torch.utils.data
 import torchvision.transforms as transforms
+from PIL import Image as PILImage
 
 from data.color_map import carla_semantics_to_our_semantics
 #pylint: disable=E1101
@@ -27,14 +29,13 @@ class MassHDF5(torch.utils.data.Dataset):
         self.agent_count = self.dataset.attrs["agent_count"][0]
         self.rgb_transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize(self.size),
             transforms.ColorJitter(hue=.05, saturation=.05),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
         self.mask_transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.Resize(self.size),
+            transforms.Resize(self.size, interpolation=PILImage.NEAREST),
             transforms.ToTensor()
         ])
 
@@ -44,20 +45,23 @@ class MassHDF5(torch.utils.data.Dataset):
         semsegs = []
         masks = []
         car_transforms = []
-        for i in range(self.agent_count):    
+        for i in range(self.agent_count):
+            # Agent ID: never used
             ids.append(torch.tensor([self.dataset[idx * self.agent_count + i, "agent_id"]], dtype=torch.long))
-            # H, W, C
+            # RGB Image: H, W, C
             rgbs.append(self.rgb_transform(self.dataset[idx * self.agent_count + i, "front_rgb"]
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
-            # H, W
+            # Semantic Label: H, W
             semseg = self.dataset[idx * self.agent_count + i, "top_semseg"] .view(dtype=np.uint8).reshape(1000, 800)
             if self.use_class_subset:
                 semseg = carla_semantics_to_our_semantics(semseg)
+            # opencv size is (width, height), instead of (rows, cols)
+            semseg = cv2.resize(semseg, dsize=self.size[::-1], interpolation=cv2.INTER_NEAREST)
             semsegs.append(torch.tensor(semseg, dtype=torch.uint8))
-            # H, W
+            # Masks: H, W
             masks.append(self.mask_transform(self.dataset[idx * self.agent_count + i, "top_mask"]
-                        .view(dtype=np.uint8).reshape(1000, 800)))
-            # 4 x 4
+                        .view(dtype=np.uint8).reshape(1000, 800)).squeeze())
+            # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[idx * self.agent_count + i, "transform"]
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
         return torch.stack(ids), torch.stack(rgbs), torch.stack(semsegs), \

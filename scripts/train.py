@@ -39,4 +39,3 @@ epochs = 1
 for ep in range(epochs):
     for batch, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
         mask_pred, sseg_pred = model(rgbs[0], car_transforms[0])
-        import pdb; pdb.set_trace()
