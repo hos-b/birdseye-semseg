@@ -74,7 +74,7 @@ def get_dataloader(file_path, batch_size=1):
     # transform_list.append(transforms.Resize(256))
     transform_list.append(transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
     transform = transforms.Compose(transform_list)
-    reader = MassHDF5(transform=transform, file_path=file_path, size=None)
+    reader = MassHDF5(transform=transform, file_path=file_path, size=(1000, 800))
     data_loader = torch.utils.data.DataLoader(reader, batch_size=batch_size, shuffle=False,
                                               num_workers=1)
     return data_loader
