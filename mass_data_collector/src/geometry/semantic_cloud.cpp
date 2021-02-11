@@ -254,7 +254,7 @@ void SemanticCloud::SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_ge
 			visible_cloud.points[size].x = target_cloud_.points[i].x;
 			visible_cloud.points[size].y = target_cloud_.points[i].y;
 			visible_cloud.points[size].z = target_cloud_.points[i].z;
-			color = config::semantic_palette_map.at(target_cloud_.points[i].label);
+			color = config::carla_to_cityscapes_palette_map.at(target_cloud_.points[i].label);
 			visible_cloud.points[size].b = color[0];
 			visible_cloud.points[size].g = color[1];
 			visible_cloud.points[size].r = color[2];
@@ -314,7 +314,7 @@ void SemanticCloud::SaveCloud(const std::string& path) const {
 		rgb_cloud.points[size].x = target_cloud_.points[i].x;
 		rgb_cloud.points[size].y = target_cloud_.points[i].y;
 		rgb_cloud.points[size].z = target_cloud_.points[i].z;
-		color = config::semantic_palette_map.at(target_cloud_.points[i].label);
+		color = config::carla_to_cityscapes_palette_map.at(target_cloud_.points[i].label);
 		rgb_cloud.points[size].b = color[0];
 		rgb_cloud.points[size].g = color[1];
 		rgb_cloud.points[size].r = color[2];
@@ -334,7 +334,7 @@ cv::Mat SemanticCloud::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 		cv::Vec3b* rgb_row = rgb_mat.ptr<cv::Vec3b>(i);
 		uchar* semantic_row = semantic_ids.ptr<uchar>(i);
 		for (int j = 0; j < semantic_ids.cols; ++j) {
-			rgb_row[j] = config::semantic_palette_map.at(semantic_row[j]);
+			rgb_row[j] = config::carla_to_cityscapes_palette_map.at(semantic_row[j]);
 		}
 	}
 	return rgb_mat;

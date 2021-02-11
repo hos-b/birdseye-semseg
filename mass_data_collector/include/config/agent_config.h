@@ -10,7 +10,7 @@ namespace config
 	extern const unsigned int kPollInterval; // miliseconds
 
 	// CARLA's semantic IDs
-	extern const unsigned int kCARLAUnknownSemanticID; // Elements that have not been categorized are considered Unlabeled. This category is meant to be empty or at least contain elements with no collisions.
+	extern const unsigned int kCARLAUnlabeledSemanticID; // Elements that have not been categorized are considered Unlabeled. This category is meant to be empty or at least contain elements with no collisions.
 	extern const unsigned int kCARLABuildingSemanticID; // Buildings like houses, skyscrapers,... and the elements attached to them. E.g. air conditioners, scaffolding, awning or ladders and much more.
 	extern const unsigned int kCARLAFenceSemanticID; // Barriers, railing, or other upright structures. Basically wood or wire assemblies that enclose an area of ground.
 	extern const unsigned int kCARLAOtherSemanticID; // Everything that does not belong to any other category.
@@ -35,7 +35,7 @@ namespace config
 	extern const unsigned int kCARLATerrainSemanticID; // Grass, ground-level vegetation, soil or sand. These areas are not meant to be driven on. This label includes a possibly delimiting curb.
 
 	// our semantic IDs
-	extern const unsigned int kMassUnknownSemanticID;
+	extern const unsigned int kMassUnlabeledSemanticID;
 	extern const unsigned int kMassBuildingSemanticID;
 	extern const unsigned int kMassStaticSemanticID;
 	extern const unsigned int kMassDynamicSemanticID;
@@ -49,7 +49,7 @@ namespace config
 
 	// hash maps for semantic ids
 	extern const std::unordered_map<unsigned int, unsigned int> semantic_conversion_map;
-	extern const std::unordered_map<unsigned int, cv::Vec3b> semantic_palette_map;
+	extern const std::unordered_map<unsigned int, cv::Vec3b> carla_to_cityscapes_palette_map;
 	extern const std::unordered_map<unsigned int, bool> fileterd_semantics;
 	extern const std::unordered_map<unsigned int, double> semantic_weight;
 

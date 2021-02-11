@@ -9,7 +9,7 @@ namespace config
     constexpr unsigned int kPollInterval = 10; // miliseconds
 
     // carla semantic IDs
-    constexpr unsigned int kCARLAUnknownSemanticID = 0;
+    constexpr unsigned int kCARLAUnlabeledSemanticID = 0;
     constexpr unsigned int kCARLABuildingSemanticID = 1;
     constexpr unsigned int kCARLAFenceSemanticID = 2;
     constexpr unsigned int kCARLAOtherSemanticID = 3;
@@ -34,7 +34,7 @@ namespace config
     constexpr unsigned int kCARLATerrainSemanticID = 22;
 
     // our filtered IDs
-    constexpr unsigned int kMassUnknownSemanticID = 0;
+    constexpr unsigned int kMassUnlabeledSemanticID = 0;
     constexpr unsigned int kMassBuildingSemanticID = 1;
     constexpr unsigned int kMassStaticSemanticID = 2;
     constexpr unsigned int kMassDynamicSemanticID = 3;
@@ -48,7 +48,7 @@ namespace config
 
     // converting from CARLA to ours
     const std::unordered_map<unsigned int, unsigned int> semantic_conversion_map({
-		{kCARLAUnknownSemanticID, kMassUnknownSemanticID},
+		{kCARLAUnlabeledSemanticID, kMassUnlabeledSemanticID},
 		{kCARLABuildingSemanticID, kMassBuildingSemanticID},
 		{kCARLAFenceSemanticID, kMassBuildingSemanticID},
 		{kCARLAOtherSemanticID, kMassOtherSemanticID},
@@ -72,9 +72,9 @@ namespace config
 		{kCARLAWaterSemanticID, kMassTerrainSemanticID},
 		{kCARLATerrainSemanticID, kMassTerrainSemanticID}
     });
-    // CARLA's semantic id -> BGR (Cityescapes?)
-    const std::unordered_map<unsigned int, cv::Vec3b> semantic_palette_map({
-        {kCARLAUnknownSemanticID, cv::Vec3b(0, 0, 0)},
+    // CARLA's semantic id -> Cityescapes BGR
+    const std::unordered_map<unsigned int, cv::Vec3b> carla_to_cityscapes_palette_map({
+        {kCARLAUnlabeledSemanticID, cv::Vec3b(0, 0, 0)},
         {kCARLABuildingSemanticID, cv::Vec3b(70, 70, 70)},
         {kCARLAFenceSemanticID, cv::Vec3b(40, 40, 100)},
         {kCARLAOtherSemanticID, cv::Vec3b(80, 90, 55)},
@@ -99,12 +99,15 @@ namespace config
         {kCARLATerrainSemanticID, cv::Vec3b(100, 170, 145)}
     });
     const std::unordered_map<unsigned int, bool> fileterd_semantics({
-        {kCARLAUnknownSemanticID, true}, // <-- hopefully empty
+        {kCARLAUnlabeledSemanticID, true},        // <-- hopefully empty
+        {kCARLAFenceSemanticID, true},          // <-- who needs fences
+        {kCARLAPoleSemanticID, true},           // <-- over-hanging structure + kinda irrelevant
+        {kCARLASkySemanticID, true},            // <-- won't happen anyway but meh
+        {kCARLAGuardRailSemanticID, true},      // <-- not important for top-down
+        {kCARLATrafficLightSemanticID, true},   // <-- over-hanging structure
         {kCARLABuildingSemanticID, false},
-        {kCARLAFenceSemanticID, true}, // <-- who needs fences
         {kCARLAOtherSemanticID, false},
         {kCARLAPedestrianSemanticID, false},
-        {kCARLAPoleSemanticID, true}, // <-- over-hanging structure + kinda irrelevant
         {kCARLARoadLineSemanticID, false},
         {kCARLARoadSemanticID, false},
         {kCARLASideWalkSemanticID, false},
@@ -112,19 +115,16 @@ namespace config
         {kCARLAVehiclesSemanticID, false},
         {kCARLAWallSemanticID, false},
         {kCARLATrafficSignSemanticID, false},
-        {kCARLASkySemanticID, true}, // <-- won't happen anyway but meh
         {kCARLAGroundSemanticID, false},
         {kCARLABridgeSemanticID, false},
         {kCARLARailTrackSemanticID, false},
-        {kCARLAGuardRailSemanticID, true}, // <-- not important for top-down
-        {kCARLATrafficLightSemanticID, true}, // <-- over-hanging structure
         {kCARLAStaticSemanticID, false},
         {kCARLADynamicSemanticID, false},
         {kCARLAWaterSemanticID, false},
         {kCARLATerrainSemanticID, false}
     });
     const std::unordered_map<unsigned int, double> semantic_weight({
-        {kCARLAUnknownSemanticID, 0.0},
+        {kCARLAUnlabeledSemanticID, 0.0},
         {kCARLAFenceSemanticID, 0.0},
         {kCARLAPoleSemanticID, 0.0},
         {kCARLARailTrackSemanticID, 0.0},
