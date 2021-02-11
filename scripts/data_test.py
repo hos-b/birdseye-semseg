@@ -8,7 +8,7 @@ import cv2
 import torch
 import torchvision.transforms as transforms
 
-from data.color_map import semantic_to_cityscapes
+from data.color_map import carla_semantic_to_cityscapes_rgb
 from data.dataloader import get_dataloader
 from data.mask_warp import get_aggregate_mask
 from data.config import SemanticCloudConfig
@@ -57,7 +57,7 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         # semantic BEV image
         ax.append(fig.add_subplot(rows, columns, i * columns + 2))
         ax[-1].set_title(f"semseg_{i}")
-        semantic_img = semantic_to_cityscapes(semsegs[0, i, :, :])
+        semantic_img = carla_semantic_to_cityscapes_rgb(semsegs[0, i, :, :])
         plt.imshow(semantic_img)
 
         # basic mask
