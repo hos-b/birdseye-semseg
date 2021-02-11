@@ -6,6 +6,7 @@ import torch
 import torch.utils.data
 import torchvision.transforms as transforms
 
+from data.color_map import carla_semantics_to_our_semantics
 #pylint: disable=E1101
 #pylint: disable=not-callable
 
@@ -14,9 +15,11 @@ PKG_NAME = "test.hdf5"
 
 class MassHDF5(torch.utils.data.Dataset):
     def __init__(self, **kwargs):
-        self.rgb_transform = kwargs.get("transform")
         self.file_path = kwargs.get("file_path")
         self.size = kwargs.get("size")
+        self.use_class_subset = False
+        if kwargs.get('classes') == 'ours':
+            self.use_class_subset = True
         print(f"opening {self.file_path}")
         self.hdf5 = h5py.File(self.file_path, "r")        
         self.dataset = self.hdf5["dataset_1"]
@@ -47,8 +50,10 @@ class MassHDF5(torch.utils.data.Dataset):
             rgbs.append(self.rgb_transform(self.dataset[idx * self.agent_count + i, "front_rgb"]
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
             # H, W
-            semsegs.append(torch.tensor(self.dataset[idx * self.agent_count + i, "top_semseg"]
-                    .view(dtype=np.uint8).reshape(1000, 800), dtype=torch.uint8))
+            semseg = self.dataset[idx * self.agent_count + i, "top_semseg"] .view(dtype=np.uint8).reshape(1000, 800)
+            if self.use_class_subset:
+                semseg = carla_semantics_to_our_semantics(semseg)
+            semsegs.append(torch.tensor(semseg, dtype=torch.uint8))
             # H, W
             masks.append(self.mask_transform(self.dataset[idx * self.agent_count + i, "top_mask"]
                         .view(dtype=np.uint8).reshape(1000, 800)))
@@ -62,19 +67,13 @@ class MassHDF5(torch.utils.data.Dataset):
         return int((self.n_samples - 1) / self.agent_count)
 
 
-def get_datasets(file_path, batch_size, split=(0.8, 0.2), size=(1000, 800)):
-    reader = MassHDF5(file_path=file_path, size=size)
-    return torch.utils.data.random_split(reader, [int(split[0] * len(reader)),
-                                                  int(split[1] * len(reader))])
+def get_datasets(file_path, batch_size, split=(0.8, 0.2), size=(1000, 800), classes='carla'):
+    if classes != 'carla' and classes != 'ours':
+        print("unknown segmentation class category: {classes}")
+        classes = 'carla'
+    dset = MassHDF5(file_path=file_path, size=size, classes=classes)
+    return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])
 
 def get_dataloader(file_path, batch_size=1):
-    transform_list = []
-    transform_list.append(transforms.ToTensor())
-    # transform_list.append(transforms.ColorJitter(hue=.05, saturation=.05))
-    # transform_list.append(transforms.Resize(256))
-    transform_list.append(transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
-    transform = transforms.Compose(transform_list)
-    reader = MassHDF5(transform=transform, file_path=file_path, size=(1000, 800))
-    data_loader = torch.utils.data.DataLoader(reader, batch_size=batch_size, shuffle=False,
-                                              num_workers=1)
-    return data_loader
+    dset = MassHDF5(file_path=file_path, size=(1000, 800), classes='carla')
+    return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=False, num_workers=1)

@@ -25,7 +25,7 @@ NEW_SIZE = (256, 205)
 
 # opening hdf5 file for the dataset
 file_path = os.path.join(DATASET_DIR, PKG_NAME)
-train_set, test_set = get_datasets(file_path, batch_size=1, split=(0.8, 0.2), size=NEW_SIZE)
+train_set, test_set = get_datasets(file_path, batch_size=1, split=(0.8, 0.2), size=NEW_SIZE, classes='ours')
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=1)
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
 
