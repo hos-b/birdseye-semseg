@@ -27,6 +27,15 @@ __carla_to_rgb_palette = {
     22 : [145, 170, 100]    # Terrain
 }
 
+__ours_to_rgb_palette = {
+    0: [70, 70, 70],
+    1: [55, 90, 80],
+    2: [128, 64, 128],
+    3: [244, 35, 232],
+    4: [107, 142, 35],
+    5: [0, 0, 142],
+    6: [45, 60, 150]
+}
 __our_classes = {
     0: 'Buildings',
     1: 'Misc',
@@ -56,7 +65,7 @@ __carla_to_our_ids = {
     22 : 4  # Terrain     -> Vegetation
 }
 
-def carla_semantic_to_cityscapes_rgb(semantic_ids : torch.Tensor):
+def carla_semantic_to_cityscapes_rgb(semantic_ids : torch.Tensor) -> np.ndarray:
     semantic_rgb = np.ndarray(shape=(semantic_ids.shape[0],
                                      semantic_ids.shape[1], 3), 
                               dtype=np.uint8)
@@ -64,8 +73,17 @@ def carla_semantic_to_cityscapes_rgb(semantic_ids : torch.Tensor):
         semantic_rgb[semantic_ids == sid] = cityscapes_rgb
     return semantic_rgb
 
-def carla_semantics_to_our_semantics(semantic_ids : np.ndarray):
+def carla_semantics_to_our_semantics(semantic_ids : np.ndarray) -> np.ndarray:
     our_semantics = np.zeros_like(semantic_ids)
     for carla_id, our_id in __carla_to_our_ids.items():
         our_semantics[semantic_ids == carla_id] = our_id
     return our_semantics
+
+def our_semantics_to_cityscapes_rgb(semantic_ids : torch.Tensor) -> np.ndarray:
+    # not really cityscapes but cityscapes-like
+    semantic_rgb = np.ndarray(shape=(semantic_ids.shape[0],
+                                     semantic_ids.shape[1], 3), 
+                              dtype=np.uint8)
+    for sid, cityscapes_rgb in __ours_to_rgb_palette.items():
+        semantic_rgb[semantic_ids == sid] = cityscapes_rgb
+    return semantic_rgb
