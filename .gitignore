@@ -11,3 +11,4 @@ mass_data_collector/guide/
 # this is extra for the symlink
 mass_data_collector/.cache
 mass_data_collector/.clangd
+**/tensorboard/

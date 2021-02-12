@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 import cv2
-import torch
 import torchvision.transforms as transforms
 
 from data.color_map import carla_semantic_to_cityscapes_rgb
@@ -64,7 +63,6 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         ax.append(fig.add_subplot(rows, columns, i * columns + 3))
         ax[-1].set_title(f"mask_{i}")
         plt.imshow(mask)
-        # import pdb; pdb.set_trace()
         
         # basic mask x semantic BEV
         ax.append(fig.add_subplot(rows, columns, i * columns + 4))

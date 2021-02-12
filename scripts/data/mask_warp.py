@@ -3,9 +3,6 @@ import torch
 import kornia
 import matplotlib.pyplot as plt
 
-#pylint: disable=E1101
-#pylint: disable=not-callable
-
 def get_centered_img_transform(transforms: torch.Tensor, pixels_per_meter, h, w, center_x, center_y) -> torch.Tensor:
     """
     turns a location-based transform into an image-centered pixel-based transform,

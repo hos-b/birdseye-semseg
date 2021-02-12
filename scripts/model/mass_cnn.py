@@ -6,9 +6,6 @@ import torch.nn.functional as F
 from data.mask_warp import get_relative_img_transform
 from data.config import SemanticCloudConfig
 
-#pylint: disable=E1101
-#pylint: disable=not-callable 
-
 """
 input --> downsample --> bottleneck --------
             |                               |

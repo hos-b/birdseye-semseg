@@ -6,9 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-#pylint: disable=E1101
-#pylint: disable=not-callable 
-
 __all__ = ['FastSCNN']
 
 
