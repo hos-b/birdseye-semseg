@@ -1,25 +1,24 @@
 import os
 import h5py
-
-import numpy as np
 import matplotlib.pyplot as plt
 
-import cv2
-import torchvision.transforms as transforms
-
-from data.color_map import carla_semantic_to_cityscapes_rgb
+from data.color_map import carla_semantics_to_cityscapes_rgb, our_semantics_to_cityscapes_rgb
 from data.dataloader import get_dataloader
-from data.mask_warp import get_aggregate_mask
+from data.mask_warp import get_single_aggregate_mask
 from data.config import SemanticCloudConfig
+from data.utils import squeeze_all
 
 DATASET_DIR = "/home/hosein"
 PKG_NAME = "tp.hdf5"
 
-image_resize = False
-NEW_SIZE = (205, 256)
 
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
+
+# image geometry
+NEW_SIZE = (256, 205)
+CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
+PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
 # opening hdf5 file for metadata
 print("opening {}".format(PKG_NAME))
@@ -31,19 +30,20 @@ print(f"found {(dataset.shape[0] - 1) // agent_count} samples")
 print(f"agent_count attribute: {agent_count}")
 
 # opening hdf5 file for the dataset
-loader = get_dataloader(file_path, batch_size=1)
+classes = 'ours'
+loader = get_dataloader(file_path, batch_size=1, size=NEW_SIZE, classes=classes)
 
 # plot stuff
 rows = agent_count
 columns = 6
-for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
+for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
+    rgbs, semsegs, masks, car_transforms = squeeze_all(rgbs, semsegs, masks, car_transforms)
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))
     for i in range(agent_count):
-        # print(car_transforms[0, i, :3, 3])
-        rgb = rgbs[0, i, :, :, :].permute(1, 2, 0)
+        rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
-        mask = ((masks[0, i, :, :] / 255.0).unsqueeze(2)).numpy().squeeze()
+        mask = ((masks[i, ...] / 255.0).unsqueeze(2)).numpy().squeeze()
 
         # create subplot and append to ax
         ax = []
@@ -56,7 +56,10 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         # semantic BEV image
         ax.append(fig.add_subplot(rows, columns, i * columns + 2))
         ax[-1].set_title(f"semseg_{i}")
-        semantic_img = carla_semantic_to_cityscapes_rgb(semsegs[0, i, :, :])
+        if classes == 'carla':
+            semantic_img = carla_semantics_to_cityscapes_rgb(semsegs[i, ...])
+        elif classes == 'ours':
+            semantic_img = our_semantics_to_cityscapes_rgb(semsegs[i, ...])
         plt.imshow(semantic_img)
 
         # basic mask
@@ -74,16 +77,12 @@ for idx, (ids, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         # aggregating the masks
         ax.append(fig.add_subplot(rows, columns, i * columns + 5))
         ax[-1].set_title(f"agg_masked_{i}")
-        aggregate_mask = get_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, cfg.pix_per_m, \
-                                            cfg.image_rows, cfg.image_cols, cfg.center_x, cfg.center_y)
+        aggregate_mask = get_single_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, \
+                                                   PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
         aggregate_mask = aggregate_mask.squeeze().numpy()
-        if image_resize:
-            aggregate_mask = cv2.resize(aggregate_mask, NEW_SIZE, interpolation=cv2.INTER_LINEAR)
         plt.imshow(aggregate_mask)
 
         # aggregated mask x semantic BEV
-        if image_resize:
-            semantic_img = cv2.resize(semantic_img, NEW_SIZE, interpolation=cv2.INTER_LINEAR)
         semantic_img[(aggregate_mask == 0).squeeze(), :] = 0
         ax.append(fig.add_subplot(rows, columns, i * columns + 6))
         ax[-1].set_title(f"agg_masked_bev_{i}")

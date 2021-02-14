@@ -14,9 +14,8 @@ class MassHDF5(torch.utils.data.Dataset):
         self.file_path = kwargs.get('file_path')
         self.size = kwargs.get('size')
         self.device = kwargs.get('device')
-        self.use_class_subset = False
-        if kwargs.get('classes') == 'ours':
-            self.use_class_subset = True
+        clss = kwargs.get('classes')
+        self.use_class_subset = kwargs.get('classes') == 'ours'
         print(f'opening {self.file_path}')
         self.hdf5 = h5py.File(self.file_path, 'r')
         self.dataset = self.hdf5['dataset_1']
@@ -82,6 +81,6 @@ def get_datasets(file_path, device, batch_size, split=(0.8, 0.2), size=(1000, 80
     dset = MassHDF5(file_path=file_path, size=size, classes=classes, device=device)
     return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])
 
-def get_dataloader(file_path, batch_size=1):
-    dset = MassHDF5(file_path=file_path, size=(1000, 800), classes='carla')
+def get_dataloader(file_path, batch_size=1, size=(1000, 800), classes='carla'):
+    dset = MassHDF5(file_path=file_path, size=size, classes=classes)
     return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=False, num_workers=1)

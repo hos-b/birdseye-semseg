@@ -21,10 +21,9 @@ transform and compressed features from other agents --------
 __all__ = ['MassCNN']
 
 class MassCNN(torch.nn.Module):
-    def __init__(self, config: SemanticCloudConfig, num_classes, conn_drop_prob = 0.01, output_size=(256, 205)):
+    def __init__(self, config: SemanticCloudConfig, num_classes, output_size=(256, 205)):
         super(MassCNN, self).__init__()
         self.cfg = config
-        self.drop_probability = conn_drop_prob
         self.output_size = output_size
         self.downsample = LearningToDownsample(in_channels=32, mid_channels=48, out_channels=64)
         # 3 x 3 stages of linear bottleneck for feature compression
@@ -77,7 +76,6 @@ class MassCNN(torch.nn.Module):
             predicted masks: agent_count x 256 x 205
             aggr_masks:      agent_count x 256 x 205
         """
-        rgbs, transforms = self.drop_agent_data(rgbs, transforms)
         # [A, 64, 241, 321]
         hi_res_features = self.downsample(rgbs)
         # [A, 128, 238, 318]
@@ -112,14 +110,6 @@ class MassCNN(torch.nn.Module):
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
 
         return aggregated_features
-    
-    def drop_agent_data(self, rgbs, transforms):
-        """
-        simulate connection drops between cars or non transmitting cars
-        """
-        drop_probs = torch.ones((rgbs.shape[0], ), dtype=torch.float32) * self.drop_probability
-        drops = torch.bernoulli(drop_probs).long()
-        return rgbs[drops != 1, :, :], transforms[drops != 1, :, :]
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""

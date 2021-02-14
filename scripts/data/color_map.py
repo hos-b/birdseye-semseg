@@ -65,7 +65,7 @@ __carla_to_our_ids = {
     22 : 4  # Terrain     -> Vegetation
 }
 
-def carla_semantic_to_cityscapes_rgb(semantic_ids : torch.Tensor) -> np.ndarray:
+def carla_semantics_to_cityscapes_rgb(semantic_ids : torch.Tensor) -> np.ndarray:
     assert len(semantic_ids.shape) == 2, f'expected HxW, got {semantic_ids.shape}'
     semantic_rgb = np.ndarray(shape=(semantic_ids.shape[0],
                                      semantic_ids.shape[1], 3),

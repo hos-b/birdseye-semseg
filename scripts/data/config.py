@@ -12,7 +12,27 @@ class SemanticCloudConfig:
         self.cloud_y_span = self.cloud_max_y - self.cloud_min_y
         self.image_rows = int(conf['bev']['image_rows'])
         self.image_cols = int(conf['bev']['image_cols'])
-        self.pix_per_m = self.image_rows / self.cloud_x_span
-        # position of the center of the car in the image (not in cartesian space)
-        self.center_y = int((self.cloud_max_x / self.cloud_x_span) * self.image_rows)
-        self.center_x = int((self.cloud_max_y / self.cloud_y_span) * self.image_cols)
+
+    def pix_per_m(self, rows=0, cols=0):
+        """
+        returns pixels per meter given the image size
+        """
+        if rows == 0 and cols == 0:
+            return  ((self.image_rows / self.cloud_x_span) + (self.image_cols / self.cloud_y_span)) / 2.0    
+        return  ((rows / self.cloud_x_span) + (cols / self.cloud_y_span)) / 2.0
+
+    def center_x(self, cols=0):
+        """
+        returns center of the car in the image coordinates system
+        """
+        if cols == 0:
+            return int((self.cloud_max_y / self.cloud_y_span) * self.image_cols)    
+        return int((self.cloud_max_y / self.cloud_y_span) * cols)
+    
+    def center_y(self, rows=0):
+        """
+        returns center of the car in the image coordinates system
+        """
+        if rows == 0:
+            return int((self.cloud_max_x / self.cloud_x_span) * self.image_rows)
+        return int((self.cloud_max_x / self.cloud_x_span) * rows)
