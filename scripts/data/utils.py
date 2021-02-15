@@ -1,4 +1,7 @@
+import cv2
 import torch
+import numpy as np
+from matplotlib import pyplot as plt
 
 def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
     """
@@ -15,4 +18,24 @@ def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
            masks[0, drops != 1, ...], transforms[0, drops != 1, ...]
 
 def squeeze_all(rgbs, labels, masks, transforms):
+    """
+    squeezes all given parameters
+    """
     return rgbs.squeeze(), labels.squeeze(), masks.squeeze(), transforms.squeeze()
+
+def get_matplotlib_image(tensor_img: torch.Tensor, figsize=(4, 5)):
+    """
+    returns the plot of a mask as an image
+    """
+    org_h, org_w = tensor_img.shape
+    fig = plt.figure(figsize=figsize)
+    fig.subplots_adjust(left=0.0, right=1.0, bottom=0.0, top=1.0)
+    width, height = fig.get_size_inches() * fig.get_dpi()
+    width, height = int(width), int(height)
+    plt.imshow(tensor_img)
+    fig.canvas.draw()
+    image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+    image = cv2.resize(image, dsize=(org_w, org_h), interpolation=cv2.INTER_NEAREST)
+    fig.clear()
+    plt.close(fig)
+    return image

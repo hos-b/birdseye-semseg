@@ -12,7 +12,7 @@ from data.dataloader import get_datasets
 from data.config import SemanticCloudConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.mask_warp import get_all_aggregate_masks
-from data.utils import drop_agent_data, squeeze_all
+from data.utils import drop_agent_data, squeeze_all, get_matplotlib_image
 from model.mass_cnn import MassCNN
 
 # opening semantic cloud settings file
@@ -39,7 +39,7 @@ name = 'test_run'
 writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
 
 # network stuff
-test_plot = False
+show_plots = False
 drop_prob = 0.0
 learning_rate = 5e-4
 model = MassCNN(cfg, num_classes=7, output_size=NEW_SIZE)
@@ -102,25 +102,27 @@ for ep in range(epochs):
             if not visaulized:
                 aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
                                                           NEW_SIZE[1], CENTER[0], CENTER[1])
-                ss_target_img = our_semantics_to_cityscapes_rgb(labels[0]).transpose(2, 0, 1)
+                ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0]).transpose(2, 0, 1)
                 ss_mask = aggregate_masks[0]
-                ss_target_img[:, ss_mask == 0] = 0
+                ss_trgt_img[:, ss_mask == 0] = 0
                 _, ss_pred = torch.max(sseg_preds[0], dim=0)
                 ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred).transpose(2, 0, 1)
-                if test_plot:
-                    plt.imshow(mask_preds.squeeze()[0].cpu().numpy())
+                pred_mask_img = get_matplotlib_image(mask_preds[0].squeeze().cpu())
+                trgt_mask_img = get_matplotlib_image(masks[0].cpu())
+                if show_plots:
+                    plt.imshow(pred_mask_img)
                     plt.show()
-                    plt.imshow(masks[0].cpu().numpy())
+                    plt.imshow(trgt_mask_img)
                     plt.show()
-                    plt.imshow(ss_target_img.transpose(1, 2, 0))
+                    plt.imshow(ss_trgt_img.transpose(1, 2, 0))
                     plt.show()
-                    plt.imshow(ss_pred.transpose(1, 2, 0))
+                    plt.imshow(ss_pred_img.transpose(1, 2, 0))
                     plt.show()
                 
-                writer.add_image("validation/predicted_mask", mask_preds[0], ep + 1)
-                writer.add_image("validation/target_mask", masks[0].unsqueeze(0), ep + 1)
+                writer.add_image("validation/predicted_mask", torch.from_numpy(pred_mask_img).permute(2, 0, 1), ep + 1)
+                writer.add_image("validation/target_mask", torch.from_numpy(trgt_mask_img).permute(2, 0, 1), ep + 1)
                 writer.add_image("validation/predicted_segmentation", ss_pred_img, ep + 1)
-                writer.add_image("validation/target_segmentation", torch.from_numpy(ss_target_img), ep + 1)
+                writer.add_image("validation/target_segmentation", torch.from_numpy(ss_trgt_img), ep + 1)
                 visaulized = True
 
     writer.add_scalar("loss/total_valid_msk", total_valid_m_loss, ep + 1)
