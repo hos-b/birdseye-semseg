@@ -38,7 +38,17 @@ if (NOT DEFINED ENV{LIBHDF5_ROOT})
 endif ()
 # CMAKE_PREFIX_PATH should only be appended after catkin find_package (idk why)
 list (APPEND CMAKE_PREFIX_PATH $ENV{LIBHDF5_ROOT})
-find_package (HDF5) # NAMES hdf5 COMPONENTS C ${SEARCH_TYPE}
+find_package (HDF5 NAMES "hdf5" COMPONENTS C CXX HL HLCXX static) # NAMES hdf5 COMPONENTS C ${SEARCH_TYPE}
+if (HDF5_FOUND)
+  if (HDF5_static_C_FOUND)
+    set (HDF5_LIBS ${HDF5_LIBS} ${HDF5_C_STATIC_LIBRARY})
+  endif ()
+  if (HDF5_static_CXX_FOUND)
+    set (HDF5_LIBS ${HDF5_LIBS} ${HDF5_CXX_STATIC_LIBRARY})
+  endif ()
+else ()
+  message (FATAL_ERROR " HDF5 is Required")
+endif ()
 # message(WARNING "${CMAKE_MODULE_PATH}")
 
 # more catkin stuff ---------------------------------------------------------
@@ -67,7 +77,7 @@ include_directories(
 add_library(hdf5_dataset STATIC 
 	${PROJECT_SOURCE_DIR}/src/hdf5_api/hdf5_dataset.cpp
 )
-target_link_libraries(hdf5_dataset hdf5-static hdf5_cpp-static)
+target_link_libraries(hdf5_dataset ${HDF5_LIBS})
 set_target_properties(hdf5_dataset PROPERTIES CXX_STANDARD 17)
 
 # HDF5 api test -------------------------------------------------------------
