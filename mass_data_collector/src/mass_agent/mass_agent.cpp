@@ -29,12 +29,15 @@
 using namespace std::chrono_literals;
 
 namespace agent {
+/* static vector of all the active agents */
+std::vector<const MassAgent*> MassAgent::agents_ = {};
+
 /* constructor */
 MassAgent::MassAgent() {
 	// initialize some stuff & things
 	transform_.setIdentity();
-	id_ = agents().size();
-	agents().emplace_back(this);
+	id_ = agents_.size();
+	agents_.emplace_back(this);
 	try {
 		auto world = carla_client()->GetWorld();
 		auto spawn_points = world.GetMap()->GetRecommendedSpawnPoints();
@@ -98,7 +101,7 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
 	while (true) {
-		initial_wp = kd_points()[std::rand() % kd_points().size()];
+		initial_wp = kd_points_[std::rand() % kd_points_.size()];
 		// if not in a restricted area
 		if (restricted_roads.find(initial_wp->GetRoadId()) == restricted_roads.end()) {
 			tf = initial_wp->GetTransform();
@@ -158,7 +161,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		knn_pts = kd_tree_->knnSearch(&query[0], knn_pts, &knn_ret_indices[0], &knn_sqrd_dist[0]);
 		knn_ret_indices.resize(knn_pts);
 		for (auto close_wp_idx : knn_ret_indices) {
-			auto expansion = ExpandWayoint(kd_points()[close_wp_idx], vehicle_length_ * 1.35);
+			auto expansion = ExpandWayoint(kd_points_[close_wp_idx], vehicle_length_ * 1.35);
 			candidates.insert(candidates.end(), expansion.begin(), expansion.end());
 		}
 	}
@@ -185,7 +188,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 			continue;
 		}
 		tf = next_wp->GetTransform();
-		for (const auto *agent : agents()) {
+		for (const auto *agent : agents_) {
 			if (agent->id_ == id_) {
 				continue;
 			}
@@ -323,8 +326,8 @@ cv::Mat MassAgent::GetMap() {
 	float miny = 0.0f, maxy = 0.0f;
 	// initialize waypoints if not done already
 	InitializeKDTree();
-	std::cout << "visaulizing " << kd_points().size() << " waypoints" << std::endl;
-	for (auto& waypoint : kd_points()) {
+	std::cout << "visaulizing " << kd_points_.size() << " waypoints" << std::endl;
+	for (auto& waypoint : kd_points_) {
 		auto transform = waypoint->GetTransform();
 		if (transform.location.x < minx) {
 			minx = transform.location.x;
@@ -350,7 +353,7 @@ cv::Mat MassAgent::GetMap() {
 	map_img = cv::Scalar(127, 127, 127);
 	minx = std::abs(minx);
 	miny = std::abs(miny);
-	for (auto& waypoint : kd_points()) {
+	for (auto& waypoint : kd_points_) {
 		auto transform = waypoint->GetTransform();
 		unsigned int x = static_cast<int>(transform.location.x + minx + 1) * 10;
 		unsigned int y = static_cast<int>(transform.location.y + miny + 1) * 10;
@@ -400,14 +403,10 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 
 /* initializes waypoints and builds a kd index on top of them */
 void MassAgent::InitializeKDTree() {
-	if (kd_points().empty()) {
-		auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(1.0);
-		kd_points().insert(kd_points().begin(), waypoints.begin(), waypoints.end());
-	}
-	if (kd_tree_ == nullptr) {
-		kd_tree_ = std::make_unique<WaypointKDTree>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(20));
-		kd_tree_->buildIndex();
-	}
+	auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(1.0);
+	kd_points_.insert(kd_points_.begin(), waypoints.begin(), waypoints.end());
+	kd_tree_ = std::make_unique<WaypointKDTree>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(20));
+	kd_tree_->buildIndex();
 }
 
 /* returns carla's x coordinate */
@@ -479,18 +478,6 @@ void MassAgent::SetupSensors() {
 	} else {
 		std::cout << "ERROR: mass camera node is not defined in sensor definition file" << std::endl;
 	}
-}
-
-/* returns the static vector of active agents */
-std::vector<const MassAgent*>& MassAgent::agents() {
-	static std::vector<const MassAgent*> activte_agents;
-	return activte_agents;
-}
-
-/* returns the static waypoint vector of possible vehicle poses */
-std::vector<boost::shared_ptr<carla::client::Waypoint>>& MassAgent::kd_points() {
-	static std::vector<boost::shared_ptr<carla::client::Waypoint>> kd_points;
-	return kd_points;
 }
 
 /* returns the static carla client. only one is needed for all agents */

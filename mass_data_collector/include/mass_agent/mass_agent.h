@@ -66,15 +66,15 @@ public:
 	void ExploreMap();
 
 	// obligatory kd-tree stuff
-	inline size_t kdtree_get_point_count() const { return kd_points().size(); }
+	inline size_t kdtree_get_point_count() const { return kd_points_.size(); }
 	inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
 		if (dim == 0) {
-			return kd_points()[idx]->GetTransform().location.x;
+			return kd_points_[idx]->GetTransform().location.x;
 		}
 		if (dim == 1) {
-			return kd_points()[idx]->GetTransform().location.y;
+			return kd_points_[idx]->GetTransform().location.y;
 		}
-		return kd_points()[idx]->GetTransform().location.z;
+		return kd_points_[idx]->GetTransform().location.z;
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const {return false;}
@@ -88,9 +88,9 @@ private:
 	void InitializeKDTree();
 	void AssertSize(size_t size);
 	static std::vector<std::string> GetBlueprintNames();
-	static std::vector<const MassAgent*>& agents();
-	static std::vector<boost::shared_ptr<carla::client::Waypoint>>& kd_points();
+	static std::vector<const MassAgent*> agents_;
 	geom::SemanticCloud::Settings& sc_settings();
+
 
 	// state
 	uint16 id_;
@@ -99,6 +99,7 @@ private:
 	double vehicle_width_, vehicle_length_;
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
+	std::vector<boost::shared_ptr<carla::client::Waypoint>> kd_points_;
 	// carla sensors
 	std::unique_ptr<data::RGBCamera> front_rgb_;
 	std::unique_ptr<data::SemanticPointCloudCamera> front_mask_pc_;
