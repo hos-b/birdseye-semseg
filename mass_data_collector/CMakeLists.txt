@@ -33,11 +33,6 @@ find_package(catkin REQUIRED COMPONENTS
 	# freicar_map
 )
 # HDF5 ----------------------------------------------------------------------
-if (NOT DEFINED ENV{LIBHDF5_ROOT})
-	message(FATAL_ERROR "environment variable LIBHDF5_ROOT is not defined.")
-endif ()
-# CMAKE_PREFIX_PATH should only be appended after catkin find_package (idk why)
-list (APPEND CMAKE_PREFIX_PATH $ENV{LIBHDF5_ROOT})
 find_package (HDF5 NAMES "hdf5" COMPONENTS C CXX HL HLCXX static) # NAMES hdf5 COMPONENTS C ${SEARCH_TYPE}
 if (HDF5_FOUND)
   if (HDF5_static_C_FOUND)
@@ -49,7 +44,6 @@ if (HDF5_FOUND)
 else ()
   message (FATAL_ERROR " HDF5 is Required")
 endif ()
-# message(WARNING "${CMAKE_MODULE_PATH}")
 
 # more catkin stuff ---------------------------------------------------------
 catkin_package(CATKIN_DEPENDS 
