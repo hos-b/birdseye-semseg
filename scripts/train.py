@@ -47,7 +47,7 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 semseg_loss = nn.CrossEntropyLoss(reduction='none')
 mask_loss = nn.L1Loss(reduction='none')
 epochs = 1
-
+print(f"{(model.parameter_count() / 1e6):.2f}M trainable parameters")
 
 for ep in range(epochs):
     total_train_m_loss = 0.0

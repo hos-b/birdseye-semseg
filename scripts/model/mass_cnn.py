@@ -67,6 +67,12 @@ class MassCNN(torch.nn.Module):
             nn.Conv2d(in_channels=64, out_channels=num_classes, kernel_size=1)
         )
     
+    def parameter_count(self):
+        """
+        returns the number of trainable parameters
+        """
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+    
     def forward(self, rgbs, transforms):
         """
         input:
