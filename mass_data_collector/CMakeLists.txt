@@ -19,8 +19,7 @@ find_package(OpenMP REQUIRED)
 # find_package(Open3D HINTS /export/repos/Open3D/build/install/lib/cmake/Open3D)
 # CARLA related stuff -------------------------------------------------------
 if (NOT DEFINED ENV{CARLA_910_CXX_API})
-	message(FATAL_ERROR "environment variable CARLA_910_CXX_API is not defined. \
-						 export it before compiling")
+	message(FATAL_ERROR "environment variable CARLA_910_CXX_API is not defined.")
 endif ()
 # message(WARNING "CARLA API: $ENV{CARLA_910_CXX_API}")
 FILE(GLOB CARLA_LIBRARIES $ENV{CARLA_910_CXX_API}/lib/*.a)
@@ -34,7 +33,10 @@ find_package(catkin REQUIRED COMPONENTS
 	# freicar_map
 )
 # HDF5 ----------------------------------------------------------------------
-# CMAKE_PREFIX_PATH should only be appended after catkin find_package (idk)
+if (NOT DEFINED ENV{LIBHDF5_ROOT})
+	message(FATAL_ERROR "environment variable LIBHDF5_ROOT is not defined.")
+endif ()
+# CMAKE_PREFIX_PATH should only be appended after catkin find_package (idk why)
 list (APPEND CMAKE_PREFIX_PATH $ENV{LIBHDF5_ROOT})
 find_package (HDF5) # NAMES hdf5 COMPONENTS C ${SEARCH_TYPE}
 # message(WARNING "${CMAKE_MODULE_PATH}")
@@ -71,8 +73,6 @@ set_target_properties(hdf5_dataset PROPERTIES CXX_STANDARD 17)
 # HDF5 api test -------------------------------------------------------------
 add_executable(hdf5_test ${PROJECT_SOURCE_DIR}/src/hdf5_api/hdf5_test.cpp)
 target_link_libraries(hdf5_test hdf5_dataset)
-# add_executable(example ${PROJECT_SOURCE_DIR}/src/test.cpp)
-# target_link_libraries(example hdf5-static hdf5_cpp-static)
 
 # data collection executable ------------------------------------------------
 add_executable(${PROJECT_NAME}
