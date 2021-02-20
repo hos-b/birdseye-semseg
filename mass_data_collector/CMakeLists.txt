@@ -33,6 +33,8 @@ find_package(catkin REQUIRED COMPONENTS
 	# freicar_map
 )
 # HDF5 ----------------------------------------------------------------------
+set(LIBHDF5_ROOT /usr/local/HDF_Group/HDF5/1.12.0)
+list (APPEND CMAKE_PREFIX_PATH ${LIBHDF5_ROOT})
 find_package (HDF5 NAMES "hdf5" COMPONENTS C CXX HL HLCXX static) # NAMES hdf5 COMPONENTS C ${SEARCH_TYPE}
 if (HDF5_FOUND)
   if (HDF5_static_C_FOUND)
