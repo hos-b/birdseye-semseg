@@ -84,7 +84,7 @@ private:
 	std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors();
 	void DestroyAgent();
-	void CaptureOnce(bool log);
+	void CaptureOnce();
 	void InitializeKDTree();
 	void AssertSize(size_t size);
 	static std::vector<std::string> GetBlueprintNames();

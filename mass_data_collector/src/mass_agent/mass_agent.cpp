@@ -226,14 +226,11 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 }
 
 /* caputres one frame for all sensors [[blocking]] */
-void MassAgent::CaptureOnce(bool log) {
+void MassAgent::CaptureOnce() {
 	front_rgb_->CaputreOnce();
 	front_mask_pc_->CaputreOnce();
 	for (auto& semantic_cam : semantic_pc_cams_) {
 		semantic_cam->CaputreOnce();
-	}
-	if (log) {
-		std::cout << "captured once" << std::endl;
 	}
 }
 
@@ -257,15 +254,15 @@ void MassAgent::DestroyAgent() {
 MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 										  size_t knn_pt_count,
 										  size_t carmask_padding) {
-	CaptureOnce(false);
+	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
-	if (!succ) {
-		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
-		return datapoint;
-	}
+	// if (!succ) {
+	// 	std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+	// 	return datapoint;
+	// }
 	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask(fovmask_stitching_threshold);
@@ -273,35 +270,35 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	geom::SemanticCloud target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
-		if (success) {
-			target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
-		} else {
-			std::cout << "ERROR: agent " + std::to_string(id_)
-					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
-			return datapoint;
-		}
+		// if (success) {
+		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+		// } else {
+		// 	std::cout << "ERROR: agent " + std::to_string(id_)
+		// 			  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+		// 	return datapoint;
+		// }
 	}
 	target_cloud.BuildKDTree();
 	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, vehicle_width_,
 																   vehicle_length_, carmask_padding);
 	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
-	if (!success) {
-		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
-		return datapoint;
-	}
-	if (!rgb_image.isContinuous()) {
-		std::cout << "ERROR: rgb image is not a continuous byte array" << std::endl;
-		return datapoint;
-	}
-	if (!semantic_bev.isContinuous()) {
-		std::cout << "ERROR: BEV image is not a continuous byte array" << std::endl;
-		return datapoint;
-	}
-	if (!fov_mask.isContinuous()) {
-		std::cout << "ERROR: BEV mask is not a continuous byte array" << std::endl;
-		return datapoint;
-	}
+	// if (!success) {
+	// 	std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
+	// 	return datapoint;
+	// }
+	// if (!rgb_image.isContinuous()) {
+	// 	std::cout << "ERROR: rgb image is not a continuous byte array" << std::endl;
+	// 	return datapoint;
+	// }
+	// if (!semantic_bev.isContinuous()) {
+	// 	std::cout << "ERROR: BEV image is not a continuous byte array" << std::endl;
+	// 	return datapoint;
+	// }
+	// if (!fov_mask.isContinuous()) {
+	// 	std::cout << "ERROR: BEV mask is not a continuous byte array" << std::endl;
+	// 	return datapoint;
+	// }
 	// filling the datapoint
 	datapoint.agent_id = id_;
 	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
@@ -517,7 +514,7 @@ void MassAgent::AssertSize(size_t size) {
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
 	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0, 0, 0.1, 7, 32});
 	for (size_t i = 0; i < size; ++i) {
-		agents[i].CaptureOnce(false);
+		agents[i].CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
 		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();

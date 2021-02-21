@@ -16,12 +16,10 @@ find_package (Eigen3 3 REQUIRED)
 find_package(PCL 1.3 REQUIRED COMPONENTS common io)
 find_package(nanoflann)
 find_package(OpenMP REQUIRED)
-# find_package(Open3D HINTS /export/repos/Open3D/build/install/lib/cmake/Open3D)
 # CARLA related stuff -------------------------------------------------------
 if (NOT DEFINED ENV{CARLA_910_CXX_API})
 	message(FATAL_ERROR "environment variable CARLA_910_CXX_API is not defined.")
 endif ()
-# message(WARNING "CARLA API: $ENV{CARLA_910_CXX_API}")
 FILE(GLOB CARLA_LIBRARIES $ENV{CARLA_910_CXX_API}/lib/*.a)
 # catkin packages -----------------------------------------------------------
 find_package(catkin REQUIRED COMPONENTS
@@ -98,7 +96,6 @@ target_link_libraries(${PROJECT_NAME}
 	${CARLA_LIBRARIES}
 	${PCL_LIBRARIES}
 	${OpenCV_LIBS}
-	# Open3D::Open3D
 	nanoflann::nanoflann
 	OpenMP::OpenMP_CXX
 	Eigen3::Eigen

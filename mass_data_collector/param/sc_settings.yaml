@@ -15,6 +15,6 @@ mask:
   # distance of the closest point to the pixel center
   sitching_threhsold: 0.1
   # number of neighbors to consider in the kd lookup
-  knn_count: 35
+  knn_count: 16
   # "padding" of the search region for the egovehicle mask
-  vehicle_mask_padding: 7
+  vehicle_mask_padding: 5

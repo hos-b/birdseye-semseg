@@ -16,7 +16,6 @@
 #include <queue>
 #include <pcl/io/pcd_io.h>
 
-#define RGB_MAX 255.0
 namespace geom
 {
 /* constructor */
@@ -45,18 +44,21 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 										  cv::Mat semantic,
 										  cv::Mat depth) {
 	size_t old_size = target_cloud_.points.size();
-	size_t index = old_size;
 	target_cloud_.points.resize(old_size + (semantic.rows * semantic.cols));
+	size_t index;
+	#pragma omp parallel for collapse(2) private(index) shared(target_cloud_, old_size)
 	for (int i = 0; i < semantic.rows; ++i) {
-		uchar* pixel_label = semantic.ptr<uchar>(i);
-		float* pixel_depth = depth.ptr<float>(i);
+		// uchar* pixel_label = semantic.ptr<uchar>(i);
+		// float* pixel_depth = depth.ptr<float>(i);
 		for (int j = 0; j < semantic.cols; ++j) {
-			auto label = pixel_label[j];
+			auto label = semantic.at<uchar>(i, j);
 			// filter if it belongs to a traffic light or pole
 			if (config::fileterd_semantics.at(label)) {
 				continue;
 			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), pixel_depth[j]);
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			// check if the point is outside the specified pointcloud dimensions
+			/* 
 			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
 				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
 				continue;
@@ -67,17 +69,17 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 			if (it != xy_map_.end() && it->second > pixel_3d_loc.z()) {
 				continue;
 			}
-			xy_map_[xy_pair] = pixel_3d_loc.z();
-
+			xy_map_[xy_pair] = pixel_3d_loc.z(); */
+			// private omp variable
+			index = old_size + semantic.rows * i + j;
 			target_cloud_[index].label = label;
 			target_cloud_[index].x = pixel_3d_loc.x();
 			target_cloud_[index].y = pixel_3d_loc.y();
 			target_cloud_[index].z = pixel_3d_loc.z();
-			++index;
 		}
 	}
-	target_cloud_.points.resize(index);
-	target_cloud_.width = index;
+	// target_cloud_.points.resize(index);
+	target_cloud_.width = target_cloud_.points.size();
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
 }

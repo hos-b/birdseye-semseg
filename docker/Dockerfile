@@ -72,4 +72,4 @@ RUN echo "export CARLA_910_CXX_API=/home/mass/libraries/libcarla-install" >> /ho
 
 # finalizing
 WORKDIR /home/mass
-RUN echo "Done! use: docker run -v $CARLA_910_CXX_API:/home/mass/libraries/libcarla-install:ro -v /export/ad-lab/repos/birdseye-semseg/mass_data_collector:/home/mass/catkin_ws/src/mass_data_collector:rw -v path/to/some/folder:/home/mass/data:rw -p 2000:2000 -it noetic-mass"
+RUN echo "Done! use: docker run -v $CARLA_910_CXX_API:/home/mass/libraries/libcarla-install:ro -v /export/ad-lab/repos/birdseye-semseg/mass_data_collector:/home/mass/catkin_ws/src/mass_data_collector:rw -v ~/mass-data:/home/mass/data:rw --net=host -it noetic-mass"

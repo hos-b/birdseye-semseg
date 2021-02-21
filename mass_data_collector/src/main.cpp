@@ -56,8 +56,8 @@ int main(int argc, char **argv)
 	// dataset --------------------------------------------------------------------------------------------------
 	HDF5Dataset* dataset = nullptr;
 	if (!debug_mode) {
-		dataset = new HDF5Dataset("/home/hosein/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
-								  compression::ZLIB | 6, 1, max_data_count + 32, 32, number_of_agents);
+		dataset = new HDF5Dataset("/home/mass/data/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
+								  compression::NONE, 1, max_data_count + 32, 32, number_of_agents);
 	}
 	// CARLA setup ----------------------------------------------------------------------------------------------
 	agent::MassAgent agents[number_of_agents];
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 	}
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
-		std::future<MASSDataType> promise[number_of_agents];
+		std::vector<MASSDataType> promise(number_of_agents);
 		if (data_count == max_data_count) {
 			break;
 		}
@@ -94,9 +94,10 @@ int main(int argc, char **argv)
 			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
 		// mandatory delay
-		std::this_thread::sleep_for(100ms);
+		std::this_thread::sleep_for(10ms);
 		// gathering data (async)
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
+			promise.emplace_back(agents[i].GenerateDataPoint())
 			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i], 0.1, 35, 7);
 		}
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
