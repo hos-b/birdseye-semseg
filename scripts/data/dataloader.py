@@ -54,7 +54,7 @@ class MassHDF5(torch.utils.data.Dataset):
             rgbs.append(self.rgb_transform(self.dataset[idx * self.agent_count + i, "front_rgb"]
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
             # Semantic Label: H, W
-            semseg = self.dataset[idx * self.agent_count + i, "top_semseg"] .view(dtype=np.uint8).reshape(1000, 800)
+            semseg = self.dataset[idx * self.agent_count + i, "top_semseg"] .view(dtype=np.uint8).reshape(500, 400)
             if self.use_class_subset:
                 semseg = carla_semantics_to_our_semantics(semseg)
             # opencv size is (width, height), instead of (rows, cols)
@@ -62,7 +62,7 @@ class MassHDF5(torch.utils.data.Dataset):
             semsegs.append(torch.tensor(semseg, dtype=torch.long))
             # Masks: H, W
             masks.append(self.mask_transform(self.dataset[idx * self.agent_count + i, "top_mask"]
-                        .view(dtype=np.uint8).reshape(1000, 800)).squeeze())
+                        .view(dtype=np.uint8).reshape(500, 400)).squeeze())
             # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[idx * self.agent_count + i, "transform"]
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
@@ -74,13 +74,13 @@ class MassHDF5(torch.utils.data.Dataset):
         return int((self.n_samples - 1) / self.agent_count)
 
 
-def get_datasets(file_path, device, batch_size, split=(0.8, 0.2), size=(1000, 800), classes='carla'):
+def get_datasets(file_path, device, batch_size, split=(0.8, 0.2), size=(500, 400), classes='carla'):
     if classes != 'carla' and classes != 'ours':
         print("unknown segmentation class category: {classes}")
         classes = 'carla'
     dset = MassHDF5(file_path=file_path, size=size, classes=classes, device=device)
     return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])
 
-def get_dataloader(file_path, batch_size=1, size=(1000, 800), classes='carla'):
+def get_dataloader(file_path, batch_size=1, size=(500, 400), classes='carla'):
     dset = MassHDF5(file_path=file_path, size=size, classes=classes)
     return torch.utils.data.DataLoader(dset, batch_size=batch_size, shuffle=False, num_workers=1)

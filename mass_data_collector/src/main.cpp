@@ -99,7 +99,7 @@ int main(int argc, char **argv)
 			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
 		// mandatory delay
-		std::this_thread::sleep_for(10ms);
+		std::this_thread::sleep_for(100ms);
 		// gathering data (async)
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
 			// promise.emplace_back(agents[i].GenerateDataPoint());
@@ -137,7 +137,7 @@ void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_
 	uint32 elapsed_s = 0;
 	std::string msg;
 	while (ros::ok()) {
-		msg = "\r gathering " + std::to_string(*data_count + 1) + "/" + std::to_string(max_data_count) +
+		msg = "\rgathering " + std::to_string(*data_count + 1) + "/" + std::to_string(max_data_count) +
 			  ", E: " + SecondsToString(elapsed_s);
 		if (*avg_batch_time == 0) {
 			msg += ", estimating remaining time ...";

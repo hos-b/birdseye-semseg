@@ -8,8 +8,9 @@ from data.mask_warp import get_single_aggregate_mask
 from data.config import SemanticCloudConfig
 from data.utils import squeeze_all
 
-DATASET_DIR = "/home/hosein"
-PKG_NAME = "tp.hdf5"
+DATASET_DIR = "/home/hosein/data"
+PKG_NAME = "testes.hdf5"
+classes = 'ours'
 
 
 # opening semantic cloud settings file
@@ -30,7 +31,6 @@ print(f"found {(dataset.shape[0] - 1) // agent_count} samples")
 print(f"agent_count attribute: {agent_count}")
 
 # opening hdf5 file for the dataset
-classes = 'ours'
 loader = get_dataloader(file_path, batch_size=1, size=NEW_SIZE, classes=classes)
 
 # plot stuff

@@ -77,8 +77,8 @@ private:
 	Settings cfg_;
 	double pixel_w_;
 	double pixel_h_;
-	std::function<size_t(const std::pair<double, double>&)> xy_hash_;
-	std::unordered_map<std::pair<double, double>, double, decltype(xy_hash_)> xy_map_;
+	// std::function<size_t(const std::pair<double, double>&)> xy_hash_;
+	// std::unordered_map<std::pair<double, double>, double, decltype(xy_hash_)> xy_map_;
 };
 
 } // namespace geom

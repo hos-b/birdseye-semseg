@@ -8,15 +8,15 @@ cloud:
   min_point_y: -10
 
 bev:
-  image_rows: 1000 # to be subsampled to 256
-  image_cols: 800 # to be subsampled to 205 (204.8)
+  image_rows: 500 # to be subsampled to 256
+  image_cols: 400 # to be subsampled to 205 (204.8)
 
 # max leaf
 kd_max_leaf: 128
 
 mask:
-  # distance of the closest point to the pixel center
-  stitching_threshold: 0.1
+  # distance of the closest point to the pixel center (higher = more masking)
+  stitching_threshold: 0.2
   # number of neighbors to consider in the kd lookup
   knn_count: 16
   # "padding" of the search region for the egovehicle mask

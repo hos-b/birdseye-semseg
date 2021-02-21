@@ -263,9 +263,7 @@ MASSDataType MassAgent::GenerateDataPoint() {
 	// }
 	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
-	std::cout << "\n before mask cloud" << std::endl;
 	cv::Mat fov_mask = mask_cloud.GetFOVMask();
-	std::cout << "\n after mask cloud" << std::endl;
 	// ---------------------------------------- creating target cloud ----------------------------------------
 	geom::SemanticCloud target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
