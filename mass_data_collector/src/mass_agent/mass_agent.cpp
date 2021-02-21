@@ -251,9 +251,7 @@ void MassAgent::DestroyAgent() {
 }
 
 /* checks the buffers and creates a single data point from all the sensors */
-MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
-										  size_t knn_pt_count,
-										  size_t carmask_padding) {
+MASSDataType MassAgent::GenerateDataPoint() {
 	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
@@ -265,7 +263,9 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 	// }
 	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
-	cv::Mat fov_mask = mask_cloud.GetFOVMask(fovmask_stitching_threshold);
+	std::cout << "\n before mask cloud" << std::endl;
+	cv::Mat fov_mask = mask_cloud.GetFOVMask();
+	std::cout << "\n after mask cloud" << std::endl;
 	// ---------------------------------------- creating target cloud ----------------------------------------
 	geom::SemanticCloud target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
@@ -279,37 +279,28 @@ MASSDataType MassAgent::GenerateDataPoint(double fovmask_stitching_threshold,
 		// }
 	}
 	target_cloud.BuildKDTree();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(knn_pt_count, vehicle_width_,
-																   vehicle_length_, carmask_padding);
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(vehicle_width_, vehicle_length_);
 	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 	// if (!success) {
 	// 	std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
 	// 	return datapoint;
 	// }
-	// if (!rgb_image.isContinuous()) {
-	// 	std::cout << "ERROR: rgb image is not a continuous byte array" << std::endl;
-	// 	return datapoint;
-	// }
-	// if (!semantic_bev.isContinuous()) {
-	// 	std::cout << "ERROR: BEV image is not a continuous byte array" << std::endl;
-	// 	return datapoint;
-	// }
-	// if (!fov_mask.isContinuous()) {
-	// 	std::cout << "ERROR: BEV mask is not a continuous byte array" << std::endl;
-	// 	return datapoint;
-	// }
 	// filling the datapoint
 	datapoint.agent_id = id_;
+	#pragma omp parallel for
 	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
 		datapoint.front_rgb[i] = rgb_image.data[i];
 	}
+	#pragma omp parallel for
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
 		datapoint.top_semseg[i] = semantic_bev.data[i];
 	}
+	#pragma omp parallel for
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
 		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i];
 	}
+	#pragma omp parallel for
 	for (size_t i = 0; i < statics::transform_length; ++i) {
 		datapoint.transform[i] = transform_.data()[i];
 	}
@@ -512,7 +503,7 @@ void MassAgent::AssertSize(size_t size) {
 
 /* create a single cloud using all cameras of all agents */
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
-	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0, 0, 0.1, 7, 32});
+	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128});
 	for (size_t i = 0; i < size; ++i) {
 		agents[i].CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
@@ -545,15 +536,16 @@ geom::SemanticCloud::Settings& MassAgent::sc_settings() {
 		YAML::Node cloud = base["cloud"];
 		YAML::Node bev = base["bev"];
 		YAML::Node mask = base["mask"];
-		semantic_cloud_settings.max_point_x = cloud["max_point_x"].as<double>();
-		semantic_cloud_settings.min_point_x = cloud["min_point_x"].as<double>();
-		semantic_cloud_settings.max_point_y = cloud["max_point_y"].as<double>();
-		semantic_cloud_settings.min_point_y = cloud["min_point_y"].as<double>();
-		semantic_cloud_settings.image_rows = bev["image_rows"].as<size_t>();
-		semantic_cloud_settings.image_cols = bev["image_cols"].as<size_t>();
-		semantic_cloud_settings.sitching_threhsold = mask["sitching_threhsold"].as<double>();
-		semantic_cloud_settings.vehicle_mask_padding = mask["vehicle_mask_padding"].as<size_t>();
-		semantic_cloud_settings.knn_count = mask["knn_count"].as<size_t>();
+		semantic_cloud_settings.max_point_x = cloud["max_point_x"].as<float>();
+		semantic_cloud_settings.min_point_x = cloud["min_point_x"].as<float>();
+		semantic_cloud_settings.max_point_y = cloud["max_point_y"].as<float>();
+		semantic_cloud_settings.min_point_y = cloud["min_point_y"].as<float>();
+		semantic_cloud_settings.stitching_threshold = mask["stitching_threshold"].as<float>();
+		semantic_cloud_settings.image_rows = bev["image_rows"].as<unsigned int>();
+		semantic_cloud_settings.image_cols = bev["image_cols"].as<unsigned int>();
+		semantic_cloud_settings.vehicle_mask_padding = mask["vehicle_mask_padding"].as<unsigned int>();
+		semantic_cloud_settings.knn_count = mask["knn_count"].as<unsigned int>();
+		semantic_cloud_settings.kd_max_leaf = base["kd_max_leaf"].as<unsigned int>();
 	});
 	return semantic_cloud_settings;
 }

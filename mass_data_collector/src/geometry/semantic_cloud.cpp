@@ -44,44 +44,63 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 										  cv::Mat semantic,
 										  cv::Mat depth) {
 	size_t old_size = target_cloud_.points.size();
-	target_cloud_.points.resize(old_size + (semantic.rows * semantic.cols));
-	size_t index;
-	#pragma omp parallel for collapse(2) private(index) shared(target_cloud_, old_size)
+	// size_t index = old_size;
+	// size_t filtered = 0;
+	// size_t out_of_bounds = 0;
+	// size_t repetitive = 0;
+	// size_t row_count = semantic.rows;
+	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
+	// single channel ...
+	uchar* semantic_ptr = (uint8_t*)semantic.data;
+	float* depth_ptr = (float*)depth.data;
 	for (int i = 0; i < semantic.rows; ++i) {
-		// uchar* pixel_label = semantic.ptr<uchar>(i);
-		// float* pixel_depth = depth.ptr<float>(i);
+		uchar* pixel_label = semantic.ptr<uchar>(i);
+		float* pixel_depth = depth.ptr<float>(i);
+		# pragma omp parallel for
 		for (int j = 0; j < semantic.cols; ++j) {
-			auto label = semantic.at<uchar>(i, j);
+			auto label = pixel_label[j];
+			// index = old_size + row_count * i + j;
 			// filter if it belongs to a traffic light or pole
 			if (config::fileterd_semantics.at(label)) {
+				// ++filtered;
 				continue;
 			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
-			// check if the point is outside the specified pointcloud dimensions
-			/* 
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), pixel_depth[j]);
+			// triggers a lot
 			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
 				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
+				// ++out_of_bounds;
 				continue;
 			}
-			// skip if repetitive or lower height, surprisingly this never triggers
-			auto xy_pair = std::make_pair(pixel_3d_loc.x(), pixel_3d_loc.y());
-			auto it = xy_map_.find(xy_pair);
-			if (it != xy_map_.end() && it->second > pixel_3d_loc.z()) {
-				continue;
-			}
-			xy_map_[xy_pair] = pixel_3d_loc.z(); */
-			// private omp variable
-			index = old_size + semantic.rows * i + j;
-			target_cloud_[index].label = label;
-			target_cloud_[index].x = pixel_3d_loc.x();
-			target_cloud_[index].y = pixel_3d_loc.y();
-			target_cloud_[index].z = pixel_3d_loc.z();
+			// skip if repetitive or lower height, surprisingly
+			// this rarely triggers in FoV and never in BEV
+			// auto xy_pair = std::make_pair(pixel_3d_loc.x(), pixel_3d_loc.y());
+			// auto it = xy_map_.find(xy_pair);
+			// if (it != xy_map_.end() && it->second > pixel_3d_loc.z()) {
+			// 	// ++repetitive;
+			// 	continue;
+			// }
+			// xy_map_[xy_pair] = pixel_3d_loc.z();
+
+			pcl::PointXYZL point;
+			point.label = label;
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			// # pragma omp critical
+			target_cloud_.points.emplace_back(point);
+			// target_cloud_[index].label = label;
+			// target_cloud_[index].x = pixel_3d_loc.x();
+			// target_cloud_[index].y = pixel_3d_loc.y();
+			// target_cloud_[index].z = pixel_3d_loc.z();
+			// ++index;
 		}
 	}
 	// target_cloud_.points.resize(index);
 	target_cloud_.width = target_cloud_.points.size();
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
+	// std::cout << "\nfiltered: " << filtered << ", oob: " << out_of_bounds << ", repetitive: " << repetitive << std::endl;
 }
 
 /* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
@@ -115,18 +134,20 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 */
 void SemanticCloud::BuildKDTree() {
 	// building kd-tree
-	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(128));
+	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(cfg_.kd_max_leaf));
 	kd_tree_->buildIndex();
 }
 
 /* returns the orthographic bird's eye view image */
-std::tuple<cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(size_t knn_pt_count, double vehicle_width, double vehicle_length, size_t padding) const {
+std::tuple<cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(double vehicle_width, double vehicle_length) const {
 	// ego roi
 	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
 	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
 	cv::Point mid(ego_col_px, ego_row_px);
-	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - padding, mid.y - (vehicle_length / (2 * pixel_h_)) - padding);
-	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + padding, mid.y + (vehicle_length / (2 * pixel_h_)) + padding);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
 	cv::Rect2d vhc_rect(topleft, botright);
 	// the output images
 	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
@@ -140,7 +161,7 @@ std::tuple<cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(size_t knn_pt_count, 
 			double knn_x = cfg_.max_point_x - i * pixel_h_ + 0.5 * pixel_h_;
 			double knn_y = cfg_.max_point_y - j * pixel_w_ + 0.5 * pixel_w_;
 			// ------------------------ majority voting for semantic id ------------------------
-			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, knn_pt_count);
+			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, cfg_.knn_count);
 			auto mv_winner = target_cloud_.points[GetMajorityVote(knn_ret_index, knn_sqrd_dist)];
 			semantic_bev.at<uchar>(i, j) = static_cast<unsigned char>(mv_winner.label);
 			// if the point belongs to the car itself
@@ -156,7 +177,7 @@ std::tuple<cv::Mat, cv::Mat> SemanticCloud::GetSemanticBEV(size_t knn_pt_count, 
 
 /* returns the BEV mask visible from the camera. this method assumes the kd tree
    is populated only with points captured with the front camera */
-cv::Mat SemanticCloud::GetFOVMask(double stitching_threshold) const {
+cv::Mat SemanticCloud::GetFOVMask() const {
 	cv::Mat bev_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	#pragma omp parallel for collapse(2)
 	for (int i = 0; i < bev_mask.rows; ++i) {
@@ -165,9 +186,9 @@ cv::Mat SemanticCloud::GetFOVMask(double stitching_threshold) const {
 			// get the center of the square that is to be mapped to a pixel
 			double knn_x = cfg_.max_point_x - i * pixel_h_ + 0.5 * pixel_h_;
 			double knn_y = cfg_.max_point_y - j * pixel_w_ + 0.5 * pixel_w_;
-			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 32);
+			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, cfg_.knn_count);
 			// if the point is close enough
-			if (knn_sqrd_dist[0] <= stitching_threshold) {
+			if (knn_sqrd_dist[0] <= cfg_.stitching_threshold) {
 				bev_mask.at<uchar>(i, j) = 255;
 			}
 		}

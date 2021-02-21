@@ -13,11 +13,14 @@
 #include "mass_agent/mass_agent.h"
 
 #define RANDOM_SEED 135
+#define SECS_IN_HOUR 60 * 60
+#define SECS_IN_DAY 60 * 60 * 24
 
 using namespace std::chrono_literals;
 void inter(int signo);
 void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update);
 void AssertDataDimensions();
+std::string SecondsToString(uint32 seconds);
 
 int main(int argc, char **argv)
 {
@@ -56,7 +59,8 @@ int main(int argc, char **argv)
 	// dataset --------------------------------------------------------------------------------------------------
 	HDF5Dataset* dataset = nullptr;
 	if (!debug_mode) {
-		dataset = new HDF5Dataset("/home/mass/data/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
+		// /home/mass/data/
+		dataset = new HDF5Dataset("/home/hosein/data/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
 								  compression::NONE, 1, max_data_count + 32, 32, number_of_agents);
 	}
 	// CARLA setup ----------------------------------------------------------------------------------------------
@@ -83,7 +87,8 @@ int main(int argc, char **argv)
 	}
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
-		std::vector<MASSDataType> promise(number_of_agents);
+		std::future<MASSDataType> promise[number_of_agents];
+		// std::vector<MASSDataType> promise;
 		if (data_count == max_data_count) {
 			break;
 		}
@@ -97,8 +102,8 @@ int main(int argc, char **argv)
 		std::this_thread::sleep_for(10ms);
 		// gathering data (async)
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
-			promise.emplace_back(agents[i].GenerateDataPoint())
-			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i], 0.1, 35, 7);
+			// promise.emplace_back(agents[i].GenerateDataPoint());
+			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i]);
 		}
 		for (unsigned int i = 0; i < number_of_agents; ++i) {
 			MASSDataType datapoint = promise[i].get();
@@ -123,27 +128,27 @@ int main(int argc, char **argv)
 /* keybord interrupt handler */
 void inter(int signo) {
 	(void)signo;
-	std::cout << "shutting down" << std::endl;
+	std::cout << "\nshutting down. please wait" << std::endl;
 	ros::shutdown();
 }
 /* prints the status of data collection */
 void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update) {
 	uint32 remaining_s = 0;
+	uint32 elapsed_s = 0;
+	std::string msg;
 	while (ros::ok()) {
+		msg = "\r gathering " + std::to_string(*data_count + 1) + "/" + std::to_string(max_data_count) +
+			  ", E: " + SecondsToString(elapsed_s);
 		if (*avg_batch_time == 0) {
-			std::cout << '\r'
-					  << "gathering " << *data_count + 1 << "/" << max_data_count
-					  << "\testimating remaining time..." << std::flush;
-			std::this_thread::sleep_for(1s);
+			msg += ", estimating remaining time ...";
 		} else {
-			std::cout << '\r'
-					<< "gathering " << *data_count + 1 << "/" << max_data_count
-					<< std::setw(20) << std::setfill(' ') << "avg. itr: " << *avg_batch_time << "s"
-					<< std::setw(30) << std::setfill(' ') << "estimated remaining time: " << remaining_s / 60 << "m "
-					<< remaining_s % 60 << "s   " << std::flush;
-			std::this_thread::sleep_for(1s);
+			msg += ", avg: " + std::to_string(*avg_batch_time) + "s" +
+				   ", R: " + SecondsToString(remaining_s);
 			remaining_s = std::max<int>(0, remaining_s - 1);
 		}
+		std::cout << msg << std::flush;
+		std::this_thread::sleep_for(1s);
+		elapsed_s += 1;
 		if (*update) {
 			if (*data_count == max_data_count) {
 				break;
@@ -152,6 +157,26 @@ void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_
 			remaining_s = (*avg_batch_time) * (max_data_count - (*data_count));
 		}
 	}
+}
+/* returns human readable string for the given period in seconds */
+std::string SecondsToString(uint32 period_in_secs) {
+	uint32 days = 0;
+	uint32 hours = 0;
+	uint32 minutes = 0;
+	if (period_in_secs >= SECS_IN_DAY) {
+		days = period_in_secs / SECS_IN_DAY;
+		period_in_secs %= SECS_IN_DAY;
+	}
+	if (period_in_secs >= SECS_IN_HOUR) {
+		hours = period_in_secs / SECS_IN_HOUR;
+		period_in_secs %= SECS_IN_HOUR;
+	}
+	if (period_in_secs >= 60) {
+		minutes = period_in_secs / 60;
+		period_in_secs %= 60;
+	}
+	return std::to_string(days) + "d" + std::to_string(hours) + "h" +
+		   std::to_string(minutes) + "m" + std::to_string(period_in_secs) + "s";
 }
 /* asserts that the dataset image size is equal to that of the gathered samples */
 void AssertDataDimensions() {

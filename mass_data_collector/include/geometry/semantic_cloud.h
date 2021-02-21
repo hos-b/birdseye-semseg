@@ -25,11 +25,12 @@ public:
 		float min_point_x;
 		float max_point_y;
 		float min_point_y;
-		float image_rows;
-		float image_cols;
-		float sitching_threhsold;
-		float vehicle_mask_padding;
+		float stitching_threshold;
+		unsigned int image_rows;
+		unsigned int image_cols;
+		unsigned int vehicle_mask_padding;
 		unsigned int knn_count;
+		unsigned int kd_max_leaf;
 	};
 	SemanticCloud(SemanticCloud::Settings settings);
 	~SemanticCloud();
@@ -40,9 +41,8 @@ public:
 							   cv::Mat semantic,
 							   cv::Mat depth,
 							   Eigen::Matrix4d& transform);
-	std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(size_t knn_pt_count, double vehicle_width,
-												double vehicle_length, size_t padding) const;
-	cv::Mat GetFOVMask(double stitching_threshold) const;
+	std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(double vehicle_width, double vehicle_length) const;
+	cv::Mat GetFOVMask() const;
 	void BuildKDTree();
 	static cv::Mat ConvertToCityScapesPallete(cv::Mat semantic_ids);
 

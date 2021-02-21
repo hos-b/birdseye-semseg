@@ -48,9 +48,7 @@ public:
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 				  const std::unordered_map<int, bool>& restricted_roads,
 				  size_t knn_pts = 0);
-	MASSDataType GenerateDataPoint(double fovmask_stitching_threshold,
-								   size_t knn_pt_count,
-								   size_t carmask_padding);
+	MASSDataType GenerateDataPoint();
 	// transform related
 	inline double carla_x() const;
 	inline double carla_y() const;
