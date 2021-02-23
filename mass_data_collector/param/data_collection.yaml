@@ -1,0 +1,12 @@
+dataset:
+  path: '/home/hosein/data/dataset.hdf5'
+  name: 'town-01'
+
+collection:
+  minimum_cars: 1
+  maximum_cars: 6
+  random_seed: 515
+  max_batch_count: 10
+  # mandatory delay after each batch because moving cars in carla is not a blocking call
+  # 100 for slow PC, 10 for fast
+  batch_delay_ms: 150
