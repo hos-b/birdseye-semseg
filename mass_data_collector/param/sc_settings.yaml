@@ -15,7 +15,7 @@ bev:
 kd_max_leaf: 128
 
 mask:
-  # distance of the closest point to the pixel center (higher = more masking)
+  # squared distance of the closest point to the pixel center (higher = more masking)
   stitching_threshold: 0.2
   # number of neighbors to consider in the kd lookup
   knn_count: 16

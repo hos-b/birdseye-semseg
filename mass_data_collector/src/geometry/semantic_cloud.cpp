@@ -158,11 +158,10 @@ cv::Mat SemanticCloud::GetFOVMask() const {
 			// get the center of the square that is to be mapped to a pixel
 			double knn_x = cfg_.max_point_x - i * pixel_h_ + 0.5 * pixel_h_;
 			double knn_y = cfg_.max_point_y - j * pixel_w_ + 0.5 * pixel_w_;
-			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, cfg_.knn_count);
+			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 1);
 			// if the point is close enough
-			if (knn_sqrd_dist[0] <= cfg_.stitching_threshold) {
-				bev_mask.at<uchar>(i, j) = 255;
-			}
+			bev_mask.at<uchar>(i, j) = static_cast<unsigned char>
+				(knn_sqrd_dist[0] <= cfg_.stitching_threshold) * 255;
 		}
 	}
 	return bev_mask;
@@ -263,7 +262,7 @@ void SemanticCloud::SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_ge
 	pcl::io::savePCDFile(path, visible_cloud);
 }
 
-/* gets the majority vote based on the results of a knn search */
+/* gets the majority vote for label based on the results of a knn search */
 size_t SemanticCloud::GetMajorityVote(const std::vector<size_t>& knn_indices,
 									  const std::vector<double>& distances) const {
 	// map from semantic id to count
