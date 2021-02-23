@@ -46,8 +46,7 @@ class HDF5Dataset
 {
 public:
     HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
-                unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size,
-                unsigned int agent_count);
+                unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size);
     HDF5Dataset(const HDF5Dataset&) = delete;
     HDF5Dataset& operator=(const HDF5Dataset&) = delete;
     HDF5Dataset& operator=(HDF5Dataset&&) = delete;
@@ -55,7 +54,7 @@ public:
     ~HDF5Dataset() = default;
 
     void AppendElement(const MASSDataType* mass_data);
-    void AddMaskAttribute(unsigned char* attr_data, size_t attr_size, const std::string& attr_name);
+    void AddU32Attribute(unsigned int* attr_data, size_t attr_size, const std::string& attr_name);
     MASSDataType ReadElement(size_t index) const;
     std::pair<hsize_t, hsize_t> GetCurrentSize() const;
     void Close();

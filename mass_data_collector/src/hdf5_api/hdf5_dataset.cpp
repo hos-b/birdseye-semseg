@@ -5,8 +5,7 @@
 #include <H5public.h>
 
 HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, unsigned int flags,
-                         unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size,
-                         unsigned int agent_count) {
+                         unsigned int compression, size_t init_size, size_t max_size, size_t chunk_size) {
     unsigned int hdf5_flags = 0;
     std::string file_action_str;
     switch (flags & statics::open_mask) {
@@ -30,7 +29,7 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
         case DSET_CREAT: {
             // creating the dataset
             hsize_t initial_size[] = {init_size};
-            hsize_t maximum_size[] = {max_size * agent_count};
+            hsize_t maximum_size[] = {max_size};
             H5::DataSpace data_space(statics::dataset_rank, initial_size, maximum_size);
             H5::DSetCreatPropList dset_params;
             hsize_t chunk_dims[] = {chunk_size};
@@ -45,12 +44,6 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
             };
             dataset_ = h5file_.createDataSet(dset_name, comp_type_, data_space, dset_params);
             write_index_ = 0;
-            // creating the attribute
-            hsize_t attr_dims[] = {1};
-            unsigned int attr_data[] = {agent_count};
-            H5::DataSpace attr_dataspace(1, attr_dims);
-            H5::Attribute attribute = dataset_.createAttribute("agent_count", H5::PredType::STD_I32BE, attr_dataspace);
-            attribute.write(H5::PredType::NATIVE_UINT32, attr_data);
             break;
         }
         case DSET_OPEN: {
@@ -68,12 +61,12 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
     _mspace = H5::DataSpace (statics::dataset_rank, _count);
 }
 /* adds an attribute to the dataset */
-void HDF5Dataset::AddMaskAttribute(unsigned char* attr_data, size_t attr_size, const std::string& attr_name) {
+void HDF5Dataset::AddU32Attribute(unsigned int* attr_data, size_t attr_size, const std::string& attr_name) {
     // creating the attribute
     hsize_t attr_dims[] = {attr_size};
     H5::DataSpace attr_dataspace(1, attr_dims);
-    H5::Attribute attribute = dataset_.createAttribute(attr_name, H5::PredType::NATIVE_UINT8, attr_dataspace);
-    attribute.write(H5::PredType::NATIVE_UINT8, attr_data);
+    H5::Attribute attribute = dataset_.createAttribute(attr_name, H5::PredType::STD_I32BE, attr_dataspace);
+    attribute.write(H5::PredType::NATIVE_UINT32, attr_data);
 }
 /* initializes the compound datatype used to write to the dataset */
 void HDF5Dataset::InitializeCompoundType() {
