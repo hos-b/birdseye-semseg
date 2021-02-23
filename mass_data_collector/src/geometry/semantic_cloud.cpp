@@ -22,12 +22,8 @@ namespace geom
 SemanticCloud::SemanticCloud(SemanticCloud::Settings settings) {
 	cfg_ = settings;
 	kd_tree_ = nullptr;
-	// xy_hash_ = [](const std::pair<double, double>& pair) -> size_t {
-	// 	return std::hash<double>()(pair.first * 1e4) ^ std::hash<double>()(pair.second);
-	// };
 	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
 	pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x) / static_cast<double>(cfg_.image_rows);
-	// xy_map_ = std::unordered_map<std::pair<double, double>, double, decltype(xy_hash_)>(150000, xy_hash_);
 }
 
 /* destructor: cleans containers */
@@ -69,6 +65,51 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 		}
 	}
 	// target_cloud_.points.resize(index);
+	target_cloud_.width = target_cloud_.points.size();
+	target_cloud_.height = 1;
+	target_cloud_.is_dense = true;
+	// std::cout << "\nfiltered: " << filtered << ", oob: " << out_of_bounds << ", repetitive: " << repetitive << std::endl;
+}
+
+/* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud  */
+void SemanticCloud::AddFrontSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+										  	   cv::Mat semantic,
+										  	   cv::Mat depth) {
+	auto xy_hash = [](const std::pair<double, double>& pair) -> size_t {
+		return std::hash<double>()(pair.first * 1e4) ^ std::hash<double>()(pair.second);
+	};
+	std::unordered_map<std::pair<double, double>, double, decltype(xy_hash)> xy_map(150000, xy_hash);
+	size_t old_size = target_cloud_.points.size();
+	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
+	for (int i = 0; i < semantic.rows; ++i) {
+		for (int j = 0; j < semantic.cols; ++j) {
+			auto label = semantic.at<uchar>(i, j);
+			// filter if it belongs to a traffic light or pole
+			if (config::fileterd_semantics.at(label)) {
+				continue;
+			}
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			// triggers a lot
+			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
+				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
+				continue;
+			}
+			// skip if repetitive or lower height, surprisingly this never triggers
+			auto xy_pair = std::make_pair(pixel_3d_loc.x(), pixel_3d_loc.y());
+			auto it = xy_map.find(xy_pair);
+			if (it != xy_map.end() && it->second > pixel_3d_loc.z()) {
+				continue;
+			}
+			// #pragma omp critical (set)
+			xy_map[xy_pair] = pixel_3d_loc.z();
+			pcl::PointXYZL point;
+			point.label = label;
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			target_cloud_.points.emplace_back(point);
+		}
+	}
 	target_cloud_.width = target_cloud_.points.size();
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;

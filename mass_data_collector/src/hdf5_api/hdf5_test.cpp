@@ -13,7 +13,7 @@ int main()
 {
     std::cout << "starting..." << std::endl;
     HDF5Dataset xtra("testfile2.hdf5", "testset", mode::FILE_TRUNC | mode::DSET_CREAT,
-                                                 compression::ZLIB | 6, 1, 20000, 32, 4);
+                                                 compression::ZLIB | 6, 1, 20000, 32);
     size_t index = 100;
     // writing
     for (size_t i = 0; i < index; ++i) {

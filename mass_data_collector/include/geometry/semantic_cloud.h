@@ -37,6 +37,9 @@ public:
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							   cv::Mat semantic,
 							   cv::Mat depth);
+	void AddFrontSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   		cv::Mat semantic,
+							   		cv::Mat depth);
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							   cv::Mat semantic,
 							   cv::Mat depth,

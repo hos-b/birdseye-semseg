@@ -48,7 +48,9 @@ public:
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 				  const std::unordered_map<int, bool>& restricted_roads,
 				  size_t knn_pts = 0);
-	MASSDataType GenerateDataPoint();
+	void HideAgent();
+	void RandomizeColor();
+	MASSDataType GenerateDataPoint(unsigned int agent_batch_index);
 	// transform related
 	inline double carla_x() const;
 	inline double carla_y() const;

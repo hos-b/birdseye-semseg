@@ -25,7 +25,6 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/imgcodecs.hpp>
 
-#define assertm(exp, msg) assert(((void)msg, exp))
 using namespace std::chrono_literals;
 
 namespace agent {
@@ -251,59 +250,81 @@ void MassAgent::DestroyAgent() {
 }
 
 /* checks the buffers and creates a single data point from all the sensors */
-MASSDataType MassAgent::GenerateDataPoint() {
+MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
-	// if (!succ) {
-	// 	std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
-	// 	return datapoint;
-	// }
-	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
+#ifndef __RELEASE
+	if (!succ) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+		return datapoint;
+	}
+#endif
+	mask_cloud.AddFrontSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask();
 	// ---------------------------------------- creating target cloud ----------------------------------------
 	geom::SemanticCloud target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
-		// if (success) {
+#ifndef __RELEASE
+		if (!success) {
+			std::cout << "ERROR: agent " + std::to_string(id_)
+					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+			return datapoint;
+		}
+#endif
 		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
-		// } else {
-		// 	std::cout << "ERROR: agent " + std::to_string(id_)
-		// 			  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
-		// 	return datapoint;
-		// }
 	}
 	target_cloud.BuildKDTree();
 	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(vehicle_width_, vehicle_length_);
 	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
-	// if (!success) {
-	// 	std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
-	// 	return datapoint;
-	// }
+#ifndef __RELEASE
+	if (!success) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
+		return datapoint;
+	}
 	// filling the datapoint
-	datapoint.agent_id = id_;
-	#pragma omp parallel for
+#endif
+	datapoint.agent_id = agent_batch_index;
+	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
 		datapoint.front_rgb[i] = rgb_image.data[i];
 	}
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
 		datapoint.top_semseg[i] = semantic_bev.data[i];
 	}
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
 		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i];
 	}
-	#pragma omp parallel for
+	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::transform_length; ++i) {
 		datapoint.transform[i] = transform_.data()[i];
 	}
 	// AssertSize(0);
 	return datapoint;
+}
+
+/* moves the agent underground next to the ninja turtles */
+void MassAgent::HideAgent() {
+	carla::geom::Transform tf = vehicle_->GetTransform();
+	tf.location.z = -200;
+    transform_(2, 3) = -200;
+	vehicle_->SetTransform(tf);
+	// blocking until moved
+	do {
+		auto current_tf = vehicle_->GetTransform();
+		// if this is not enough, it just means I have a scientifically proven shit luck
+		if (std::abs(current_tf.location.z - tf.location.z) < 1e-2) {
+			break;
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
+	} while(true);
 }
 
 /* returns an image of the map */

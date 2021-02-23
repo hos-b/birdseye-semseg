@@ -1,79 +1,77 @@
-#include <chrono>
-#include <limits>
-#include <opencv2/imgcodecs.hpp>
 #include <thread>
+#include <chrono>
 #include <csignal>
-#include <iomanip>
 #include <future>
+#include <random>
+#include <algorithm>
+
 #include <ros/ros.h>
 #include <ros/package.h>
 
 #include "config/agent_config.h"
 #include "hdf5_api/hdf5_dataset.h"
 #include "mass_agent/mass_agent.h"
+#include "data_collection.h"
 
-#define RANDOM_SEED 135
-#define SECS_IN_HOUR 60 * 60
-#define SECS_IN_DAY 60 * 60 * 24
+#define __RELEASE
 
 using namespace std::chrono_literals;
-void inter(int signo);
-void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update);
+
+void SIGINT_handler(int signo);
+void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, float* avg_batch_time, bool* update);
 void AssertDataDimensions();
 std::string SecondsToString(uint32 seconds);
 
+
 int main(int argc, char **argv)
 {
+	// assertions, config & stats
 	AssertDataDimensions();
+	auto& config = CollectionConfig::GetConfig();
+	CollectionStats stats(config.minimum_cars, config.maximum_cars);
+	// ros init, signal handling
 	ros::init(argc, argv, "mass_data_collector");
 	std::shared_ptr<ros::NodeHandle> node_handle = std::make_shared<ros::NodeHandle>();
-	signal(SIGINT, inter);
-	bool debug_mode = false;
+	signal(SIGINT, SIGINT_handler);
+
 	// reading command line args --------------------------------------------------------------------------------
+	bool debug_mode = false;
 	size_t number_of_agents = 0;
-	size_t max_data_count = 0;
-	size_t data_count = 0;
-	if (argc == 2) {
+	size_t batch_count = 0;
+	if (argc == 1) {
+		number_of_agents = config.maximum_cars;
+	} else if (argc == 2) {
 		if (std::strcmp(argv[1], "--debug") == 0) {
 			number_of_agents = 1;
-			max_data_count = 1;
 			debug_mode = true;
 		} else {
-			number_of_agents = 1;
-			max_data_count = 100;
+			std::cout << "use --debug" << std::endl;
+			std::exit(EXIT_FAILURE);
 		}
-	} else if (argc == 3) {
-		number_of_agents = std::atoi(argv[2]);
-		max_data_count = 100;
-	} else if (argc ==  4) {
-		number_of_agents = std::atoi(argv[2]);
-		max_data_count = std::atoi(argv[3]);
 	} else {
-		std::cout << "use: rosrun mass_data_collector dataset_name <number of agents> <data count>" << std::endl;
+		std::cout << "use param/data_collection.yaml for conf" << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
-	std::string dset_name(argv[1]);
-	dset_name += ".hdf5";
-	srand(RANDOM_SEED);
-	ROS_INFO("starting data collection with %zu agent(s) for %zu iterations", number_of_agents, max_data_count);
+	srand(config.random_seed);
+	ROS_INFO("starting data collection with up to %zu agent(s) for %u iterations",
+			 number_of_agents, config.max_batch_count);
 	// dataset --------------------------------------------------------------------------------------------------
 	HDF5Dataset* dataset = nullptr;
 	if (!debug_mode) {
-		// /home/mass/data/
-		dataset = new HDF5Dataset("/home/hosein/data/" + dset_name, "dataset_1", mode::FILE_TRUNC | mode::DSET_CREAT,
-								  compression::NONE, 1, max_data_count + 32, 32, number_of_agents);
+		dataset = new HDF5Dataset(config.dataset_path, config.dataset_name,
+								  mode::FILE_TRUNC | mode::DSET_CREAT, compression::NONE, 1,
+								  (config.max_batch_count + 1) * config.maximum_cars, 32);
 	}
 	// CARLA setup ----------------------------------------------------------------------------------------------
 	agent::MassAgent agents[number_of_agents];
 	boost::shared_ptr<carla::client::Waypoint> random_pose;
-	auto world = agent::MassAgent::carla_client()->GetWorld();
 	// some timing stuff ----------------------------------------------------------------------------------------
 	float avg_batch_time = 0.0f;
 	bool update = false;
 	std::thread *time_thread = nullptr;
 	if (!debug_mode) {
-		time_thread = new std::thread(StatusThreadCallback, &data_count, 
-									  max_data_count, &avg_batch_time, &update);
+		time_thread = new std::thread(StatusThreadCallback, &batch_count, 
+									  config.max_batch_count, &avg_batch_time, &update);
 	}
 	// debugging ------------------------------------------------------------------------------------------------
 	if (debug_mode) {
@@ -82,43 +80,63 @@ int main(int argc, char **argv)
 		for (size_t i = 1; i < number_of_agents; ++i) {
 			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
-		agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, "/home/hosein/debugcloud.pcl");
+		agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, config.dataset_path + ".pcl");
 		ros::shutdown();
 	}
+	// random distribution & shuffling necessities --------------------------------------------------------------
+	std::mt19937 random_gen(config.random_seed);
+    std::uniform_int_distribution<> distrib(config.minimum_cars, config.maximum_cars);
+	std::vector<unsigned int> shuffled(number_of_agents);
+    std::iota(shuffled.begin(), shuffled.end(), 0);
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
-		std::future<MASSDataType> promise[number_of_agents];
-		// std::vector<MASSDataType> promise;
-		if (data_count == max_data_count) {
+		if (batch_count == config.max_batch_count) {
 			break;
 		}
-		auto batch_start = std::chrono::high_resolution_clock::now();
-		// chain randoming poses
-		random_pose = agents[0].SetRandomPose(config::town0_restricted_roads);
-		for (size_t i = 1; i < number_of_agents; ++i) {
-			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
+		// timing
+		auto batch_start_t = std::chrono::high_resolution_clock::now();
+		// randoming the batch size and shuffling the agents
+		unsigned int batch_size = distrib(random_gen);
+		stats.AddNewBatch(batch_size);
+    	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
+		// chain randoming poses for the chosen ones
+		random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
+		for (size_t i = 1; i < batch_size; ++i) {
+			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
-		// mandatory delay
-		std::this_thread::sleep_for(100ms);
+		// hiding the ones that didn't make it
+		for (size_t i = batch_size; i < number_of_agents; ++i) {
+			agents[shuffled[i]].HideAgent();
+		}
+		// mandatory delay because moving cars in carla is not a blocking call
+		std::this_thread::sleep_for(std::chrono::milliseconds(config.batch_delay_ms));
+
+		std::future<MASSDataType> promise[batch_size];
 		// gathering data (async)
-		for (unsigned int i = 0; i < number_of_agents; ++i) {
-			// promise.emplace_back(agents[i].GenerateDataPoint());
-			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[i]);
+		size_t agent_batch_index = 0;
+		for (unsigned int i = 0; i < batch_size; ++i) {
+			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[shuffled[i]], agent_batch_index++);
 		}
-		for (unsigned int i = 0; i < number_of_agents; ++i) {
+		for (unsigned int i = 0; i < batch_size; ++i) {
 			MASSDataType datapoint = promise[i].get();
 			dataset->AppendElement(&datapoint);
 		}
 		// timing stuff
-		++data_count;
-		auto batch_end = std::chrono::high_resolution_clock::now();
-		std::chrono::duration<float> batch_duration = batch_end - batch_start;
-		avg_batch_time = avg_batch_time + (1.0f / static_cast<float> (data_count)) *
+		++batch_count;
+		auto batch_end_t = std::chrono::high_resolution_clock::now();
+		std::chrono::duration<float> batch_duration = batch_end_t - batch_start_t;
+		avg_batch_time = avg_batch_time + (1.0f / static_cast<float>(batch_count)) *
 										  (batch_duration.count() - avg_batch_time);
 		update = true;
 	}
 	if (!debug_mode) {
 		std::cout << "\ndone, closing dataset..." << std::endl;
+		auto batch_histogram = stats.AsVector();
+		dataset->AddU32Attribute(&batch_histogram[0], batch_histogram.size(), "batch_histogram");
+		unsigned int data[] = {config.maximum_cars};
+		dataset->AddU32Attribute(data, 1, "max_agent_count");
+		data[0] = config.minimum_cars;
+		dataset->AddU32Attribute(data, 1, "min_agent_count");
 		dataset->Close();
 		time_thread->join();
 	}
@@ -126,18 +144,19 @@ int main(int argc, char **argv)
 }
 
 /* keybord interrupt handler */
-void inter(int signo) {
+void SIGINT_handler(int signo) {
 	(void)signo;
 	std::cout << "\nshutting down. please wait" << std::endl;
 	ros::shutdown();
 }
+
 /* prints the status of data collection */
-void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_batch_time, bool* update) {
+void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, float* avg_batch_time, bool* update) {
 	uint32 remaining_s = 0;
 	uint32 elapsed_s = 0;
 	std::string msg;
 	while (ros::ok()) {
-		msg = "\rgathering " + std::to_string(*data_count + 1) + "/" + std::to_string(max_data_count) +
+		msg = "\rgathering " + std::to_string(*batch_count + 1) + "/" + std::to_string(max_batch_count) +
 			  ", E: " + SecondsToString(elapsed_s);
 		if (*avg_batch_time == 0) {
 			msg += ", estimating remaining time ...";
@@ -150,16 +169,19 @@ void StatusThreadCallback(size_t* data_count, size_t max_data_count, float* avg_
 		std::this_thread::sleep_for(1s);
 		elapsed_s += 1;
 		if (*update) {
-			if (*data_count == max_data_count) {
+			if (*batch_count == max_batch_count) {
 				break;
 			}
 			*update = false;
-			remaining_s = (*avg_batch_time) * (max_data_count - (*data_count));
+			remaining_s = (*avg_batch_time) * (max_batch_count - (*batch_count));
 		}
 	}
 }
+
 /* returns human readable string for the given period in seconds */
 std::string SecondsToString(uint32 period_in_secs) {
+	static unsigned int SECS_IN_HOUR = 60 * 60;
+	static unsigned int SECS_IN_DAY = 60 * 60 * 24;
 	uint32 days = 0;
 	uint32 hours = 0;
 	uint32 minutes = 0;
@@ -178,6 +200,7 @@ std::string SecondsToString(uint32 period_in_secs) {
 	return std::to_string(days) + "d" + std::to_string(hours) + "h" +
 		   std::to_string(minutes) + "m" + std::to_string(period_in_secs) + "s";
 }
+
 /* asserts that the dataset image size is equal to that of the gathered samples */
 void AssertDataDimensions() {
 	std::string yaml_path = ros::package::getPath("mass_data_collector")
