@@ -1,15 +1,15 @@
 import os
-import h5py
+import torch
 import matplotlib.pyplot as plt
 
 from data.color_map import carla_semantics_to_cityscapes_rgb, our_semantics_to_cityscapes_rgb
-from data.dataloader import get_dataloader
+from data.dataset import MassHDF5
 from data.mask_warp import get_single_aggregate_mask
 from data.config import SemanticCloudConfig
 from data.utils import squeeze_all
 
 DATASET_DIR = "/home/hosein/data"
-PKG_NAME = "testes.hdf5"
+PKG_NAME = "dataset.hdf5"
 classes = 'ours'
 
 
@@ -21,26 +21,21 @@ NEW_SIZE = (256, 205)
 CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
-# opening hdf5 file for metadata
-print("opening {}".format(PKG_NAME))
-file_path = os.path.join(DATASET_DIR, PKG_NAME)
-hdf5 = h5py.File(file_path, "r")
-dataset = hdf5["dataset_1"]
-agent_count = dataset.attrs["agent_count"][0]
-print(f"found {(dataset.shape[0] - 1) // agent_count} samples")
-print(f"agent_count attribute: {agent_count}")
 
 # opening hdf5 file for the dataset
-loader = get_dataloader(file_path, batch_size=1, size=NEW_SIZE, classes=classes)
+print("opening {}".format(PKG_NAME))
+file_path = os.path.join(DATASET_DIR, PKG_NAME)
+dset = MassHDF5(dataset='town-01', file_path=file_path, size=NEW_SIZE, classes=classes)
+loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_workers=1)
 
 # plot stuff
-rows = agent_count
 columns = 6
 for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
     rgbs, semsegs, masks, car_transforms = squeeze_all(rgbs, semsegs, masks, car_transforms)
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))
-    for i in range(agent_count):
+    rows = rgbs.shape[0]
+    for i in range(rows):
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
         mask = ((masks[i, ...] / 255.0).unsqueeze(2)).numpy().squeeze()
@@ -77,8 +72,7 @@ for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         # aggregating the masks
         ax.append(fig.add_subplot(rows, columns, i * columns + 5))
         ax[-1].set_title(f"agg_masked_{i}")
-        aggregate_mask = get_single_aggregate_mask(masks.squeeze(), car_transforms.squeeze(), i, \
-                                                   PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
+        aggregate_mask = get_single_aggregate_mask(masks, car_transforms, i, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
         aggregate_mask = aggregate_mask.squeeze().numpy()
         plt.imshow(aggregate_mask)
 
@@ -89,5 +83,3 @@ for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
         plt.imshow(semantic_img)
 
     plt.show()
-
-hdf5.close()

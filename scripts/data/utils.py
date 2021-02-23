@@ -21,7 +21,7 @@ def squeeze_all(rgbs, labels, masks, transforms):
     """
     squeezes all given parameters
     """
-    return rgbs.squeeze(), labels.squeeze(), masks.squeeze(), transforms.squeeze()
+    return rgbs.squeeze(0), labels.squeeze(0), masks.squeeze(0), transforms.squeeze(0)
 
 def get_matplotlib_image(tensor_img: torch.Tensor, figsize=(4, 5)):
     """

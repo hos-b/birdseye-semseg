@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # from data.color_map import semantic_to_cityscapes
-from data.dataloader import get_datasets
+from data.dataset import get_datasets
 from data.config import SemanticCloudConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.mask_warp import get_all_aggregate_masks
@@ -29,7 +29,7 @@ PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 # dataset
 device = torch.device('cpu')
 file_path = os.path.join(DATASET_DIR, PKG_NAME)
-train_set, test_set = get_datasets(file_path, device=device, batch_size=1, split=(0.95, 0.05), size=NEW_SIZE, classes='ours')
+train_set, test_set = get_datasets(file_path, device=device, split=(0.95, 0.05), size=NEW_SIZE, classes='ours')
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=1)
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
 
