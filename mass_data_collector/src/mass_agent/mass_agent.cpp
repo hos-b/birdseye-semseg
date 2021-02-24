@@ -264,7 +264,7 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 		return datapoint;
 	}
 #endif
-	mask_cloud.AddFrontSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
+	mask_cloud.AddFilteredSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask();
 	// ---------------------------------------- creating target cloud ----------------------------------------

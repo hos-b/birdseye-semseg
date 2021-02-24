@@ -40,8 +40,8 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 										  cv::Mat semantic,
 										  cv::Mat depth) {
 	size_t old_size = target_cloud_.points.size();
-	// resizing + omp critical section is definitely worse
 	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
+	// resizing + omp critical|atomic is definitely worse
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic.rows; ++i) {
 		for (int j = 0; j < semantic.cols; ++j) {
@@ -69,8 +69,10 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 	target_cloud_.is_dense = true;
 }
 
-/* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud  */
-void SemanticCloud::AddFrontSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+/* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud.
+   the points are filtered so that they don't overlap and only the point with the highest z counts. necessary
+   for FoV mask calculation */
+void SemanticCloud::AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 										  	   cv::Mat semantic,
 										  	   cv::Mat depth) {
 	auto xy_hash = [](const std::pair<double, double>& pair) -> size_t {
@@ -79,6 +81,7 @@ void SemanticCloud::AddFrontSemanticDepthImage(std::shared_ptr<geom::CameraGeome
 	std::unordered_map<std::pair<double, double>, double, decltype(xy_hash)> xy_map(150000, xy_hash);
 	size_t old_size = target_cloud_.points.size();
 	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
+	// omp + any mutex type degrades perf
 	for (int i = 0; i < semantic.rows; ++i) {
 		for (int j = 0; j < semantic.cols; ++j) {
 			auto label = semantic.at<uchar>(i, j);
@@ -98,7 +101,6 @@ void SemanticCloud::AddFrontSemanticDepthImage(std::shared_ptr<geom::CameraGeome
 			if (it != xy_map.end() && it->second > pixel_3d_loc.z()) {
 				continue;
 			}
-			// #pragma omp critical (set)
 			xy_map[xy_pair] = pixel_3d_loc.z();
 			pcl::PointXYZL point;
 			point.label = label;
@@ -111,7 +113,6 @@ void SemanticCloud::AddFrontSemanticDepthImage(std::shared_ptr<geom::CameraGeome
 	target_cloud_.width = target_cloud_.points.size();
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
-	// std::cout << "\nfiltered: " << filtered << ", oob: " << out_of_bounds << ", repetitive: " << repetitive << std::endl;
 }
 
 /* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
@@ -120,22 +121,21 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 										  cv::Mat depth,
 										  Eigen::Matrix4d& transform) {
 	size_t old_size = target_cloud_.points.size();
-	size_t index = old_size;
-	target_cloud_.points.resize(old_size + (semantic.rows * semantic.cols));
+	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
 	for (int i = 0; i < semantic.rows; ++i) {
 		uchar* pixel_label = semantic.ptr<uchar>(i);
 		float* pixel_depth = depth.ptr<float>(i);
 		for (int j = 0; j < semantic.cols; ++j) {
 			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]);
-			target_cloud_[index].label = pixel_label[j];
-			target_cloud_[index].x = pixel_3d_loc.x();
-			target_cloud_[index].y = pixel_3d_loc.y();
-			target_cloud_[index].z = pixel_3d_loc.z();
-			++index;
+			pcl::PointXYZL point;
+			point.label = pixel_label[j];
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			target_cloud_.points.emplace_back(point);
 		}
 	}
-	target_cloud_.points.resize(index);
-	target_cloud_.width = index;
+	target_cloud_.width = target_cloud_.points.size();
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
 }
