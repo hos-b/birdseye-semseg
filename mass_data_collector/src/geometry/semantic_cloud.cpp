@@ -40,7 +40,7 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 										  cv::Mat semantic,
 										  cv::Mat depth) {
 	size_t old_size = target_cloud_.points.size();
-	// size_t row_count = semantic.rows;
+	// resizing + omp critical section is definitely worse
 	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic.rows; ++i) {
@@ -64,11 +64,9 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 			target_cloud_.points.emplace_back(point);
 		}
 	}
-	// target_cloud_.points.resize(index);
 	target_cloud_.width = target_cloud_.points.size();
 	target_cloud_.height = 1;
 	target_cloud_.is_dense = true;
-	// std::cout << "\nfiltered: " << filtered << ", oob: " << out_of_bounds << ", repetitive: " << repetitive << std::endl;
 }
 
 /* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud  */
