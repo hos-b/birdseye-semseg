@@ -292,23 +292,19 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 	// filling the datapoint
 #endif
 	datapoint.agent_id = agent_batch_index;
-	// #pragma omp parallel for
+	// omp for does not improve performance, may even degrade
 	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
 		datapoint.front_rgb[i] = rgb_image.data[i];
 	}
-	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
 		datapoint.top_semseg[i] = semantic_bev.data[i];
 	}
-	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
 		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i];
 	}
-	// #pragma omp parallel for
 	for (size_t i = 0; i < statics::transform_length; ++i) {
 		datapoint.transform[i] = transform_.data()[i];
 	}
-	// AssertSize(0);
 	return datapoint;
 }
 
