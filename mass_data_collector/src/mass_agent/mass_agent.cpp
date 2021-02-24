@@ -27,6 +27,8 @@
 
 using namespace std::chrono_literals;
 
+#define __RELEASE
+
 namespace agent {
 /* static vector of all the active agents */
 std::vector<const MassAgent*> MassAgent::agents_ = {};

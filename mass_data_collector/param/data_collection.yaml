@@ -3,8 +3,8 @@ dataset:
   name: 'town-01'
 
 collection:
-  minimum_cars: 1
-  maximum_cars: 6
+  minimum_cars: 3
+  maximum_cars: 3
   random_seed: 515
   max_batch_count: 10
   # mandatory delay after each batch because moving cars in carla is not a blocking call

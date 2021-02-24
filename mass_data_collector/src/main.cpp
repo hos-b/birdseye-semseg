@@ -13,8 +13,6 @@
 #include "mass_agent/mass_agent.h"
 #include "data_collection.h"
 
-#define __RELEASE
-
 using namespace std::chrono_literals;
 
 void SIGINT_handler(int signo);
