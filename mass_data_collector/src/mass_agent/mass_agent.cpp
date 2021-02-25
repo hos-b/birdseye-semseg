@@ -30,15 +30,13 @@ using namespace std::chrono_literals;
 #define __RELEASE
 
 namespace agent {
-/* static vector of all the active agents */
-std::vector<const MassAgent*> MassAgent::agents_ = {};
 
 /* constructor */
 MassAgent::MassAgent() {
 	// initialize some stuff & things
 	transform_.setIdentity();
-	id_ = agents_.size();
-	agents_.emplace_back(this);
+	id_ = agents().size();
+	agents().emplace_back(this);
 	try {
 		auto world = carla_client()->GetWorld();
 		auto spawn_points = world.GetMap()->GetRecommendedSpawnPoints();
@@ -145,11 +143,13 @@ ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
 	return candidates;
 }
 
-/* places the agent around the given waypoint and also makes sure it doesn't collide with others [[blocking]] */
+/* places the agent around the given waypoint and also makes sure it doesn't collide with others [[blocking]] 
+   the indices of the other agents must be given and only up until `max_index will be considered */
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-						 const std::unordered_map<int, bool>& restricted_roads,
-						 size_t knn_pts) {
+						 size_t knn_pts, const MassAgent* agents,
+				  		 std::vector<unsigned int> indices, unsigned int max_index,
+						 const std::unordered_map<int, bool>& restricted_roads) {
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
 	auto initial_expansion = ExpandWayoint(initial_wp, vehicle_length_ * 1.35);
@@ -167,7 +167,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		}
 	}
 	boost::shared_ptr<carla::client::Waypoint> next_wp;
-	carla::geom::Transform tf;
+	carla::geom::Transform target_tf;
 	bool admissable = false;
 	while (!admissable) {
 		admissable = true;
@@ -188,37 +188,39 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 			admissable = false;
 			continue;
 		}
-		tf = next_wp->GetTransform();
-		for (const auto *agent : agents_) {
+		target_tf = next_wp->GetTransform();
+		for (unsigned int i = 0; i < max_index; ++i) {
+			const MassAgent* agent = &agents[indices[i]];
+			// technically impossible to hit this if
 			if (agent->id_ == id_) {
 				continue;
 			}
-			auto distance = std::sqrt((agent->carla_x() - tf.location.x) *
-									  (agent->carla_x() - tf.location.x) +
-									  (agent->carla_y() - tf.location.y) *
-									  (agent->carla_y() - tf.location.y) +
-									  (agent->carla_z() - tf.location.z) *
-									  (agent->carla_z() - tf.location.z));
-			if (distance < vehicle_length_ * 1.1) {
+			auto distance = std::sqrt((agent->carla_x() - target_tf.location.x) *
+									  (agent->carla_x() - target_tf.location.x) +
+									  (agent->carla_y() - target_tf.location.y) *
+									  (agent->carla_y() - target_tf.location.y) +
+									  (agent->carla_z() - target_tf.location.z) *
+									  (agent->carla_z() - target_tf.location.z));
+			if (distance < vehicle_length_ * 1.2) {
 				admissable = false;
 				continue;
 			}
 		}
 	}
 	Eigen::Matrix3d rot;
-	rot = Eigen::AngleAxisd(-tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
-		  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
-		  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
-    Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
+	rot = Eigen::AngleAxisd(-target_tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+		  Eigen::AngleAxisd(-target_tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+		  Eigen::AngleAxisd(-target_tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
+    Eigen::Vector3d trans(target_tf.location.x, -target_tf.location.y, target_tf.location.z);
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
-	vehicle_->SetTransform(tf);
+	vehicle_->SetTransform(target_tf);
 	// blocking until moved
 	do {
 		auto current_tf = vehicle_->GetTransform();
 		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(current_tf.location.x - tf.location.x) +
-			std::abs(current_tf.location.y - tf.location.y) < 1e-2) {
+		if (std::abs(current_tf.location.x - target_tf.location.x) +
+			std::abs(current_tf.location.y - target_tf.location.y) < 1e-2) {
 			break;
 		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
@@ -565,6 +567,12 @@ geom::SemanticCloud::Settings& MassAgent::sc_settings() {
 		semantic_cloud_settings.kd_max_leaf = base["kd_max_leaf"].as<unsigned int>();
 	});
 	return semantic_cloud_settings;
+}
+
+/* static function that returns a vector of all active agents */
+std::vector<const MassAgent*>& MassAgent::agents() {
+	static std::vector<const MassAgent*> agents;
+	return agents;
 }
 
 /* used to explore the map to find the road ID of corrupt samples */

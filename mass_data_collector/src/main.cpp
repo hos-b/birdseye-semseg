@@ -16,10 +16,9 @@
 using namespace std::chrono_literals;
 
 void SIGINT_handler(int signo);
-void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* stage,
-					      unsigned int* done, unsigned int agent_cnt, float* avg_batch_time, bool* update);
+void StatusThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*);
 void AssertDataDimensions();
-std::string SecondsToString(uint32 seconds);
+std::string SecondsToString(uint32);
 
 
 int main(int argc, char **argv)
@@ -41,7 +40,7 @@ int main(int argc, char **argv)
 		number_of_agents = config.maximum_cars;
 	} else if (argc == 2) {
 		if (std::strcmp(argv[1], "--debug") == 0) {
-			number_of_agents = 1;
+			number_of_agents = 3;
 			debug_mode = true;
 		} else {
 			std::cout << "use --debug" << std::endl;
@@ -68,18 +67,22 @@ int main(int argc, char **argv)
 	float avg_batch_time = 0.0f;
 	bool update = false;
 	std::thread *time_thread = nullptr;
-	char stage = 'r';
+	char state = 'r';
+	unsigned int batch_size = 0;
 	unsigned int agents_done = 0;
 	if (!debug_mode) {
 		time_thread = new std::thread(StatusThreadCallback, &batch_count,  config.max_batch_count,
-									  &stage, &agents_done, number_of_agents, &avg_batch_time, &update);
+									  &state, &agents_done, &batch_size, &avg_batch_time, &update);
 	}
 	// debugging ------------------------------------------------------------------------------------------------
 	if (debug_mode) {
+		std::vector<unsigned int> indices(number_of_agents);
+    	std::iota(indices.begin(), indices.end(), 0);
 		std::cout << "creating uniform pointcloud" << std::endl;
 		random_pose = agents[0].SetRandomPose(config::town0_restricted_roads);
 		for (size_t i = 1; i < number_of_agents; ++i) {
-			random_pose = agents[i].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
+			random_pose = agents[i].SetRandomPose(random_pose, 30, agents, indices, i,
+												  config::town0_restricted_roads);
 		}
 		agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, config.dataset_path + ".pcl");
 		ros::shutdown();
@@ -91,25 +94,27 @@ int main(int argc, char **argv)
     std::iota(shuffled.begin(), shuffled.end(), 0);
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
-		agents_done = 0;
 		if (batch_count == config.max_batch_count) {
 			break;
 		}
 		// timing
 		auto batch_start_t = std::chrono::high_resolution_clock::now();
 		// randoming the batch size and shuffling the agents
-		stage = 'r'; // randoming
-		unsigned int batch_size = distrib(random_gen);
+		batch_size = distrib(random_gen);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
 		// chain randoming poses for the chosen ones
+		state = 'p';
+		agents_done = 0;
 		random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
-		stage = 'p'; // positioning
+		agents_done = 1;
 		for (size_t i = 1; i < batch_size; ++i) {
-			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
+			agents_done += 1;
+			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, 30, agents, shuffled, i,
+															config::town0_restricted_roads);
 		}
 		// hiding the ones that didn't make it
-		stage = 'h'; // hiding
+		state = 'h'; // hiding
 		for (size_t i = batch_size; i < number_of_agents; ++i) {
 			agents[shuffled[i]].HideAgent();
 		}
@@ -118,19 +123,22 @@ int main(int argc, char **argv)
 
 		std::future<MASSDataType> promise[batch_size];
 		// gathering data (async)
-		stage = 'g';
+		agents_done = 0;
+		state = 'g';
 		size_t agent_batch_index = 0;
 		for (unsigned int i = 0; i < batch_size; ++i) {
+			agents_done += 1;
 			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[shuffled[i]], agent_batch_index++);
 		}
-		stage = 's'; // saving
+		state = 's'; // saving
+		agents_done = 0;
 		for (unsigned int i = 0; i < batch_size; ++i) {
 			agents_done += 1;
 			MASSDataType datapoint = promise[i].get();
 			dataset->AppendElement(&datapoint);
 		}
 		// timing stuff
-		stage = 't';
+		state = 't';
 		batch_count += 1;
 		auto batch_end_t = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<float> batch_duration = batch_end_t - batch_start_t;
@@ -160,14 +168,14 @@ void SIGINT_handler(int signo) {
 }
 
 /* prints the status of data collection */
-void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* stage,
-					      unsigned int* done, unsigned int agent_cnt, float* avg_batch_time, bool* update) {
+void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* state, unsigned int* done,
+						  unsigned int* batch_size, float* avg_batch_time, bool* update) {
 	uint32 remaining_s = 0;
 	uint32 elapsed_s = 0;
 	std::string msg;
 	while (ros::ok()) {
 		msg = "\rgathering " + std::to_string(*batch_count + 1) + "/" + std::to_string(max_batch_count) +
-			  ", S:" + *stage + ", A:" + std::to_string(*done) + "/" + std::to_string(agent_cnt) + ", E: " +
+			  ", S:" + *state + ":" + std::to_string(*done) + "/" + std::to_string(*batch_size) + ", E: " +
 			  SecondsToString(elapsed_s);
 		if (*avg_batch_time == 0) {
 			msg += ", estimating remaining time ...";

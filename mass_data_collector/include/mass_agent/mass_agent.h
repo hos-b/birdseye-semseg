@@ -46,8 +46,9 @@ public:
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(const std::unordered_map<int, bool>& restricted_roads);
 	boost::shared_ptr<carla::client::Waypoint>
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-				  const std::unordered_map<int, bool>& restricted_roads,
-				  size_t knn_pts = 0);
+				  size_t knn_pts, const MassAgent* agents,
+				  std::vector<unsigned int> indices, unsigned int max_index,
+				  const std::unordered_map<int, bool>& restricted_roads);
 	void HideAgent();
 	void RandomizeColor();
 	MASSDataType GenerateDataPoint(unsigned int agent_batch_index);
@@ -59,6 +60,7 @@ public:
 	
 	// static stuff
 	static std::unique_ptr<cc::Client>& carla_client();
+	static std::vector<const MassAgent*>& agents();
 	static void DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path);
 
 	// debug functions
@@ -88,7 +90,6 @@ private:
 	void InitializeKDTree();
 	void AssertSize(size_t size);
 	static std::vector<std::string> GetBlueprintNames();
-	static std::vector<const MassAgent*> agents_;
 	geom::SemanticCloud::Settings& sc_settings();
 
 
