@@ -17,9 +17,9 @@ from model.mass_cnn import MassCNN
 
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
-DATASET_DIR = '/home/hosein'
+DATASET_DIR = '/home/hosein/data'
+PKG_NAME = "dataset.hdf5"
 TENSORBOARD_DIR = './tensorboard'
-PKG_NAME = "tp.hdf5"
 
 # image size and center coordinates
 NEW_SIZE = (256, 205)
@@ -29,7 +29,7 @@ PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 # dataset
 device = torch.device('cpu')
 file_path = os.path.join(DATASET_DIR, PKG_NAME)
-train_set, test_set = get_datasets(file_path, device=device, split=(0.95, 0.05), size=NEW_SIZE, classes='ours')
+train_set, test_set = get_datasets(file_path, device=device, split=(0.8, 0.2), size=NEW_SIZE, classes='ours')
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=1)
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
 
@@ -55,32 +55,32 @@ for ep in range(epochs):
     total_valid_m_loss = 0.0
     total_valid_s_loss = 0.0
     # training
-    # model.train()
-    # for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
-    #     print(f'\repoch: {ep}/{epochs}, training batch: {batch_idx} / {len(train_loader)}', end='')
-    #     # simulate connection drops
-    #     rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, drop_prob)
-    #     optimizer.zero_grad()
-    #     # mask aggregation for labels
-    #     aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
-    #                                               NEW_SIZE[1], CENTER[0], CENTER[1])
-    #     mask_preds, sseg_preds = model(rgbs, car_transforms)
-    #     # masked loss
-    #     m_loss = torch.mean(mask_loss(mask_preds.squeeze(), masks) * aggregate_masks, dim=(0, 1, 2))
-    #     s_loss = torch.mean(semseg_loss(sseg_preds, labels) * masks, dim=(0, 1, 2))
-    #     (m_loss + s_loss).backward()
-    #     optimizer.step()
-    #     batch_train_m_loss = m_loss.item()
-    #     batch_train_s_loss = s_loss.item()
-    #     writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
-    #     writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
-    #     total_train_m_loss += batch_train_m_loss
-    #     total_train_s_loss += batch_train_s_loss
-    #     break
+    model.train()
+    for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+        print(f'\repoch: {ep}/{epochs}, training batch: {batch_idx} / {len(train_loader)}', end='')
+        # simulate connection drops
+        rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, drop_prob)
+        optimizer.zero_grad()
+        import pdb; pdb.set_trace()
+        mask_preds, sseg_preds = model(rgbs, car_transforms)
+        # masked loss
+        aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
+                                                  NEW_SIZE[1], CENTER[0], CENTER[1])
+        m_loss = torch.mean(mask_loss(mask_preds.squeeze(), masks) * aggregate_masks, dim=(0, 1, 2))
+        s_loss = torch.mean(semseg_loss(sseg_preds, labels) * masks, dim=(0, 1, 2))
+        (m_loss + s_loss).backward()
+        optimizer.step()
+        batch_train_m_loss = m_loss.item()
+        batch_train_s_loss = s_loss.item()
+        writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
+        writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
+        total_train_m_loss += batch_train_m_loss
+        total_train_s_loss += batch_train_s_loss
+        break
 
-    # writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
-    # writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
-    # print(f'\nepoch loss: {total_train_m_loss} mask, {total_train_s_loss} segmentation')
+    writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
+    writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
+    print(f'\nepoch loss: {total_train_m_loss} mask, {total_train_s_loss} segmentation')
 
     # validation
     model.eval()

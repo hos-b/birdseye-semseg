@@ -8,10 +8,10 @@ from data.config import SemanticCloudConfig
 
 """
 input --> downsample --> bottleneck --------
-            |                               |
-            |                                --> aggregation layer ---> total mask, total prediction [loss #2]
-            |                                           ^   ^
-             --> mask prediction [loss #1] -------------|   |
+            |             |                 |
+            |             x                 --> aggregation layer ---> total mask, total prediction [loss #2]
+            |             |                             ^   ^
+             -->   mask_pred_mid -----> mask_pred ------|   |
                                                         |   |
                  transform -----------------------------    |
                                                             |
@@ -27,26 +27,30 @@ class MassCNN(torch.nn.Module):
         self.output_size = output_size
         self.downsample = LearningToDownsample(in_channels=32, mid_channels=48, out_channels=64)
         # 3 x 3 stages of linear bottleneck for feature compression
-        self.compression = nn.Sequential(
+        self.compression_l1 = nn.Sequential(
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=2, skip_en=False),
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
-            # -----------------------------------------------------------------------------------------------
+            # ---------------------------------------------------------------------------------------------
             LinearBottleneck(in_channels=64, out_channels=96, expansion=4, stride=2, skip_en=False),
             LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
-            # # ---------------------------------------------------------------------------------------------
+            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
+        )
+            # ---------------------------------------------------------------------------------------------
+        self.compression_l2 = nn.Sequential(
             LinearBottleneck(in_channels= 96, out_channels=128, expansion=4, stride=2, skip_en=False),
             LinearBottleneck(in_channels=128, out_channels=128, expansion=4, stride=1, skip_en=True),
             LinearBottleneck(in_channels=128, out_channels=128, expansion=4, stride=1, skip_en=True),
         )
-        # 2 x 2 stages of linear bottleneck for fov estimation
-        self.mask_prediction = nn.Sequential(
+        self.mask_prediction_l1 = nn.Sequential(
+            # 2 x 2 stages of linear bottleneck for fov estimation
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=2),
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
             # ----------------------------------------------------------------------
             LinearBottleneck(in_channels=64, out_channels=96, expansion=4, stride=2),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
+        )
+        self.mask_prediction_l2 = nn.Sequential(
             # DSConv with sigmoid activation + average pooling for size
             nn.Conv2d(in_channels=96, out_channels=96, kernel_size=(3, 6), padding=1, groups=96, bias=False),
             nn.AdaptiveAvgPool2d(self.output_size),
@@ -84,20 +88,23 @@ class MassCNN(torch.nn.Module):
         """
         # [A, 64, 241, 321]
         hi_res_features = self.downsample(rgbs)
+        # [3, 96, 239, 319]
+        latent_compressed_features = self.compression_l1(hi_res_features)
+        # [3, 96, 239, 319]
+        latent_mask_prediction = self.mask_prediction_l1(hi_res_features)
         # [A, 128, 238, 318]
-        compressed_features = self.compression(hi_res_features)
+        compressed_features = self.compression_l2(latent_compressed_features *
+                                                  latent_mask_prediction)
         # [A,   1, 256, 206]
-        predicted_masks = self.mask_prediction(hi_res_features)
-        # [A, 128, 238, 318]
-        aggregated_features = self.aggregate_data(compressed_features,
-                                                  predicted_masks,
-                                                  transforms)
+        predicted_masks = self.mask_prediction_l2(latent_mask_prediction)
 
+        # [A, 128, 238, 318]
+        aggregated_features = self.aggregate_data(compressed_features, transforms)
         # [A, 128, 256, 205]
         pooled_features = self.pyramid_pooling(aggregated_features, self.output_size)
         return predicted_masks, self.classifier(pooled_features)
     
-    def aggregate_data(self, compressed_features, predicted_masks, transforms):
+    def aggregate_data(self, compressed_features, transforms):
         """
         warps compressed features into the view of each agent, before pooling 
         the results
@@ -116,6 +123,7 @@ class MassCNN(torch.nn.Module):
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
 
         return aggregated_features
+        
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
