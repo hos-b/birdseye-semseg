@@ -110,7 +110,7 @@ int main(int argc, char **argv)
 		agents_done = 1;
 		for (size_t i = 1; i < batch_size; ++i) {
 			agents_done += 1;
-			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, 30, agents, shuffled, i,
+			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, 32, agents, shuffled, i,
 															config::town0_restricted_roads);
 		}
 		// hiding the ones that didn't make it

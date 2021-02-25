@@ -410,7 +410,7 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 
 /* initializes waypoints and builds a kd index on top of them */
 void MassAgent::InitializeKDTree() {
-	auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(1.0);
+	auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(2.0);
 	kd_points_.insert(kd_points_.begin(), waypoints.begin(), waypoints.end());
 	kd_tree_ = std::make_unique<WaypointKDTree>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(20));
 	kd_tree_->buildIndex();

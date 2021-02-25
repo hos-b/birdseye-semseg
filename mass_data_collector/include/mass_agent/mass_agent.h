@@ -90,7 +90,7 @@ private:
 	void InitializeKDTree();
 	void AssertSize(size_t size);
 	static std::vector<std::string> GetBlueprintNames();
-	geom::SemanticCloud::Settings& sc_settings();
+	static geom::SemanticCloud::Settings& sc_settings();
 
 
 	// state
