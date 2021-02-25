@@ -1,19 +1,14 @@
 #include "geometry/semantic_cloud.h"
-#include "boost/algorithm/string/erase.hpp"
 #include "config/agent_config.h"
 #include "config/geom_config.h"
 
-#include <bits/stdint-uintn.h>
 #include <cmath>
-#include <functional>
-#include <deque>
+#include <tuple>
 #include <opencv2/core/hal/interface.h>
 #include <opencv2/core/matx.hpp>
 #include <opencv2/core/types.hpp>
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
-#include <tuple>
-#include <queue>
 #include <pcl/io/pcd_io.h>
 
 namespace geom
@@ -24,6 +19,8 @@ SemanticCloud::SemanticCloud(SemanticCloud::Settings settings) {
 	kd_tree_ = nullptr;
 	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
 	pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x) / static_cast<double>(cfg_.image_rows);
+	target_cloud_.height = 1;
+	target_cloud_.is_dense = true;
 }
 
 /* destructor: cleans containers */
@@ -65,8 +62,6 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 		}
 	}
 	target_cloud_.width = target_cloud_.points.size();
-	target_cloud_.height = 1;
-	target_cloud_.is_dense = true;
 }
 
 /* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud.
@@ -83,13 +78,15 @@ void SemanticCloud::AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGe
 	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
 	// omp + any mutex type degrades perf
 	for (int i = 0; i < semantic.rows; ++i) {
+		uchar* pixel_label = semantic.ptr<uchar>(i);
+		float* pixel_depth = depth.ptr<float>(i);
 		for (int j = 0; j < semantic.cols; ++j) {
-			auto label = semantic.at<uchar>(i, j);
+			auto label = pixel_label[j];
 			// filter if it belongs to a traffic light or pole
 			if (config::fileterd_semantics.at(label)) {
 				continue;
 			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), pixel_depth[j]);
 			// triggers a lot
 			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
 				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
@@ -111,8 +108,6 @@ void SemanticCloud::AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGe
 		}
 	}
 	target_cloud_.width = target_cloud_.points.size();
-	target_cloud_.height = 1;
-	target_cloud_.is_dense = true;
 }
 
 /* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
@@ -136,8 +131,6 @@ void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> 
 		}
 	}
 	target_cloud_.width = target_cloud_.points.size();
-	target_cloud_.height = 1;
-	target_cloud_.is_dense = true;
 }
 
 /* removes overlapping or invisible points for the target cloud. initializes kd tree.
