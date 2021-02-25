@@ -16,7 +16,8 @@
 using namespace std::chrono_literals;
 
 void SIGINT_handler(int signo);
-void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, float* avg_batch_time, bool* update);
+void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* stage,
+					      unsigned int* done, unsigned int agent_cnt, float* avg_batch_time, bool* update);
 void AssertDataDimensions();
 std::string SecondsToString(uint32 seconds);
 
@@ -67,9 +68,11 @@ int main(int argc, char **argv)
 	float avg_batch_time = 0.0f;
 	bool update = false;
 	std::thread *time_thread = nullptr;
+	char stage = 'r';
+	unsigned int agents_done = 0;
 	if (!debug_mode) {
-		time_thread = new std::thread(StatusThreadCallback, &batch_count, 
-									  config.max_batch_count, &avg_batch_time, &update);
+		time_thread = new std::thread(StatusThreadCallback, &batch_count,  config.max_batch_count,
+									  &stage, &agents_done, number_of_agents, &avg_batch_time, &update);
 	}
 	// debugging ------------------------------------------------------------------------------------------------
 	if (debug_mode) {
@@ -88,21 +91,25 @@ int main(int argc, char **argv)
     std::iota(shuffled.begin(), shuffled.end(), 0);
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
+		agents_done = 0;
 		if (batch_count == config.max_batch_count) {
 			break;
 		}
 		// timing
 		auto batch_start_t = std::chrono::high_resolution_clock::now();
 		// randoming the batch size and shuffling the agents
+		stage = 'r'; // randoming
 		unsigned int batch_size = distrib(random_gen);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
 		// chain randoming poses for the chosen ones
 		random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
+		stage = 'p'; // positioning
 		for (size_t i = 1; i < batch_size; ++i) {
 			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, config::town0_restricted_roads, 30);
 		}
 		// hiding the ones that didn't make it
+		stage = 'h'; // hiding
 		for (size_t i = batch_size; i < number_of_agents; ++i) {
 			agents[shuffled[i]].HideAgent();
 		}
@@ -111,16 +118,20 @@ int main(int argc, char **argv)
 
 		std::future<MASSDataType> promise[batch_size];
 		// gathering data (async)
+		stage = 'g';
 		size_t agent_batch_index = 0;
 		for (unsigned int i = 0; i < batch_size; ++i) {
 			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[shuffled[i]], agent_batch_index++);
 		}
+		stage = 's'; // saving
 		for (unsigned int i = 0; i < batch_size; ++i) {
+			agents_done += 1;
 			MASSDataType datapoint = promise[i].get();
 			dataset->AppendElement(&datapoint);
 		}
 		// timing stuff
-		++batch_count;
+		stage = 't';
+		batch_count += 1;
 		auto batch_end_t = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<float> batch_duration = batch_end_t - batch_start_t;
 		avg_batch_time = avg_batch_time + (1.0f / static_cast<float>(batch_count)) *
@@ -149,13 +160,15 @@ void SIGINT_handler(int signo) {
 }
 
 /* prints the status of data collection */
-void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, float* avg_batch_time, bool* update) {
+void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* stage,
+					      unsigned int* done, unsigned int agent_cnt, float* avg_batch_time, bool* update) {
 	uint32 remaining_s = 0;
 	uint32 elapsed_s = 0;
 	std::string msg;
 	while (ros::ok()) {
 		msg = "\rgathering " + std::to_string(*batch_count + 1) + "/" + std::to_string(max_batch_count) +
-			  ", E: " + SecondsToString(elapsed_s);
+			  ", S:" + *stage + ", A:" + std::to_string(*done) + "/" + std::to_string(agent_cnt) + ", E: " +
+			  SecondsToString(elapsed_s);
 		if (*avg_batch_time == 0) {
 			msg += ", estimating remaining time ...";
 		} else {
@@ -163,7 +176,7 @@ void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, float* av
 				   ", R: " + SecondsToString(remaining_s);
 			remaining_s = std::max<int>(0, remaining_s - 1);
 		}
-		std::cout << msg << std::flush;
+		std::cout << msg + "    " << std::flush;
 		std::this_thread::sleep_for(1s);
 		elapsed_s += 1;
 		if (*update) {
