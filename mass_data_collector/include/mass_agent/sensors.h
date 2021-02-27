@@ -37,7 +37,7 @@ public:
 	RGBCamera(const YAML::Node& rgb_cam_node,
 			  boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
 			  boost::shared_ptr<carla::client::Vehicle> vehicle,				
-			  bool log = true);
+			  float x_cam_shift, bool log = true);
 	void CaputreOnce();
 	void Destroy();
 

@@ -22,7 +22,7 @@ namespace data
 RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 			boost::shared_ptr<class carla::client::BlueprintLibrary> bp_library,
 			boost::shared_ptr<carla::client::Vehicle> vehicle,
-			bool log) {
+			float x_cam_shift, bool log) {
 	cam_log("setting up rgb camera");
 	auto cam_blueprint = *bp_library->Find(rgb_cam_node["type"].as<std::string>());
 	// setting camera attributes from the yaml
@@ -34,7 +34,7 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 	}
 	// spawn the camera attached to the vehicle
 	auto camera_transform = cg::Transform{
-		cg::Location{rgb_cam_node["x"].as<float>(),
+		cg::Location{rgb_cam_node["x"].as<float>() + x_cam_shift,
 					 rgb_cam_node["y"].as<float>(),
 					 rgb_cam_node["z"].as<float>()},
 		cg::Rotation{rgb_cam_node["pitch"].as<float>(),

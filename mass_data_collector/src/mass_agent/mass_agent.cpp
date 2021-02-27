@@ -450,7 +450,8 @@ void MassAgent::SetupSensors(float rgb_cam_shift) {
 	YAML::Node front_msk_node = base["camera-mask"];
 	// front rgb cam
 	if (front_rgb_node.IsDefined()) {
-		front_rgb_ = std::make_unique<data::RGBCamera>(front_rgb_node, bp_library, vehicle_, false);
+		front_rgb_ = std::make_unique<data::RGBCamera>(front_rgb_node, bp_library,
+													   vehicle_, rgb_cam_shift, false);
 	} else {
 		std::cout << "ERROR: front camera node is not defined in sensor definition file" << std::endl;
 	}
@@ -459,7 +460,7 @@ void MassAgent::SetupSensors(float rgb_cam_shift) {
 		front_mask_pc_ = std::make_unique<data::SemanticPointCloudCamera>(front_msk_node,
 															bp_library,
 															vehicle_,
-															rgb_cam_shift, // shift for some agents
+															0, // no x hover
 															0, // no y hover
 															false);
 	} else {
