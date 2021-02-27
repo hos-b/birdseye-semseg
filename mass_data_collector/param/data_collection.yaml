@@ -7,6 +7,7 @@ collection:
   maximum_cars: 3
   random_seed: 515
   max_batch_count: 10
+  hdf5_chunk_size: 5
   # mandatory delay after each batch because moving cars in carla is not a blocking call
   # 100 for slow PC, 10 for fast
   batch_delay_ms: 150

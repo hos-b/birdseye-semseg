@@ -15,6 +15,7 @@ struct CollectionConfig
     unsigned int maximum_cars;
     unsigned int max_batch_count;
     unsigned int batch_delay_ms;
+    unsigned int hdf5_chunk_size;
     unsigned long random_seed;
     float deadlock_multiplier;
     static const CollectionConfig& GetConfig() {
@@ -30,9 +31,10 @@ struct CollectionConfig
             conf.dataset_name = dataset["name"].as<std::string>();
             conf.minimum_cars = collection["minimum_cars"].as<unsigned int>();
             conf.maximum_cars = collection["maximum_cars"].as<unsigned int>();
-            conf.random_seed = collection["random_seed"].as<unsigned long>();
             conf.max_batch_count = collection["max_batch_count"].as<unsigned int>();
             conf.batch_delay_ms = collection["batch_delay_ms"].as<unsigned int>();
+            conf.hdf5_chunk_size = collection["hdf5_chunk_size"].as<unsigned int>();
+            conf.random_seed = collection["random_seed"].as<unsigned long>();
             conf.deadlock_multiplier = collection["deadlock_multiplier"].as<float>();
         });
         return conf;
