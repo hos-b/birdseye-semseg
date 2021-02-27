@@ -16,7 +16,8 @@ struct CollectionConfig
     unsigned int max_batch_count;
     unsigned int batch_delay_ms;
     unsigned long random_seed;
-    static CollectionConfig& GetConfig() {
+    float deadlock_multiplier;
+    static const CollectionConfig& GetConfig() {
         static CollectionConfig conf;
         static std::once_flag once;
         std::call_once(once, []() {
@@ -32,6 +33,7 @@ struct CollectionConfig
             conf.random_seed = collection["random_seed"].as<unsigned long>();
             conf.max_batch_count = collection["max_batch_count"].as<unsigned int>();
             conf.batch_delay_ms = collection["batch_delay_ms"].as<unsigned int>();
+            conf.deadlock_multiplier = collection["deadlock_multiplier"].as<float>();
         });
         return conf;
     }

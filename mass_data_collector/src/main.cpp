@@ -16,7 +16,7 @@
 using namespace std::chrono_literals;
 
 void SIGINT_handler(int signo);
-void StatusThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*);
+void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertDataDimensions();
 std::string SecondsToString(uint32);
 
@@ -65,14 +65,15 @@ int main(int argc, char **argv)
 	boost::shared_ptr<carla::client::Waypoint> random_pose;
 	// some timing stuff ----------------------------------------------------------------------------------------
 	float avg_batch_time = 0.0f;
-	bool update = false;
+	bool batch_finished = false;
 	std::thread *time_thread = nullptr;
 	char state = 'r';
 	unsigned int batch_size = 0;
 	unsigned int agents_done = 0;
+	bool deadlock = false;
 	if (!debug_mode) {
-		time_thread = new std::thread(StatusThreadCallback, &batch_count,  config.max_batch_count,
-									  &state, &agents_done, &batch_size, &avg_batch_time, &update);
+		time_thread = new std::thread(WatchdogThreadCallback, &batch_count,  config.max_batch_count, &state,
+									  &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
 	}
 	// debugging ------------------------------------------------------------------------------------------------
 	if (debug_mode) {
@@ -81,8 +82,8 @@ int main(int argc, char **argv)
 		std::cout << "creating uniform pointcloud" << std::endl;
 		random_pose = agents[0].SetRandomPose(config::town0_restricted_roads);
 		for (size_t i = 1; i < number_of_agents; ++i) {
-			random_pose = agents[i].SetRandomPose(random_pose, 30, agents, indices, i,
-												  config::town0_restricted_roads);
+			random_pose = agents[i].SetRandomPose(random_pose, 30, agents, &deadlock,
+												  indices, i, config::town0_restricted_roads);
 		}
 		agent::MassAgent::DebugMultiAgentCloud(agents, number_of_agents, config.dataset_path + ".pcl");
 		ros::shutdown();
@@ -103,16 +104,19 @@ int main(int argc, char **argv)
 		batch_size = distrib(random_gen);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
-		// chain randoming poses for the chosen ones
 		state = 'p';
-		agents_done = 0;
-		random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
-		agents_done = 1;
-		for (size_t i = 1; i < batch_size; ++i) {
-			agents_done += 1;
-			random_pose = agents[shuffled[i]].SetRandomPose(random_pose, 32, agents, shuffled, i,
-															config::town0_restricted_roads);
-		}
+		// reset poses if hit a deadlock
+		do {
+			// chain randoming poses for the chosen ones
+			agents_done = 0;
+			random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
+			agents_done = 1;
+			for (size_t i = 1; i < batch_size; ++i) {
+				agents_done += 1;
+				random_pose = agents[shuffled[i]].SetRandomPose(random_pose, 32, agents, &deadlock,
+																shuffled, i, config::town0_restricted_roads);
+			}
+		} while (deadlock);
 		// hiding the ones that didn't make it
 		state = 'h'; // hiding
 		for (size_t i = batch_size; i < number_of_agents; ++i) {
@@ -128,7 +132,8 @@ int main(int argc, char **argv)
 		size_t agent_batch_index = 0;
 		for (unsigned int i = 0; i < batch_size; ++i) {
 			agents_done += 1;
-			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint, &agents[shuffled[i]], agent_batch_index++);
+			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint,
+									&agents[shuffled[i]], agent_batch_index++);
 		}
 		state = 's'; // saving
 		agents_done = 0;
@@ -144,7 +149,7 @@ int main(int argc, char **argv)
 		std::chrono::duration<float> batch_duration = batch_end_t - batch_start_t;
 		avg_batch_time = avg_batch_time + (1.0f / static_cast<float>(batch_count)) *
 										  (batch_duration.count() - avg_batch_time);
-		update = true;
+		batch_finished = true;
 	}
 	if (!debug_mode) {
 		std::cout << "\ndone, closing dataset..." << std::endl;
@@ -168,10 +173,13 @@ void SIGINT_handler(int signo) {
 }
 
 /* prints the status of data collection */
-void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* state, unsigned int* done,
-						  unsigned int* batch_size, float* avg_batch_time, bool* update) {
+void WatchdogThreadCallback(size_t* batch_count, size_t max_batch_count, char* state,
+							unsigned int* done, unsigned int* batch_size, float* avg_batch_time,
+							bool* batch_finished, bool* deadlock) {
 	uint32 remaining_s = 0;
 	uint32 elapsed_s = 0;
+	uint32 batch_s = 0;
+	auto deadlock_multiplier = CollectionConfig::GetConfig().deadlock_multiplier;
 	std::string msg;
 	while (ros::ok()) {
 		msg = "\rgathering " + std::to_string(*batch_count + 1) + "/" + std::to_string(max_batch_count) +
@@ -187,12 +195,20 @@ void StatusThreadCallback(size_t* batch_count, size_t max_batch_count, char* sta
 		std::cout << msg + "    " << std::flush;
 		std::this_thread::sleep_for(1s);
 		elapsed_s += 1;
-		if (*update) {
+		batch_s += 1;
+		if (*batch_finished) {
 			if (*batch_count == max_batch_count) {
 				break;
 			}
-			*update = false;
+			*batch_finished = false;
 			remaining_s = (*avg_batch_time) * (max_batch_count - (*batch_count));
+			batch_s = 0;
+		// deadlock detection
+		} else if (*batch_count > 0 && batch_s >= (*avg_batch_time) * deadlock_multiplier) {
+			*deadlock = true;
+			std::cout << "\ndeadlock detected at batch #" << *batch_count + 1
+					  << ", retrying ..." << std::endl;
+			batch_s = 0;
 		}
 	}
 }

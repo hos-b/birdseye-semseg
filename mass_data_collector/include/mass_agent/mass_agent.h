@@ -46,7 +46,7 @@ public:
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(const std::unordered_map<int, bool>& restricted_roads);
 	boost::shared_ptr<carla::client::Waypoint>
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-				  size_t knn_pts, const MassAgent* agents,
+				  size_t knn_pts, const MassAgent* agents, const bool* deadlock,
 				  std::vector<unsigned int> indices, unsigned int max_index,
 				  const std::unordered_map<int, bool>& restricted_roads);
 	void HideAgent();

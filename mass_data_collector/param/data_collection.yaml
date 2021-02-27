@@ -10,3 +10,5 @@ collection:
   # mandatory delay after each batch because moving cars in carla is not a blocking call
   # 100 for slow PC, 10 for fast
   batch_delay_ms: 150
+  # avg. batch time x multiplier = deadlock
+  deadlock_multiplier: 5.0

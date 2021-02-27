@@ -147,9 +147,13 @@ ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
    the indices of the other agents must be given and only up until `max_index will be considered */
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-						 size_t knn_pts, const MassAgent* agents,
+						 size_t knn_pts, const MassAgent* agents, const bool* deadlock,
 				  		 std::vector<unsigned int> indices, unsigned int max_index,
 						 const std::unordered_map<int, bool>& restricted_roads) {
+	// last agent in queue has hit a deadlock, forwarding nullptr
+	if (initial_wp == nullptr) {
+		return nullptr;
+	}
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
 	auto initial_expansion = ExpandWayoint(initial_wp, vehicle_length_ * 1.35);
@@ -170,6 +174,11 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 	carla::geom::Transform target_tf;
 	bool admissable = false;
 	while (!admissable) {
+		// it is possible to hit a deadlock when the batch size is high
+		// and the randomed waypoints don't suffice to fit them all in.
+		if (*deadlock) {
+			return nullptr;
+		}
 		admissable = true;
 		next_wp = candidates[std::rand() % candidates.size()];
 		// nullptr happens if unavailable
