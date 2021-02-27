@@ -111,6 +111,7 @@ int main(int argc, char **argv)
 		state = 'p';
 		// chain randoming poses for the chosen ones, reset on deadlock
 		do {
+			deadlock = false;
 			agents_done = 0;
 			random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
 			agents_done = 1;
