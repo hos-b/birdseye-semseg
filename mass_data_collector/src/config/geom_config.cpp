@@ -15,5 +15,12 @@ namespace config
 	// boundaries, sizes
 	constexpr unsigned int kMaxAgentDistance = 400; // centimeters
 
+	// map kd-tree
+	constexpr float kWaypointGenerationDistance = 1.4f;
+	constexpr unsigned int kWaypointKDTreeBins = 30;
+
+	// agent positioning
+	constexpr float kMinDistCoeff = 1.35f;
+
 
 } // namespace config

@@ -14,6 +14,12 @@ namespace config
 	// boundaries, sizes
 	const extern unsigned int kMaxAgentDistance; // centimeters
 
+	// map kd-tree
+	const extern float kWaypointGenerationDistance;
+	const extern unsigned int kWaypointKDTreeBins;
+
+	// agent positioning
+	const extern float kMinDistCoeff;
 
 } // namespace config
 
