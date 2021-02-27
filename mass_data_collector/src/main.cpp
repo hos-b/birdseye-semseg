@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 	if (!debug_mode) {
 		dataset = new HDF5Dataset(config.dataset_path, config.dataset_name,
 								  mode::FILE_TRUNC | mode::DSET_CREAT, compression::NONE, 1,
-								  (config.max_batch_count + 1) * config.maximum_cars, 32);
+								  (config.max_batch_count + 1) * config.maximum_cars, config.hdf5_chunk_size);
 	}
 	// CARLA setup ----------------------------------------------------------------------------------------------
 	agent::MassAgent agents[number_of_agents];
@@ -238,6 +238,7 @@ std::string SecondsToString(uint32 period_in_secs) {
 
 /* asserts that the dataset image size is equal to that of the gathered samples */
 void AssertDataDimensions() {
+	auto& col_conf = CollectionConfig::GetConfig();
 	std::string yaml_path = ros::package::getPath("mass_data_collector")
 							+ "/param/sensors.yaml";
 	YAML::Node sensors_base = YAML::LoadFile(yaml_path);
@@ -261,6 +262,11 @@ void AssertDataDimensions() {
 		failed = true;
 		std::cout << "bev image width doesn't match the dataset struct size" << std::endl;
 	}
+	if ((col_conf.max_batch_count + 1) * col_conf.maximum_cars < col_conf.hdf5_chunk_size) {
+		failed = true;
+		std::cout << "hdf5 chunk size must be smaller than the collected data" << std::endl;
+	}
+
 	if (failed) {
 		std::exit(EXIT_FAILURE);
 	}

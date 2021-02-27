@@ -84,7 +84,7 @@ public:
 
 private:
 	std::tuple<float, float, float> GetPostion() const;
-	void SetupSensors();
+	void SetupSensors(float rgb_cam_shift);
 	void DestroyAgent();
 	void CaptureOnce();
 	void InitializeKDTree();

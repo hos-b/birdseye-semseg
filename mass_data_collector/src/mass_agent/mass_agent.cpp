@@ -75,8 +75,6 @@ MassAgent::MassAgent() {
 		DestroyAgent();
 		std::exit(EXIT_FAILURE);
 	}
-	std::cout << "created mass-agent-" << id_ << ": " + blueprint_name_ << std::endl;
-	SetupSensors();
 	// reading the dimensions of the vehicle
 	std::string yaml_path = ros::package::getPath("mass_data_collector");
 	yaml_path += "/param/vehicle_dimensions.yaml";
@@ -84,6 +82,8 @@ MassAgent::MassAgent() {
 	YAML::Node boundaries = base[blueprint_name_];
 	vehicle_width_ = std::max(boundaries["left"].as<double>(), boundaries["right"].as<double>()) * 2;
 	vehicle_length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
+	SetupSensors(boundaries["camera-shift"].as<float>());
+	std::cout << "created mass-agent-" << id_ << ": " + blueprint_name_ << std::endl;
 }
 
 /* destructor */
@@ -402,14 +402,14 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 		"vehicle.citroen.c3",
 		"vehicle.mercedes-benz.coupe",
 		"vehicle.mini.cooperst",
-		"vehicle.nissan.patrol",
 		"vehicle.mustang.mustang",
 		"vehicle.lincoln.mkz2017",
 		"vehicle.toyota.prius",
 		"vehicle.bmw.grandtourer",
 		"vehicle.tesla.model3",
-		"vehicle.dodge_charger.police",
+		"vehicle.nissan.patrol",
 		"vehicle.jeep.wrangler_rubicon",
+		"vehicle.dodge_charger.police",
 		"vehicle.chevrolet.impala",
 		"vehicle.audi.etron",
 		"vehicle.seat.leon",
@@ -441,7 +441,7 @@ double MassAgent::carla_z() const {
 }
 
 /* initializes the structures for the camera, lidar & depth measurements */
-void MassAgent::SetupSensors() {
+void MassAgent::SetupSensors(float rgb_cam_shift) {
 	std::string yaml_path = ros::package::getPath("mass_data_collector");
 	yaml_path += "/param/sensors.yaml";
 	auto bp_library = vehicle_->GetWorld().GetBlueprintLibrary();
@@ -459,7 +459,7 @@ void MassAgent::SetupSensors() {
 		front_mask_pc_ = std::make_unique<data::SemanticPointCloudCamera>(front_msk_node,
 															bp_library,
 															vehicle_,
-															0, // no x hover
+															rgb_cam_shift, // shift for some agents
 															0, // no y hover
 															false);
 	} else {
