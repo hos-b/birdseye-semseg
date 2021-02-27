@@ -40,7 +40,8 @@ public:
 			  float x_cam_shift, bool log = true);
 	void CaputreOnce();
 	void Destroy();
-
+	void PauseCallback();
+	void ResumeCallback();
 	bool waiting() const;
 	size_t count() const;
 	std::shared_ptr<geom::CameraGeometry> geometry() const;
@@ -50,6 +51,7 @@ private:
 	boost::shared_ptr<carla::client::Sensor> sensor_;
 	std::vector<cv::Mat> images_;
 	std::shared_ptr<geom::CameraGeometry> geometry_;
+	std::function<void(const boost::shared_ptr<carla::sensor::SensorData>& data)> rgb_callback_;
 	std::mutex buffer_mutex_;
 };
 
@@ -61,6 +63,8 @@ public:
 			float delta_x,
 			float delta_y,
 			bool log = true);
+	void PauseCallback();
+	void ResumeCallback();
 	void CaputreOnce();
 	void Destroy();
 
@@ -77,6 +81,8 @@ private:
 	bool save_semantics_;
 	boost::shared_ptr<carla::client::Sensor> depth_sensor_;
 	boost::shared_ptr<carla::client::Sensor> semantic_sensor_;
+	std::function<void(const boost::shared_ptr<carla::sensor::SensorData>& data)> depth_callback_;
+	std::function<void(const boost::shared_ptr<carla::sensor::SensorData>& data)> semantic_callback_;
 	std::shared_ptr<geom::CameraGeometry> geometry_;
 	std::vector<cv::Mat> semantic_images_;
 	std::vector<cv::Mat> depth_images_;

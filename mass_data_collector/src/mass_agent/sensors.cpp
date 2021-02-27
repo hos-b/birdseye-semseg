@@ -50,17 +50,16 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 																	 camera_transform.rotation.yaw);
 	save_ = false;
 	// register a callback to publish images
-	sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+	rgb_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		std::lock_guard<std::mutex> guard(buffer_mutex_);
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
 		if (save_) {
 			images_.emplace_back(mat.clone());
-			cam_log("saving rgb:" << images_.size());
 			save_ = false;
-			// cv::imwrite("/home/hosein/catkin_ws/src/mass_data_collector/guide/rgb.png", images_[0]);
 		}
-	});
+	};
+	sensor_->Listen(rgb_callback_);
 }
 /* lets the camera save the next frame [[blocking]] */
 void RGBCamera::CaputreOnce() {
@@ -97,6 +96,18 @@ std::shared_ptr<geom::CameraGeometry> RGBCamera::geometry() const {
 /* returns whether CaptureOnce has been called but we haven't recoreded the sensor data yet */
 bool RGBCamera::waiting() const {
 	return save_;
+}
+/* stops the rgb callback */
+void RGBCamera::PauseCallback() {
+	if (sensor_->IsListening()) {
+		sensor_->Stop();
+	}
+}
+/* resumes the rgb callback */
+void RGBCamera::ResumeCallback() {
+	if (!sensor_->IsListening()) {
+		sensor_->Listen(rgb_callback_);
+	}
 }
 // --------------------------------------- SemnaticPointCloudCamera ---------------------------------------
 SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_node,
@@ -135,15 +146,15 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	depth_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
 	// register a callback to publish images
 	save_depth_ = false;
-	depth_sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+	depth_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_depth_) {
 			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
 			depth_images_.emplace_back(DecodeToDepthMat(image));
-			cam_log("saving depth: " << depth_images_.size());
 			save_depth_ = false;
 		}
-	});
+	};
+	depth_sensor_->Listen(depth_callback_);
 	// semantic camera ------------------------------------------------------------------------------------
 	auto scam_blueprint = *bp_library->Find("sensor.camera.semantic_segmentation");
 	// setting camera attributes from the yaml
@@ -158,16 +169,15 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	semantic_sensor_ = boost::static_pointer_cast<cc::Sensor>(generic_actor);
 	// callback
 	save_semantics_ = false;
-	semantic_sensor_->Listen([this, log](const boost::shared_ptr<carla::sensor::SensorData>& data) {
+	semantic_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_semantics_) {
 			std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
 			semantic_images_.emplace_back(DecodeToSemSegMat(image));
-			// add car transform, if haven't already in depth callback
-			cam_log("saving semantics: " << semantic_images_.size());
 			save_semantics_ = false;
 		}
-	});
+	};
+	semantic_sensor_->Listen(semantic_callback_);
 	geometry_ = std::make_shared<geom::CameraGeometry>(mass_cam_node, camera_transform.location.x,
 																	  camera_transform.location.y,
 																	  camera_transform.location.z,
@@ -231,6 +241,24 @@ bool SemanticPointCloudCamera::waiting() const {
 /* returns the camera's name, used for debugging */
 std::string SemanticPointCloudCamera::name() const {
 	return name_;
+}
+/* stops the depth & semantic callbacks */
+void SemanticPointCloudCamera::PauseCallback() {
+	if (depth_sensor_->IsListening()) {
+		depth_sensor_->Stop();
+	}
+	if (semantic_sensor_->IsListening()) {
+		semantic_sensor_->Stop();
+	}
+}
+/* resumes the callback functions */
+void SemanticPointCloudCamera::ResumeCallback() {
+	if (!depth_sensor_->IsListening()) {
+		depth_sensor_->Listen(depth_callback_);
+	}
+	if (!semantic_sensor_->IsListening()) {
+		semantic_sensor_->Listen(semantic_callback_);
+	}
 }
 // custom conversion functions -------------------------------------------------------------------------------
 

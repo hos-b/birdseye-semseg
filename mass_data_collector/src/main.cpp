@@ -104,10 +104,13 @@ int main(int argc, char **argv)
 		batch_size = distrib(random_gen);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
+		// enabling callbacks for chosen ones
+		for (size_t i = 0; i < batch_size; ++i) {
+			agents[shuffled[i]].ResumeSensorCallbacks();
+		}
 		state = 'p';
-		// reset poses if hit a deadlock
+		// chain randoming poses for the chosen ones, reset on deadlock
 		do {
-			// chain randoming poses for the chosen ones
 			agents_done = 0;
 			random_pose = agents[shuffled[0]].SetRandomPose(config::town0_restricted_roads);
 			agents_done = 1;
@@ -117,9 +120,10 @@ int main(int argc, char **argv)
 																shuffled, i, config::town0_restricted_roads);
 			}
 		} while (deadlock);
-		// hiding the ones that didn't make it
-		state = 'h'; // hiding
+		// hiding & disabling callbacks for the ones that didn't make it
+		state = 'h';
 		for (size_t i = batch_size; i < number_of_agents; ++i) {
+			agents[shuffled[i]].PauseSensorCallbacks();
 			agents[shuffled[i]].HideAgent();
 		}
 		// mandatory delay because moving cars in carla is not a blocking call

@@ -156,7 +156,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 	}
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
-	auto initial_expansion = ExpandWayoint(initial_wp, vehicle_length_ * 1.35);
+	auto initial_expansion = ExpandWayoint(initial_wp, vehicle_length_ * config::kMinDistCoeff);
 	candidates.insert(candidates.end(), initial_expansion.begin(), initial_expansion.end());
 	if (knn_pts > 0) {
 		auto query_tfm = initial_wp->GetTransform();
@@ -166,7 +166,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		knn_pts = kd_tree_->knnSearch(&query[0], knn_pts, &knn_ret_indices[0], &knn_sqrd_dist[0]);
 		knn_ret_indices.resize(knn_pts);
 		for (auto close_wp_idx : knn_ret_indices) {
-			auto expansion = ExpandWayoint(kd_points_[close_wp_idx], vehicle_length_ * 1.35);
+			auto expansion = ExpandWayoint(kd_points_[close_wp_idx], vehicle_length_ * config::kMinDistCoeff);
 			candidates.insert(candidates.end(), expansion.begin(), expansion.end());
 		}
 	}
@@ -210,7 +210,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 									  (agent->carla_y() - target_tf.location.y) +
 									  (agent->carla_z() - target_tf.location.z) *
 									  (agent->carla_z() - target_tf.location.z));
-			if (distance < vehicle_length_ * 1.2) {
+			if (distance < vehicle_length_ * config::kMinDistCoeff) {
 				admissable = false;
 				continue;
 			}
@@ -335,6 +335,22 @@ void MassAgent::HideAgent() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
 	} while(true);
 }
+/* stops the callback on all sensors */
+void MassAgent::PauseSensorCallbacks() {
+	front_rgb_->PauseCallback();
+	front_mask_pc_->PauseCallback();
+	for (auto& semantic_cam : semantic_pc_cams_) {
+		semantic_cam->PauseCallback();
+	}
+}
+/* resumes the callback on all sensors */
+void MassAgent::ResumeSensorCallbacks() {
+	front_rgb_->ResumeCallback();
+	front_mask_pc_->ResumeCallback();
+	for (auto& semantic_cam : semantic_pc_cams_) {
+		semantic_cam->ResumeCallback();
+	}
+}
 
 /* returns an image of the map */
 cv::Mat MassAgent::GetMap() {
@@ -419,9 +435,10 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 
 /* initializes waypoints and builds a kd index on top of them */
 void MassAgent::InitializeKDTree() {
-	auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(2.0);
+	auto waypoints = carla_client()->GetWorld().GetMap()->GenerateWaypoints(config::kWaypointGenerationDistance);
 	kd_points_.insert(kd_points_.begin(), waypoints.begin(), waypoints.end());
-	kd_tree_ = std::make_unique<WaypointKDTree>(3, *this, nanoflann::KDTreeSingleIndexAdaptorParams(20));
+	kd_tree_ = std::make_unique<WaypointKDTree>(3, *this,
+		nanoflann::KDTreeSingleIndexAdaptorParams(config::kWaypointKDTreeBins));
 	kd_tree_->buildIndex();
 }
 

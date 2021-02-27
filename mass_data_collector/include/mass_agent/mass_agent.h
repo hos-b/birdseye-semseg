@@ -50,7 +50,11 @@ public:
 				  std::vector<unsigned int> indices, unsigned int max_index,
 				  const std::unordered_map<int, bool>& restricted_roads);
 	void HideAgent();
+	// TODO: implement
 	void RandomizeColor();
+	void PauseSensorCallbacks();
+	void ResumeSensorCallbacks();
+
 	MASSDataType GenerateDataPoint(unsigned int agent_batch_index);
 	// transform related
 	inline double carla_x() const;
