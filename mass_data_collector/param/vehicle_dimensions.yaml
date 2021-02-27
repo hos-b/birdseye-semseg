@@ -29,7 +29,7 @@ vehicle.chevrolet.impala:
   back: 2.65012
   left: 0.895853
   right: 0.831608
-  camera-shift: 0.15
+  camera-shift: 0.25
 vehicle.citroen.c3:
   front: 2.00025
   back: 1.97027
