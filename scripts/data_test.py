@@ -1,6 +1,7 @@
 import os
 import torch
 import matplotlib.pyplot as plt
+import random
 
 from data.color_map import carla_semantics_to_cityscapes_rgb, our_semantics_to_cityscapes_rgb
 from data.dataset import MassHDF5
@@ -9,9 +10,9 @@ from data.config import SemanticCloudConfig
 from data.utils import squeeze_all
 
 DATASET_DIR = "/home/hosein/data"
-PKG_NAME = "dataset.hdf5"
+PKG_NAME = "testset.hdf5"
 classes = 'ours'
-
+random_samples = True
 
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
@@ -31,6 +32,10 @@ loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_work
 # plot stuff
 columns = 6
 for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
+    # randomly skip samples (useful for large datasets)
+    if random_samples and bool(random.randint(0, 1)):
+        continue
+
     rgbs, semsegs, masks, car_transforms = squeeze_all(rgbs, semsegs, masks, car_transforms)
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))
