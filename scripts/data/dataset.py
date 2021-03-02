@@ -25,6 +25,7 @@ class MassHDF5(torch.utils.data.Dataset):
         self.max_agent_count = self.dataset.attrs['max_agent_count'][0]
         self.n_samples = self.get_dataset_size()
         self.batch_indices, self.batch_sizes = self.parse_batch_indices()
+        print(f"found {self.n_samples} samples in {self.batch_sizes.shape[0]} batches")
         self.rgb_transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.ColorJitter(hue=.05, saturation=.05),
