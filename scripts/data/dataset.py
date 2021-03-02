@@ -13,18 +13,20 @@ from data.color_map import carla_semantics_to_our_semantics
 
 class MassHDF5(torch.utils.data.Dataset):
     def __init__(self, **kwargs):
-        self.file_path = kwargs.get('file_path')
+        self.path = kwargs.get('path')
+        self.hdf5name = kwargs.get('hdf5name')
+        self.full_path = self.path + '/' + self.hdf5name
         self.size = kwargs.get('size')
         self.device = kwargs.get('device')
         self.dset_name = kwargs.get('dataset', 'town-01')
         self.use_class_subset = kwargs.get('classes') == 'ours'
-        print(f'opening {self.file_path}')
-        self.hdf5 = h5py.File(self.file_path, 'r')
+        print(f'opening {self.full_path}')
+        self.hdf5 = h5py.File(self.full_path, 'r')
         self.dataset = self.hdf5[self.dset_name]
         self.min_agent_count = self.dataset.attrs['min_agent_count'][0]
         self.max_agent_count = self.dataset.attrs['max_agent_count'][0]
         self.n_samples = self.get_dataset_size()
-        self.batch_indices, self.batch_sizes = self.parse_batch_indices()
+        self.batch_indices, self.batch_sizes = self.get_batch_info()
         print(f"found {self.n_samples} samples in {self.batch_sizes.shape[0]} batches")
         self.rgb_transform = transforms.Compose([
             transforms.ToPILImage(),
@@ -37,14 +39,13 @@ class MassHDF5(torch.utils.data.Dataset):
             transforms.Resize(self.size, interpolation=PILImage.NEAREST),
             transforms.ToTensor()
         ])
-
         self.hdf5.close()
         self.hdf5 = None
         self.dataset = None
 
     def __getitem__(self, idx):
         if self.dataset == None:
-            self.hdf5 = h5py.File(self.file_path, 'r')
+            self.hdf5 = h5py.File(self.full_path, 'r')
             self.dataset = self.hdf5[self.dset_name]
 
         ids = []
@@ -92,24 +93,61 @@ class MassHDF5(torch.utils.data.Dataset):
         for i in range(batch_histogram.shape[0]):
             total_samples += (i + self.min_agent_count) * batch_histogram[i]
         
-        assert(total_samples == self.dataset.shape[0] - 1, "unexpected number of samples")
+        assert total_samples == self.dataset.shape[0] - 1, "unexpected number of samples"
         return total_samples
-
-    def parse_batch_indices(self):
+    
+    def get_batch_info(self, estimate_batch_count=11000):
         """
-        iterate the dataset to find the start of each batch.
+        tries to read batch start indices and batch sizes from the metadata file.
+        if file doesn't exist, it parses the dataset and creates the file.
+        """
+        md_name = self.hdf5name.replace('hdf5', 'metadata')
+        # try to read from file
+        try:
+            fmeta = open(self.path + '/' + md_name, mode='rb')
+        except FileNotFoundError:
+            print('could not locate metadata file for the dataset. generating...')
+            return self._parse_batch_indices(md_name, estimate_batch_count)
+        metadata = np.fromfile(fmeta, dtype = np.uint32)
+        half = int(metadata.shape[0] / 2)
+        fmeta.close()
+        return metadata[:half], metadata[half:]
+
+    def _parse_batch_indices(self, filename: str, estimate_batch_count=11000):
+        """
+        iterates the dataset to find the start of each batch.
         agent ids go 0 1 ... 0 1 2 3 ... 0 1 ...
         """
-        batch_start_indices = []
-        batch_sizes = []
-        for i in range(self.n_samples):
+        # np arrays & indices to avoid heavy append() calls
+        batch_start_indices = np.zeros(shape=(estimate_batch_count), dtype=np.uint32)
+        batch_start_indices_c = 0
+        batch_sizes = np.zeros(shape=(estimate_batch_count), dtype=np.uint32)
+        batch_sizes_c = 0
+        # manually adding the first batch to avoid an extra if in the loop
+        batch_start_indices[0] = 0
+        batch_start_indices_c += 1
+        # loop the rest
+        for i in range(1, self.n_samples):
             if self.dataset[i, 'agent_id'] == 0:
-                batch_start_indices.append(i)
-                if len(batch_start_indices) > 1:
-                    batch_sizes.append(batch_start_indices[-1] - batch_start_indices[-2])
-        batch_sizes.append(self.n_samples - batch_start_indices[-1])
-        return np.array(batch_start_indices, dtype=np.uint), \
-               np.array(batch_sizes, dtype=np.uint)
+                batch_sizes[batch_sizes_c] = i - batch_start_indices[batch_start_indices_c - 1]
+                batch_sizes_c += 1
+                batch_start_indices[batch_start_indices_c] = i
+                batch_start_indices_c += 1
+        batch_sizes[batch_sizes_c] = self.n_samples - batch_start_indices[batch_start_indices_c - 1]
+        batch_sizes_c += 1
+        # resize arrays
+        batch_sizes = batch_sizes[:batch_sizes_c]
+        batch_start_indices = batch_start_indices[:batch_start_indices_c]
+        # write the result to a file
+        metadata = np.append(batch_start_indices, batch_sizes)
+        try:
+            fmeta = open(self.path + '/' + filename, mode='wb')
+            metadata.tofile(fmeta)
+            fmeta.close()
+            print(f'successfully wrote metadata to file {self.path}/{filename}')
+        except:
+            print(f'could not write metadata to file {self.path}/{filename}')
+        return batch_start_indices, batch_sizes
 
 def get_datasets(file_path, device, split=(0.8, 0.2), size=(500, 400), classes='carla'):
     if classes != 'carla' and classes != 'ours':

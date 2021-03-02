@@ -9,10 +9,10 @@ from data.mask_warp import get_single_aggregate_mask
 from data.config import SemanticCloudConfig
 from data.utils import squeeze_all
 
-DATASET_DIR = "/home/hosein/data"
-PKG_NAME = "testset.hdf5"
+DATASET_DIR = "/export/home/aiscar2/mass-data"
+PKG_NAME = "dataset_10k.hdf5"
 classes = 'ours'
-random_samples = True
+random_samples = False
 
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
@@ -22,13 +22,11 @@ NEW_SIZE = (256, 205)
 CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
-
 # opening hdf5 file for the dataset
-print("opening {}".format(PKG_NAME))
-file_path = os.path.join(DATASET_DIR, PKG_NAME)
-dset = MassHDF5(dataset='town-01', file_path=file_path, size=NEW_SIZE, classes=classes)
+dset = MassHDF5(dataset='town-01', path=DATASET_DIR,
+                hdf5name=PKG_NAME, size=NEW_SIZE, classes=classes)
 loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_workers=1)
-
+import pdb; pdb.set_trace()
 # plot stuff
 columns = 6
 for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
