@@ -1,4 +1,5 @@
 import os
+import pdb
 import torch
 import torch.nn as nn
 import torch.functional as F
@@ -13,6 +14,7 @@ from data.color_map import our_semantics_to_cityscapes_rgb
 from data.mask_warp import get_all_aggregate_masks
 from data.utils import drop_agent_data, squeeze_all, get_matplotlib_image
 from model.mass_cnn import MassCNN
+from agent.agent_pool import AgentPool
 
 def to_device(rgbs, labels, masks, car_transforms, device):
     return rgbs.to(device), labels.to(device), \
@@ -46,6 +48,7 @@ show_plots = False
 drop_prob = 0.0
 learning_rate = 5e-4
 model = MassCNN(cfg, num_classes=7, output_size=NEW_SIZE).to(device)
+agent_pool = AgentPool(model, device, NEW_SIZE)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 semseg_loss = nn.CrossEntropyLoss(reduction='none')
 mask_loss = nn.L1Loss(reduction='none')
@@ -60,25 +63,31 @@ for ep in range(epochs):
     # training
     model.train()
     for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
-        rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
         print(f'\repoch: {ep}/{epochs}, training batch: {batch_idx} / {len(train_loader)}', end='')
+        rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
         # simulate connection drops
         rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, drop_prob)
-        optimizer.zero_grad()
-        mask_preds, sseg_preds = model(rgbs, car_transforms)
         # masked loss
         aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
                                                   NEW_SIZE[1], CENTER[0], CENTER[1])
-        m_loss = torch.mean(mask_loss(mask_preds.squeeze(), masks) * aggregate_masks, dim=(0, 1, 2))
-        s_loss = torch.mean(semseg_loss(sseg_preds, labels) * masks, dim=(0, 1, 2))
-        (m_loss + s_loss).backward()
-        optimizer.step()
-        batch_train_m_loss = m_loss.item()
-        batch_train_s_loss = s_loss.item()
+        optimizer.zero_grad()
+        # mask_preds, sseg_preds = model(rgbs, car_transforms)
+        agent_pool.calculate_detached_messages(rgbs)
+        for i in range(agent_pool.agent_count):
+            mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
+            sseg_pred = agent_pool.aggregate_messages(i, car_transforms)
+            m_loss = torch.mean(mask_loss(mask_pred.squeeze(), masks[i]) * aggregate_masks[i], dim=(0, 1))
+            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * masks[i], dim=(0, 1, 2))
+            (m_loss + s_loss).backward()
+            optimizer.step()
+            batch_train_m_loss = m_loss.item()
+            batch_train_s_loss = s_loss.item()
         writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
         writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
         total_train_m_loss += batch_train_m_loss
         total_train_s_loss += batch_train_s_loss
+        break
+
 
     writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
     writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
@@ -89,26 +98,31 @@ for ep in range(epochs):
     visaulized = False
     with torch.no_grad():
         for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
-            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             print(f'\repoch: {ep}/{epochs}, validation batch: {batch_idx} / {len(test_loader)}', end='')
+            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
+            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
             mask_preds, sseg_preds = model(rgbs, car_transforms)
             m_loss = mask_loss(mask_preds.squeeze(), masks.squeeze())
-            s_loss = semseg_loss(sseg_preds, labels.squeeze())
+            try:
+                s_loss = semseg_loss(sseg_preds, labels)
+            except ValueError:
+                pdb.set_trace()
             batch_valid_m_loss = torch.mean(m_loss, dim=(0, 1, 2)).item()
             batch_valid_s_loss = torch.mean(s_loss, dim=(0, 1, 2)).item()
             writer.add_scalar("loss/batch_valid_msk", batch_valid_m_loss, ep * len(test_loader) + batch_idx)
             writer.add_scalar("loss/batch_valid_seg", batch_valid_s_loss, ep * len(test_loader) + batch_idx)
             total_valid_m_loss += batch_valid_m_loss
             total_valid_s_loss += batch_valid_s_loss
+
             # visaluize the first agent from the first batch
             if not visaulized:
                 aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
                                                           NEW_SIZE[1], CENTER[0], CENTER[1])
-                ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0]).transpose(2, 0, 1)
-                ss_mask = aggregate_masks[0]
+                ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
+                ss_mask = aggregate_masks[0].cpu()
                 ss_trgt_img[:, ss_mask == 0] = 0
                 _, ss_pred = torch.max(sseg_preds[0], dim=0)
-                ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred).transpose(2, 0, 1)
+                ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu()).transpose(2, 0, 1)
                 pred_mask_img = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask_img = get_matplotlib_image(masks[0].cpu())
                 if show_plots:

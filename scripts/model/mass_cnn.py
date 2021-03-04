@@ -20,6 +20,7 @@ transform and compressed features from other agents --------
 
 __all__ = ['MassCNN']
 
+
 class MassCNN(torch.nn.Module):
     def __init__(self, config: SemanticCloudConfig, num_classes, output_size=(256, 205)):
         super(MassCNN, self).__init__()
@@ -32,41 +33,41 @@ class MassCNN(torch.nn.Module):
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
             # ---------------------------------------------------------------------------------------------
-            LinearBottleneck(in_channels=64, out_channels=96, expansion=4, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=64, out_channels=82, expansion=4, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=82, out_channels=82, expansion=4, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=82, out_channels=82, expansion=4, stride=1, skip_en=True)
         )
         self.compression_l2 = nn.Sequential(
-            LinearBottleneck(in_channels= 96, out_channels=128, expansion=4, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=128, out_channels=128, expansion=4, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=128, out_channels=128, expansion=4, stride=1, skip_en=True),
+            LinearBottleneck(in_channels= 82, out_channels=96, expansion=4, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
         )
         self.mask_prediction_l1 = nn.Sequential(
             # 2 x 2 stages of linear bottleneck for fov estimation
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=2),
             LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
             # ----------------------------------------------------------------------
-            LinearBottleneck(in_channels=64, out_channels=96, expansion=4, stride=2),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=64, out_channels=82, expansion=4, stride=2),
+            LinearBottleneck(in_channels=82, out_channels=82, expansion=4, stride=1, skip_en=True)
         )
         self.mask_prediction_l2 = nn.Sequential(
             # DSConv with sigmoid activation + average pooling for size
-            nn.Conv2d(in_channels=96, out_channels=96, kernel_size=(3, 6), padding=1, groups=96, bias=False),
+            nn.Conv2d(in_channels=82, out_channels=82, kernel_size=(3, 6), padding=1, groups=82, bias=False),
             nn.AdaptiveAvgPool2d(self.output_size),
-            nn.BatchNorm2d(96),
+            nn.BatchNorm2d(82),
             nn.ReLU(True),
-            nn.Conv2d(in_channels=96, out_channels=1, kernel_size=1, bias=False),
+            nn.Conv2d(in_channels=82, out_channels=1, kernel_size=1, bias=False),
             nn.Sigmoid()
         )
-        self.pyramid_pooling = PyramidPooling(in_channels=128, out_channels=128)
+        self.pyramid_pooling = PyramidPooling(in_channels=96, out_channels=96)
         self.classifier = nn.Sequential(
-            DWConv(in_channels=128, out_channels=128, kernel_size=1),
-            nn.Conv2d(in_channels=128, out_channels=128, kernel_size=1),
-            nn.BatchNorm2d(128),
-            DSConv(in_channels=128, out_channels=128, stride=1),
-            DSConv(in_channels=128, out_channels=128, stride=1),
+            DWConv(in_channels=96, out_channels=96, kernel_size=1),
+            nn.Conv2d(in_channels=96, out_channels=96, kernel_size=1),
+            nn.BatchNorm2d(96),
+            DSConv(in_channels=96, out_channels=96, stride=1),
+            DSConv(in_channels=96, out_channels=96, stride=1),
             nn.Dropout(0.1),
-            nn.Conv2d(in_channels=128, out_channels=64, kernel_size=3),
+            nn.Conv2d(in_channels=96, out_channels=64, kernel_size=3),
             nn.Conv2d(in_channels=64, out_channels=num_classes, kernel_size=1)
         )
     
@@ -78,6 +79,7 @@ class MassCNN(torch.nn.Module):
     
     def forward(self, rgbs, transforms):
         """
+        Not used.
         input:
             rgbs:       agent_count x 480 x 640
             transforms: agent_count x 4 x 4
