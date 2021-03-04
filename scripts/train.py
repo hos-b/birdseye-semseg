@@ -14,10 +14,14 @@ from data.mask_warp import get_all_aggregate_masks
 from data.utils import drop_agent_data, squeeze_all, get_matplotlib_image
 from model.mass_cnn import MassCNN
 
+def to_device(rgbs, labels, masks, car_transforms, device):
+    return rgbs.to(device), labels.to(device), \
+           masks.to(device), car_transforms.to(device)
+
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
-DATASET_DIR = '/home/hosein/data'
-PKG_NAME = "testset.hdf5"
+DATASET_DIR = '/export/home/aiscar2/mass-data'
+PKG_NAME = 'dataset_10k.hdf5'
 DATASET = 'town-01'
 TENSORBOARD_DIR = './tensorboard'
 NEW_SIZE = (256, 205)
@@ -27,8 +31,8 @@ CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
 # dataset
-device = torch.device('cpu')
-train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME, device, (0.8, 0.2), NEW_SIZE, 'ours')
+device = torch.device('cuda')
+train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME, (0.8, 0.2), NEW_SIZE, 'ours')
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=1)
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
 
@@ -41,11 +45,11 @@ writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
 show_plots = False
 drop_prob = 0.0
 learning_rate = 5e-4
-model = MassCNN(cfg, num_classes=7, output_size=NEW_SIZE)
+model = MassCNN(cfg, num_classes=7, output_size=NEW_SIZE).to(device)
 optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 semseg_loss = nn.CrossEntropyLoss(reduction='none')
 mask_loss = nn.L1Loss(reduction='none')
-epochs = 1
+epochs = 100
 print(f"{(model.parameter_count() / 1e6):.2f}M trainable parameters")
 
 for ep in range(epochs):
@@ -56,11 +60,11 @@ for ep in range(epochs):
     # training
     model.train()
     for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+        rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
         print(f'\repoch: {ep}/{epochs}, training batch: {batch_idx} / {len(train_loader)}', end='')
         # simulate connection drops
         rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, drop_prob)
         optimizer.zero_grad()
-        import pdb; pdb.set_trace()
         mask_preds, sseg_preds = model(rgbs, car_transforms)
         # masked loss
         aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
@@ -75,7 +79,6 @@ for ep in range(epochs):
         writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
         total_train_m_loss += batch_train_m_loss
         total_train_s_loss += batch_train_s_loss
-        break
 
     writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
     writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
