@@ -149,9 +149,10 @@ class MassHDF5(torch.utils.data.Dataset):
             print(f'could not write metadata to file {self.path}/{filename}')
         return batch_start_indices, batch_sizes
 
-def get_datasets(file_path, device, split=(0.8, 0.2), size=(500, 400), classes='carla'):
+def get_datasets(dataset, path, hdf5name, device, split=(0.8, 0.2), size=(500, 400), classes='carla'):
     if classes != 'carla' and classes != 'ours':
-        print("unknown segmentation class category: {classes}")
+        print("unknown segmentation class category: {classes}, using 'carla'")
         classes = 'carla'
-    dset = MassHDF5(file_path=file_path, size=size, classes=classes, device=device)
+    dset = MassHDF5(dataset=dataset, path=path, hdf5name=hdf5name,
+                    size=size, classes=classes, device=device)
     return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])

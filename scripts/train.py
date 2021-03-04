@@ -4,10 +4,9 @@ import torch.nn as nn
 import torch.functional as F
 from tensorboardX import SummaryWriter
 
-import numpy as np
+import subprocess
 import matplotlib.pyplot as plt
 
-# from data.color_map import semantic_to_cityscapes
 from data.dataset import get_datasets
 from data.config import SemanticCloudConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
@@ -18,24 +17,24 @@ from model.mass_cnn import MassCNN
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
 DATASET_DIR = '/home/hosein/data'
-PKG_NAME = "dataset.hdf5"
+PKG_NAME = "testset.hdf5"
+DATASET = 'town-01'
 TENSORBOARD_DIR = './tensorboard'
+NEW_SIZE = (256, 205)
 
 # image size and center coordinates
-NEW_SIZE = (256, 205)
 CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
 # dataset
 device = torch.device('cpu')
-file_path = os.path.join(DATASET_DIR, PKG_NAME)
-train_set, test_set = get_datasets(file_path, device=device, split=(0.8, 0.2), size=NEW_SIZE, classes='ours')
+train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME, device, (0.8, 0.2), NEW_SIZE, 'ours')
 train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=1)
 test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
 
 # logging
-# TODO: get name from commit id
-name = 'test_run'
+name = 'initial-'
+name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
 writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
 
 # network stuff
