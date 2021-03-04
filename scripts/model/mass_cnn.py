@@ -36,7 +36,6 @@ class MassCNN(torch.nn.Module):
             LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
             LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
         )
-            # ---------------------------------------------------------------------------------------------
         self.compression_l2 = nn.Sequential(
             LinearBottleneck(in_channels= 96, out_channels=128, expansion=4, stride=2, skip_en=False),
             LinearBottleneck(in_channels=128, out_channels=128, expansion=4, stride=1, skip_en=True),
@@ -118,7 +117,7 @@ class MassCNN(torch.nn.Module):
         # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(compressed_features)
         for i in range(agent_count):
-            relative_tfs = get_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y)
+            relative_tfs = get_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).cuda()
             warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
 

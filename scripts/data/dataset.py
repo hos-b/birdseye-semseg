@@ -17,7 +17,6 @@ class MassHDF5(torch.utils.data.Dataset):
         self.hdf5name = kwargs.get('hdf5name')
         self.full_path = self.path + '/' + self.hdf5name
         self.size = kwargs.get('size')
-        self.device = kwargs.get('device')
         self.dset_name = kwargs.get('dataset', 'town-01')
         self.use_class_subset = kwargs.get('classes') == 'ours'
         print(f'opening {self.full_path}')
@@ -74,9 +73,8 @@ class MassHDF5(torch.utils.data.Dataset):
             # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, "transform"]
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
-        return torch.stack(ids).to(self.device), torch.stack(rgbs).to(self.device), \
-               torch.stack(semsegs).to(self.device), torch.stack(masks).to(self.device), \
-               torch.stack(car_transforms).to(self.device)
+        return torch.stack(ids), torch.stack(rgbs), torch.stack(semsegs), torch.stack(masks), \
+               torch.stack(car_transforms)
 
     def __len__(self):
         return self.batch_sizes.shape[0]
@@ -149,10 +147,10 @@ class MassHDF5(torch.utils.data.Dataset):
             print(f'could not write metadata to file {self.path}/{filename}')
         return batch_start_indices, batch_sizes
 
-def get_datasets(dataset, path, hdf5name, device, split=(0.8, 0.2), size=(500, 400), classes='carla'):
+def get_datasets(dataset, path, hdf5name, split=(0.8, 0.2), size=(500, 400), classes='carla'):
     if classes != 'carla' and classes != 'ours':
         print("unknown segmentation class category: {classes}, using 'carla'")
         classes = 'carla'
     dset = MassHDF5(dataset=dataset, path=path, hdf5name=hdf5name,
-                    size=size, classes=classes, device=device)
+                    size=size, classes=classes)
     return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])
