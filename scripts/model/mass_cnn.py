@@ -29,26 +29,26 @@ class MassCNN(torch.nn.Module):
         self.downsample = LearningToDownsample(in_channels=32, mid_channels=48, out_channels=64)
         # 3 x 3 stages of linear bottleneck for feature compression
         self.compression_l1 = nn.Sequential(
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=1, skip_en=True),
             # ---------------------------------------------------------------------------------------------
-            LinearBottleneck(in_channels=64, out_channels=82, expansion=4, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=82, out_channels=82, expansion=4, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=82, out_channels=82, expansion=4, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=64, out_channels=82, expansion=3, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=82, out_channels=82, expansion=3, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=82, out_channels=82, expansion=3, stride=1, skip_en=True)
         )
         self.compression_l2 = nn.Sequential(
-            LinearBottleneck(in_channels= 82, out_channels=96, expansion=4, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=4, stride=1, skip_en=True)
+            LinearBottleneck(in_channels= 82, out_channels=96, expansion=3, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=96, out_channels=96, expansion=3, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=96, out_channels=96, expansion=3, stride=1, skip_en=True)
         )
         self.mask_prediction_l1 = nn.Sequential(
             # 2 x 2 stages of linear bottleneck for fov estimation
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=2),
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=4, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=2),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=1, skip_en=True),
             # ----------------------------------------------------------------------
-            LinearBottleneck(in_channels=64, out_channels=82, expansion=4, stride=2),
-            LinearBottleneck(in_channels=82, out_channels=82, expansion=4, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=64, out_channels=82, expansion=3, stride=2),
+            LinearBottleneck(in_channels=82, out_channels=82, expansion=3, stride=1, skip_en=True)
         )
         self.mask_prediction_l2 = nn.Sequential(
             # DSConv with sigmoid activation + average pooling for size

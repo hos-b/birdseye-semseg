@@ -71,7 +71,6 @@ for ep in range(epochs):
         aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
                                                   NEW_SIZE[1], CENTER[0], CENTER[1])
         optimizer.zero_grad()
-        # mask_preds, sseg_preds = model(rgbs, car_transforms)
         agent_pool.calculate_detached_messages(rgbs)
         for i in range(agent_pool.agent_count):
             mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
@@ -86,8 +85,6 @@ for ep in range(epochs):
         writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
         total_train_m_loss += batch_train_m_loss
         total_train_s_loss += batch_train_s_loss
-        break
-
 
     writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
     writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
