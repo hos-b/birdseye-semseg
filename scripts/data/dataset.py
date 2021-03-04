@@ -70,7 +70,7 @@ class MassHDF5(torch.utils.data.Dataset):
             semsegs.append(torch.tensor(semseg, dtype=torch.long))
             # Masks: H, W
             masks.append(self.mask_transform(self.dataset[b_start_idx + i, "top_mask"]
-                        .view(dtype=np.uint8).reshape(500, 400)).squeeze())
+                        .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze())
             # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, "transform"]
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
