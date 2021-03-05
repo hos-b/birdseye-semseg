@@ -44,7 +44,6 @@ name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode(
 writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
 
 # network stuff
-show_plots = False
 drop_prob = 0.0
 learning_rate = 5e-4
 model = MassCNN(cfg, num_classes=7, output_size=NEW_SIZE).to(device)
@@ -63,7 +62,7 @@ for ep in range(epochs):
     # training
     model.train()
     for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
-        print(f'\repoch: {ep}/{epochs}, training batch: {batch_idx} / {len(train_loader)}', end='')
+        print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
         # simulate connection drops
         rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, drop_prob)
@@ -88,22 +87,20 @@ for ep in range(epochs):
 
     writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
     writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
-    print(f'\nepoch loss: {total_train_m_loss} mask, {total_train_s_loss} segmentation')
+    print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
+                        f'{total_train_s_loss / len(train_loader)} segmentation')
 
     # validation
     model.eval()
     visaulized = False
     with torch.no_grad():
         for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
-            print(f'\repoch: {ep}/{epochs}, validation batch: {batch_idx} / {len(test_loader)}', end='')
+            print(f'\repoch: {ep + 1}/{epochs}, validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
             mask_preds, sseg_preds = model(rgbs, car_transforms)
             m_loss = mask_loss(mask_preds.squeeze(), masks.squeeze())
-            try:
-                s_loss = semseg_loss(sseg_preds, labels)
-            except ValueError:
-                pdb.set_trace()
+            s_loss = semseg_loss(sseg_preds, labels)
             batch_valid_m_loss = torch.mean(m_loss, dim=(0, 1, 2)).item()
             batch_valid_s_loss = torch.mean(s_loss, dim=(0, 1, 2)).item()
             writer.add_scalar("loss/batch_valid_msk", batch_valid_m_loss, ep * len(test_loader) + batch_idx)
@@ -122,16 +119,6 @@ for ep in range(epochs):
                 ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu()).transpose(2, 0, 1)
                 pred_mask_img = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask_img = get_matplotlib_image(masks[0].cpu())
-                if show_plots:
-                    plt.imshow(pred_mask_img)
-                    plt.show()
-                    plt.imshow(trgt_mask_img)
-                    plt.show()
-                    plt.imshow(ss_trgt_img.transpose(1, 2, 0))
-                    plt.show()
-                    plt.imshow(ss_pred_img.transpose(1, 2, 0))
-                    plt.show()
-                
                 writer.add_image("validation/predicted_mask", torch.from_numpy(pred_mask_img).permute(2, 0, 1), ep + 1)
                 writer.add_image("validation/target_mask", torch.from_numpy(trgt_mask_img).permute(2, 0, 1), ep + 1)
                 writer.add_image("validation/predicted_segmentation", ss_pred_img, ep + 1)
@@ -140,6 +127,6 @@ for ep in range(epochs):
 
     writer.add_scalar("loss/total_valid_msk", total_valid_m_loss, ep + 1)
     writer.add_scalar("loss/total_valid_seg", total_valid_s_loss, ep + 1)
-    print(f'\nepoch loss: {total_valid_m_loss} mask, {total_valid_s_loss} segmentation')
+    print(f'\nepoch loss: {total_valid_m_loss / len(test_loader)} mask, {total_valid_s_loss / len(test_loader)} segmentation')
 
 writer.close()
