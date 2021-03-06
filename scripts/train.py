@@ -1,5 +1,4 @@
 import os
-import pdb
 import torch
 import torch.nn as nn
 import torch.functional as F
@@ -35,8 +34,8 @@ PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 # dataset
 device = torch.device('cuda')
 train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME, (0.8, 0.2), NEW_SIZE, 'ours')
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=1)
-test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
 # logging
 name = 'initial-'
@@ -85,8 +84,8 @@ for ep in range(epochs):
         total_train_m_loss += batch_train_m_loss
         total_train_s_loss += batch_train_s_loss
 
-    writer.add_scalar("loss/total_train_msk", total_train_m_loss, ep + 1)
-    writer.add_scalar("loss/total_train_seg", total_train_s_loss, ep + 1)
+    writer.add_scalar("loss/total_train_msk", total_train_m_loss / len(train_loader), ep + 1)
+    writer.add_scalar("loss/total_train_seg", total_train_s_loss / len(train_loader), ep + 1)
     print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
                         f'{total_train_s_loss / len(train_loader)} segmentation')
 
@@ -101,8 +100,8 @@ for ep in range(epochs):
             mask_preds, sseg_preds = model(rgbs, car_transforms)
             m_loss = mask_loss(mask_preds.squeeze(), masks.squeeze())
             s_loss = semseg_loss(sseg_preds, labels)
-            batch_valid_m_loss = torch.mean(m_loss, dim=(0, 1, 2)).item()
-            batch_valid_s_loss = torch.mean(s_loss, dim=(0, 1, 2)).item()
+            batch_valid_m_loss = torch.mean(m_loss.view(1, -1)).item()
+            batch_valid_s_loss = torch.mean(s_loss.view(1, -1)).item()
             writer.add_scalar("loss/batch_valid_msk", batch_valid_m_loss, ep * len(test_loader) + batch_idx)
             writer.add_scalar("loss/batch_valid_seg", batch_valid_s_loss, ep * len(test_loader) + batch_idx)
             total_valid_m_loss += batch_valid_m_loss
@@ -125,8 +124,8 @@ for ep in range(epochs):
                 writer.add_image("validation/target_segmentation", torch.from_numpy(ss_trgt_img), ep + 1)
                 visaulized = True
 
-    writer.add_scalar("loss/total_valid_msk", total_valid_m_loss, ep + 1)
-    writer.add_scalar("loss/total_valid_seg", total_valid_s_loss, ep + 1)
+    writer.add_scalar("loss/total_valid_msk", total_valid_m_loss / len(test_loader), ep + 1)
+    writer.add_scalar("loss/total_valid_seg", total_valid_s_loss / len(test_loader), ep + 1)
     print(f'\nepoch loss: {total_valid_m_loss / len(test_loader)} mask, {total_valid_s_loss / len(test_loader)} segmentation')
 
 writer.close()
