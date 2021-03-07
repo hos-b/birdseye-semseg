@@ -43,6 +43,9 @@ name = train_cfg.training_name + '-'
 name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
 writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
 
+# saving model
+last_metric = 0.0
+
 # network stuff
 model = MassCNN(geom_cfg,
                 num_classes=train_cfg.num_classes,
@@ -61,7 +64,7 @@ for ep in range(epochs):
     total_valid_m_loss = 0.0
     total_valid_s_loss = 0.0
     # training
-    model.train()
+    # model.train()
     for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
         print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
@@ -69,7 +72,7 @@ for ep in range(epochs):
         rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
         # masked loss
         aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
-                                                  NEW_SIZE[1], CENTER[0], CENTER[1])
+                                                  NEW_SIZE[1], CENTER[0], CENTER[1], device)
         optimizer.zero_grad()
         agent_pool.calculate_detached_messages(rgbs)
         for i in range(agent_pool.agent_count):
@@ -127,11 +130,22 @@ for ep in range(epochs):
                 writer.add_image("validation/segmentation_target", torch.from_numpy(ss_trgt_img), ep + 1)
                 visaulized = True
     
+    new_metric = 0.0
     writer.add_scalar("loss/total_valid_msk", total_valid_m_loss / len(test_loader), ep + 1)
     writer.add_scalar("loss/total_valid_seg", total_valid_s_loss / len(test_loader), ep + 1)
     writer.add_scalar("iou/mask_iou", mask_ious / sample_count, ep + 1)
     for key, val in classes.items():
         writer.add_scalar(f"iou/{val.lower()}_iou", sseg_ious[key] / sample_count, ep + 1)
+        new_metric += sseg_ious[key] / sample_count
+    new_metric += mask_ious / sample_count
     print(f'\nepoch loss: {total_valid_m_loss / len(test_loader)} mask, {total_valid_s_loss / len(test_loader)} segmentation')
+
+    if new_metric > last_metric:
+        print(f'saving snapshot at epoch {ep}')
+        last_metric = new_metric
+        if not os.path.exists(train_cfg.snapshot_dir):
+            os.makedirs(train_cfg.snapshot_dir)
+        torch.save(optimizer.state_dict(), train_cfg.snapshot_dir + '/optimizer_dict')
+        torch.save(model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
 
 writer.close()

@@ -4,6 +4,7 @@ parameters:
   dataset-file: 'testset.hdf5'
   dataset-name: 'town-01'
   tensorboard-dir: './tensorboard'
+  snapshot-dir: './snapshots'
   device: 'cpu'
 
 hyperparameters:

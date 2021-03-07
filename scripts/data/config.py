@@ -46,6 +46,7 @@ class TrainingConfig:
         self.dset_file = conf['parameters']['dataset-file']
         self.dset_name = conf['parameters']['dataset-name']
         self.tensorboard_dir = conf['parameters']['tensorboard-dir']
+        self.snapshot_dir = conf['parameters']['snapshot-dir']
         self.device = conf['parameters']['device']
 
         self.drop_prob = conf['hyperparameters']['drop-prob']
