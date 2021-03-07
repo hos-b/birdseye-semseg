@@ -70,7 +70,7 @@ def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, 
         warped_mask[warped_mask < 1] = 0
     return warped_mask
 
-def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y):
+def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y, device):
     """
     input: masks & transforms of all agents, target agent id, extra info
     output: accumulative mask for all agents
@@ -80,7 +80,7 @@ def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x,
     all_masks = torch.zeros_like(masks)
     # TODO: remove for loop for faster ops
     for i in range(agent_count):
-        relative_tfs = get_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y).cuda()
+        relative_tfs = get_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y).to(device)
         warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags='bilinear')
         all_masks[i] = warped_mask.sum(dim=0)
     all_masks[all_masks > 1] = 1

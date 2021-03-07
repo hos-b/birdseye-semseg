@@ -22,9 +22,10 @@ __all__ = ['MassCNN']
 
 
 class MassCNN(torch.nn.Module):
-    def __init__(self, config: SemanticCloudConfig, num_classes, output_size=(256, 205)):
+    def __init__(self, config: SemanticCloudConfig, num_classes, device, output_size=(256, 205)):
         super(MassCNN, self).__init__()
         self.cfg = config
+        self.device = device
         self.output_size = output_size
         self.downsample = LearningToDownsample(in_channels=32, mid_channels=48, out_channels=64)
         # 3 x 3 stages of linear bottleneck for feature compression
@@ -119,7 +120,7 @@ class MassCNN(torch.nn.Module):
         # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(compressed_features)
         for i in range(agent_count):
-            relative_tfs = get_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).cuda()
+            relative_tfs = get_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(self.device)
             warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
 

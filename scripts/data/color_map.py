@@ -46,7 +46,7 @@ __our_classes = {
     6: 'Water'
 }
 __carla_to_our_ids = {
-    # 0, 2, 4, 5, 12, 13 & 17 are assumed to be absent
+    # 0, 2, 4, 5, 12, 13 & 17 are assumed to be absent in the dataset
     1 : 0,  # Buildings   -> Buildings
     3 : 1,  # Other       -> Misc
     6 : 2,  # RoadLine    -> Road (for now)
