@@ -1,4 +1,5 @@
 import os
+from matplotlib.pyplot import plot_date
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
@@ -65,34 +66,34 @@ for ep in range(epochs):
     total_valid_s_loss = 0.0
     # training
     # model.train()
-    for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
-        print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
-        rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
-        # simulate connection drops
-        rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
-        # masked loss
-        aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
-                                                  NEW_SIZE[1], CENTER[0], CENTER[1], device)
-        optimizer.zero_grad()
-        agent_pool.calculate_detached_messages(rgbs)
-        for i in range(agent_pool.agent_count):
-            mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
-            sseg_pred = agent_pool.aggregate_messages(i, car_transforms)
-            m_loss = torch.mean(mask_loss(mask_pred.squeeze(), masks[i]) * aggregate_masks[i], dim=(0, 1))
-            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * masks[i], dim=(0, 1, 2))
-            (m_loss + s_loss).backward()
-            optimizer.step()
-            batch_train_m_loss = m_loss.item()
-            batch_train_s_loss = s_loss.item()
-        writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
-        writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
-        total_train_m_loss += batch_train_m_loss
-        total_train_s_loss += batch_train_s_loss
+    # for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+    #     print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
+    #     rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
+    #     # simulate connection drops
+    #     rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
+    #     # masked loss
+    #     aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
+    #                                               NEW_SIZE[1], CENTER[0], CENTER[1], device)
+    #     optimizer.zero_grad()
+    #     agent_pool.calculate_detached_messages(rgbs)
+    #     for i in range(agent_pool.agent_count):
+    #         mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
+    #         sseg_pred = agent_pool.aggregate_messages(i, car_transforms)
+    #         m_loss = torch.mean(mask_loss(mask_pred.squeeze(), masks[i]) * aggregate_masks[i], dim=(0, 1))
+    #         s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * masks[i], dim=(0, 1, 2))
+    #         (m_loss + s_loss).backward()
+    #         optimizer.step()
+    #         batch_train_m_loss = m_loss.item()
+    #         batch_train_s_loss = s_loss.item()
+    #     writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
+    #     writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
+    #     total_train_m_loss += batch_train_m_loss
+    #     total_train_s_loss += batch_train_s_loss
 
-    writer.add_scalar("loss/total_train_msk", total_train_m_loss / len(train_loader), ep + 1)
-    writer.add_scalar("loss/total_train_seg", total_train_s_loss / len(train_loader), ep + 1)
-    print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
-                        f'{total_train_s_loss / len(train_loader)} segmentation')
+    # writer.add_scalar("loss/total_train_msk", total_train_m_loss / len(train_loader), ep + 1)
+    # writer.add_scalar("loss/total_train_seg", total_train_s_loss / len(train_loader), ep + 1)
+    # print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
+    #                     f'{total_train_s_loss / len(train_loader)} segmentation')
 
     # validation
     model.eval()
@@ -124,6 +125,7 @@ for ep in range(epochs):
                 ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu()).transpose(2, 0, 1)
                 pred_mask_img = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask_img = get_matplotlib_image(masks[0].cpu())
+                writer.add_image("validation/input_rgb", rgbs[0], ep + 1)
                 writer.add_image("validation/mask_predicted", torch.from_numpy(pred_mask_img).permute(2, 0, 1), ep + 1)
                 writer.add_image("validation/mask_target", torch.from_numpy(trgt_mask_img).permute(2, 0, 1), ep + 1)
                 writer.add_image("validation/segmentation_predicted", ss_pred_img, ep + 1)
