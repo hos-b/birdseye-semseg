@@ -6,19 +6,20 @@ import random
 from data.color_map import carla_semantics_to_cityscapes_rgb, our_semantics_to_cityscapes_rgb
 from data.dataset import MassHDF5
 from data.mask_warp import get_single_aggregate_mask
-from data.config import SemanticCloudConfig
+from data.config import SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all
 
-DATASET_DIR = "/export/home/aiscar2/mass-data"
-PKG_NAME = "dataset_10k.hdf5"
-classes = 'ours'
+train_cfg = TrainingConfig('config/training.yml')
+DATASET_DIR = train_cfg.dset_dir
+PKG_NAME = train_cfg.dset_file
+classes = train_cfg.classes
 random_samples = False
 
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
 
 # image geometry
-NEW_SIZE = (256, 205)
+NEW_SIZE = (train_cfg.output_h, train_cfg.output_w)
 CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
