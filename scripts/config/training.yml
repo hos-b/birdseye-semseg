@@ -1,0 +1,22 @@
+parameters:
+  name: 'test'
+  dataset-dir: '/home/hosein/data'
+  dataset-file: 'testset.hdf5'
+  dataset-name: 'town-01'
+  tensorboard-dir: './tensorboard'
+  snapshot-dir: './snapshots'
+  device: 'cpu'
+
+hyperparameters:
+  # probability that an agent stops transmitting
+  learning-rate: 5e-4
+  epochs: 100
+  drop-prob: 0.0
+  output-h: 256
+  output-w: 205
+  classes: 'ours'
+  num-classes: 7
+
+validation:
+  # threshold for counting the mask pixel as detected
+  mask-det-threshold: 0.5

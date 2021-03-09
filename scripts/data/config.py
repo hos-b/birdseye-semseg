@@ -36,3 +36,25 @@ class SemanticCloudConfig:
         if rows == 0:
             return int((self.cloud_max_x / self.cloud_x_span) * self.image_rows)
         return int((self.cloud_max_x / self.cloud_x_span) * rows)
+
+class TrainingConfig:
+    def __init__(self, file_path: str):
+        yaml_file = open(file_path)
+        conf = yaml.load(yaml_file, Loader=yaml.FullLoader)
+        self.training_name = conf['parameters']['name']
+        self.dset_dir = conf['parameters']['dataset-dir']
+        self.dset_file = conf['parameters']['dataset-file']
+        self.dset_name = conf['parameters']['dataset-name']
+        self.tensorboard_dir = conf['parameters']['tensorboard-dir']
+        self.snapshot_dir = conf['parameters']['snapshot-dir']
+        self.device = conf['parameters']['device']
+
+        self.drop_prob = conf['hyperparameters']['drop-prob']
+        self.output_h = conf['hyperparameters']['output-h']
+        self.output_w = conf['hyperparameters']['output-w']
+        self.classes = conf['hyperparameters']['classes']
+        self.num_classes = conf['hyperparameters']['num-classes']
+        self.learning_rate = float(conf['hyperparameters']['learning-rate'])
+        self.epochs = conf['hyperparameters']['epochs']
+
+        self.mask_detection_thresh = conf['validation']['mask-det-threshold']

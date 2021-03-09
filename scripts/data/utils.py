@@ -1,6 +1,8 @@
 import cv2
 import torch
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
