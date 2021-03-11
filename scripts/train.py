@@ -1,10 +1,8 @@
 import os
-from matplotlib.pyplot import plot_date
 import torch
 import torch.nn as nn
 from tensorboardX import SummaryWriter
 import subprocess
-
 
 from data.dataset import get_datasets
 from data.config import SemanticCloudConfig, TrainingConfig
