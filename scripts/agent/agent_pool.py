@@ -33,12 +33,12 @@ class AgentPool:
                     latent_compressed_features * latent_mask_predictions
             )
 
-        del latent_mask_predictions
-        del latent_compressed_features
-        del hi_res_features
+        # del latent_mask_predictions
+        # del latent_compressed_features
+        # del hi_res_features
         # 2 > 1!
-        torch.cuda.empty_cache()
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
 
     def calculate_agent_mask(self, rgb):
         hi_res_features = self.model.downsample(rgb.unsqueeze(0))
