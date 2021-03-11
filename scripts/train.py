@@ -65,35 +65,35 @@ for ep in range(epochs):
     total_valid_m_loss = 0.0
     total_valid_s_loss = 0.0
     # training
-    model.train()
-    for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
-        print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
-        rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
-        # simulate connection drops
-        rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
-        # masked loss
-        aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
-                                                  NEW_SIZE[1], CENTER[0], CENTER[1], device)
-        optimizer.zero_grad()
-        agent_pool.calculate_detached_messages(rgbs)
-        for i in range(agent_pool.agent_count):
-            mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
-            sseg_pred = agent_pool.aggregate_messages(i, car_transforms)
-            m_loss = torch.mean(mask_loss(mask_pred.squeeze(), masks[i]) * aggregate_masks[i], dim=(0, 1))
-            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * masks[i], dim=(0, 1, 2))
-            (m_loss + s_loss).backward()
-            optimizer.step()
-            batch_train_m_loss = m_loss.item()
-            batch_train_s_loss = s_loss.item()
-        writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
-        writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
-        total_train_m_loss += batch_train_m_loss
-        total_train_s_loss += batch_train_s_loss
+    # model.train()
+    # for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+    #     print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
+    #     rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
+    #     # simulate connection drops
+    #     rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
+    #     # masked loss
+    #     aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
+    #                                               NEW_SIZE[1], CENTER[0], CENTER[1], device)
+    #     optimizer.zero_grad()
+    #     agent_pool.calculate_detached_messages(rgbs)
+    #     for i in range(agent_pool.agent_count):
+    #         mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
+    #         sseg_pred = agent_pool.aggregate_messages(i, car_transforms)
+    #         m_loss = torch.mean(mask_loss(mask_pred.squeeze(), masks[i]) * aggregate_masks[i], dim=(0, 1))
+    #         s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * masks[i], dim=(0, 1, 2))
+    #         (m_loss + s_loss).backward()
+    #         optimizer.step()
+    #         batch_train_m_loss = m_loss.item()
+    #         batch_train_s_loss = s_loss.item()
+    #     writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
+    #     writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
+    #     total_train_m_loss += batch_train_m_loss
+    #     total_train_s_loss += batch_train_s_loss
 
-    writer.add_scalar("loss/total_train_msk", total_train_m_loss / len(train_loader), ep + 1)
-    writer.add_scalar("loss/total_train_seg", total_train_s_loss / len(train_loader), ep + 1)
-    print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
-                        f'{total_train_s_loss / len(train_loader)} segmentation')
+    # writer.add_scalar("loss/total_train_msk", total_train_m_loss / len(train_loader), ep + 1)
+    # writer.add_scalar("loss/total_train_seg", total_train_s_loss / len(train_loader), ep + 1)
+    # print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
+    #                     f'{total_train_s_loss / len(train_loader)} segmentation')
 
     # validation
     model.eval()
@@ -109,8 +109,9 @@ for ep in range(epochs):
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
             mask_preds, sseg_preds = model(rgbs, car_transforms)
             sseg_ious += iou_per_class(sseg_preds, labels)
-            mask_ious += mask_iou(mask_preds.squeeze(), masks, train_cfg.mask_detection_thresh).item()
-            m_loss = mask_loss(mask_preds.squeeze(), masks.squeeze())
+            # squeezing mask preds along channel dim (= 1)
+            mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh).item()
+            m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels)
             total_valid_m_loss += torch.mean(m_loss.view(1, -1)).item()
             total_valid_s_loss += torch.mean(s_loss.view(1, -1)).item()
