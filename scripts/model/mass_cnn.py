@@ -22,7 +22,7 @@ __all__ = ['MassCNN']
 
 def get_layer_sizes(size: str):
     if size == 'small':
-        return 3, 82, 96
+        return 2, 82, 96
     elif size == 'large':
         return 4, 96, 128
     else:
