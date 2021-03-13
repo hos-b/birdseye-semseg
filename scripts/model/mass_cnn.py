@@ -60,22 +60,23 @@ class MassCNN(torch.nn.Module):
             LinearBottleneck(in_channels=64, out_channels=64, expansion=exp, stride=1, skip_en=True),
             # ----------------------------------------------------------------------
             LinearBottleneck(in_channels=64, out_channels=l1, expansion=exp, stride=2),
-            LinearBottleneck(in_channels=l1, out_channels=l1, expansion=exp, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=l1, out_channels=l1, expansion=exp, stride=1, skip_en=True),
+            nn.ReLU()
         )
         self.mask_prediction_l2 = nn.Sequential(
             # DSConv with sigmoid activation + average pooling for size
             nn.Conv2d(in_channels=l1, out_channels=l1, kernel_size=(3, 6), padding=1, groups=l1, bias=False),
             nn.AdaptiveAvgPool2d(self.output_size),
-            # nn.BatchNorm2d(l1),
+            nn.BatchNorm2d(l1),
             nn.PReLU(num_parameters=l1),
             nn.Conv2d(in_channels=l1, out_channels=1, kernel_size=1, bias=False),
-            nn.Sigmoid()
+            nn.ReLU()
         )
         self.pyramid_pooling = PyramidPooling(in_channels=l2, out_channels=l2)
         self.classifier = nn.Sequential(
             DWConv(in_channels=l2, out_channels=l2, kernel_size=1),
             nn.Conv2d(in_channels=l2, out_channels=l2, kernel_size=1),
-            # nn.BatchNorm2d(l2),
+            nn.BatchNorm2d(l2),
             DSConv(in_channels=l2, out_channels=l2, stride=1),
             DSConv(in_channels=l2, out_channels=l2, stride=1),
             # nn.Dropout(0.1),
@@ -158,7 +159,7 @@ class ConvBNReLU(nn.Module):
         super(ConvBNReLU, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
-            # nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels),
             nn.PReLU(num_parameters=out_channels)
         )
 
@@ -178,10 +179,10 @@ class DSConv(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size, stride,
                       padding, groups=in_channels, bias=False),
-            # nn.BatchNorm2d(in_channels),
+            nn.BatchNorm2d(in_channels),
             nn.PReLU(num_parameters=in_channels),
             nn.Conv2d(in_channels, out_channels, 1, bias=False), # 1x1 conv
-            # nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels),
             nn.PReLU(num_parameters=out_channels)
         )
 
@@ -200,7 +201,7 @@ class DWConv(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride,
                       padding, groups=in_channels, bias=False),
-            # nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels),
             nn.PReLU(num_parameters=out_channels)
         )
 
@@ -219,7 +220,7 @@ class LinearBottleneck(nn.Module):
             DWConv(in_channels * expansion, in_channels * expansion, stride),
             # pw-linear
             nn.Conv2d(in_channels * expansion, out_channels, 1, bias=False),
-            # nn.BatchNorm2d(out_channels)
+            nn.BatchNorm2d(out_channels)
         )
 
     def forward(self, x):
