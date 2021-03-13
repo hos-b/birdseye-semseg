@@ -4,7 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from data.mask_warp import get_relative_img_transform
-from data.config import SemanticCloudConfig
+from data.config import SemanticCloudConfig, TrainingConfig
 
 """
 input --> downsample --> bottleneck --------
@@ -20,55 +20,63 @@ transform and compressed features from other agents --------
 
 __all__ = ['MassCNN']
 
+def get_layer_sizes(mode: str):
+    if mode == 'small':
+        return 3, 82, 96
+    elif mode == 'large':
+        return 4, 96, 128
 
 class MassCNN(torch.nn.Module):
-    def __init__(self, config: SemanticCloudConfig, num_classes, device, output_size=(256, 205)):
+    def __init__(self, sem_cfg: SemanticCloudConfig, num_classes,
+                 device, mode='small', output_size=(256, 205)):
         super(MassCNN, self).__init__()
-        self.cfg = config
+        self.sem_cfg = sem_cfg
         self.device = device
         self.output_size = output_size
+        # defining model size
+        exp, l1, l2 = get_layer_sizes(mode)
         self.downsample = LearningToDownsample(in_channels=32, mid_channels=48, out_channels=64)
         # 3 x 3 stages of linear bottleneck for feature compression
         self.compression_l1 = nn.Sequential(
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=exp, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=exp, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=exp, stride=1, skip_en=True),
             # ---------------------------------------------------------------------------------------------
-            LinearBottleneck(in_channels=64, out_channels=82, expansion=3, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=82, out_channels=82, expansion=3, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=82, out_channels=82, expansion=3, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=64, out_channels=l1, expansion=exp, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=l1, out_channels=l1, expansion=exp, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=l1, out_channels=l1, expansion=exp, stride=1, skip_en=True)
         )
         self.compression_l2 = nn.Sequential(
-            LinearBottleneck(in_channels= 82, out_channels=96, expansion=3, stride=2, skip_en=False),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=3, stride=1, skip_en=True),
-            LinearBottleneck(in_channels=96, out_channels=96, expansion=3, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=l1, out_channels=l2, expansion=exp, stride=2, skip_en=False),
+            LinearBottleneck(in_channels=l2, out_channels=l2, expansion=exp, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=l2, out_channels=l2, expansion=exp, stride=1, skip_en=True)
         )
         self.mask_prediction_l1 = nn.Sequential(
             # 2 x 2 stages of linear bottleneck for fov estimation
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=2),
-            LinearBottleneck(in_channels=64, out_channels=64, expansion=3, stride=1, skip_en=True),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=exp, stride=2),
+            LinearBottleneck(in_channels=64, out_channels=64, expansion=exp, stride=1, skip_en=True),
             # ----------------------------------------------------------------------
-            LinearBottleneck(in_channels=64, out_channels=82, expansion=3, stride=2),
-            LinearBottleneck(in_channels=82, out_channels=82, expansion=3, stride=1, skip_en=True)
+            LinearBottleneck(in_channels=64, out_channels=l1, expansion=exp, stride=2),
+            LinearBottleneck(in_channels=l1, out_channels=l1, expansion=exp, stride=1, skip_en=True)
         )
         self.mask_prediction_l2 = nn.Sequential(
             # DSConv with sigmoid activation + average pooling for size
-            nn.Conv2d(in_channels=82, out_channels=82, kernel_size=(3, 6), padding=1, groups=82, bias=False),
+            nn.Conv2d(in_channels=l1, out_channels=l1, kernel_size=(3, 6), padding=1, groups=l1, bias=False),
             nn.AdaptiveAvgPool2d(self.output_size),
-            nn.BatchNorm2d(82),
-            nn.ReLU(True),
-            nn.Conv2d(in_channels=82, out_channels=1, kernel_size=1, bias=False),
+            # nn.BatchNorm2d(l1),
+            nn.PReLU(num_parameters=l1),
+            nn.Conv2d(in_channels=l1, out_channels=1, kernel_size=1, bias=False),
             nn.Sigmoid()
         )
-        self.pyramid_pooling = PyramidPooling(in_channels=96, out_channels=96)
+        self.pyramid_pooling = PyramidPooling(in_channels=l2, out_channels=l2)
         self.classifier = nn.Sequential(
-            DWConv(in_channels=96, out_channels=96, kernel_size=1),
-            nn.Conv2d(in_channels=96, out_channels=96, kernel_size=1),
-            nn.BatchNorm2d(96),
-            DSConv(in_channels=96, out_channels=96, stride=1),
-            DSConv(in_channels=96, out_channels=96, stride=1),
-            nn.Dropout(0.1),
-            nn.Conv2d(in_channels=96, out_channels=64, kernel_size=3),
+            DWConv(in_channels=l2, out_channels=l2, kernel_size=1),
+            nn.Conv2d(in_channels=l2, out_channels=l2, kernel_size=1),
+            # nn.BatchNorm2d(l2),
+            DSConv(in_channels=l2, out_channels=l2, stride=1),
+            DSConv(in_channels=l2, out_channels=l2, stride=1),
+            # nn.Dropout(0.1),
+            nn.Conv2d(in_channels=l2, out_channels=64, kernel_size=3),
             nn.Conv2d(in_channels=64, out_channels=num_classes, kernel_size=1)
         )
     
@@ -114,9 +122,9 @@ class MassCNN(torch.nn.Module):
         # calculating constants
         agent_count = transforms.shape[0]
         cf_h, cf_w = 238, 318 # compressed_features.shape[2], compressed_features.shape[3]
-        ppm = 12.71 # ((cf_h / self.cfg.cloud_x_span) + (cf_w / self.cfg.cloud_y_span)) / 2.0
-        center_x = 190 # int((self.cfg.cloud_max_x / self.cfg.cloud_x_span) * cf_h)
-        center_y = 159 # int((self.cfg.cloud_max_y / self.cfg.cloud_y_span) * cf_w)
+        ppm = 12.71 # ((cf_h / self.sem_cfg.cloud_x_span) + (cf_w / self.sem_cfg.cloud_y_span)) / 2.0
+        center_x = 190 # int((self.sem_cfg.cloud_max_x / self.sem_cfg.cloud_x_span) * cf_h)
+        center_y = 159 # int((self.sem_cfg.cloud_max_y / self.sem_cfg.cloud_y_span) * cf_w)
         # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(compressed_features)
         for i in range(agent_count):
@@ -125,7 +133,6 @@ class MassCNN(torch.nn.Module):
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
 
         return aggregated_features
-        
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
@@ -148,8 +155,8 @@ class ConvBNReLU(nn.Module):
         super(ConvBNReLU, self).__init__()
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride, padding, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True)
+            # nn.BatchNorm2d(out_channels),
+            nn.PReLU(num_parameters=out_channels)
         )
 
     def forward(self, x):
@@ -168,11 +175,11 @@ class DSConv(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, in_channels, kernel_size, stride,
                       padding, groups=in_channels, bias=False),
-            nn.BatchNorm2d(in_channels),
-            nn.ReLU(True),
+            # nn.BatchNorm2d(in_channels),
+            nn.PReLU(num_parameters=in_channels),
             nn.Conv2d(in_channels, out_channels, 1, bias=False), # 1x1 conv
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True)
+            # nn.BatchNorm2d(out_channels),
+            nn.PReLU(num_parameters=out_channels)
         )
 
     def forward(self, x):
@@ -190,8 +197,8 @@ class DWConv(nn.Module):
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size, stride,
                       padding, groups=in_channels, bias=False),
-            nn.BatchNorm2d(out_channels),
-            nn.ReLU(True)
+            # nn.BatchNorm2d(out_channels),
+            nn.PReLU(num_parameters=out_channels)
         )
 
     def forward(self, x):
@@ -209,7 +216,7 @@ class LinearBottleneck(nn.Module):
             DWConv(in_channels * expansion, in_channels * expansion, stride),
             # pw-linear
             nn.Conv2d(in_channels * expansion, out_channels, 1, bias=False),
-            nn.BatchNorm2d(out_channels)
+            # nn.BatchNorm2d(out_channels)
         )
 
     def forward(self, x):
