@@ -28,25 +28,22 @@ class AgentPool:
             latent_compressed_features = self.model.compression_l1(hi_res_features)
             # [A, 96, 239, 319]
             latent_mask_predictions = self.model.mask_prediction_l1(hi_res_features)
+            latent_mask_predictions = torch.minimum(latent_mask_predictions,
+                                      torch.ones_like(latent_mask_predictions))
             # [A, 128, 238, 318]
             self.detached_features = self.model.compression_l2(
                     latent_compressed_features * latent_mask_predictions
             )
 
-        # del latent_mask_predictions
-        # del latent_compressed_features
-        # del hi_res_features
-        # 2 > 1!
-        # torch.cuda.empty_cache()
-        # torch.cuda.empty_cache()
-
     def calculate_agent_mask(self, rgb):
         hi_res_features = self.model.downsample(rgb.unsqueeze(0))
-        # [A, 96, 239, 319]
+        # [1 96, 239, 319]
         latent_compressed_features = self.model.compression_l1(hi_res_features)
-        # [A, 96, 239, 319]
+        # [1, 96, 239, 319]
         latent_mask_prediction = self.model.mask_prediction_l1(hi_res_features)
-        # [A, 128, 238, 318]
+        latent_mask_prediction = torch.minimum(latent_mask_prediction,
+                                 torch.ones_like(latent_mask_prediction))
+        # [1, 128, 238, 318]
         self.agent_features = self.model.compression_l2(
             latent_compressed_features * latent_mask_prediction
         )

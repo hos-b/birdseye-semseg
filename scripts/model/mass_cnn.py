@@ -83,13 +83,13 @@ class MassCNN(torch.nn.Module):
             nn.Conv2d(in_channels=l2, out_channels=64, kernel_size=3),
             nn.Conv2d(in_channels=64, out_channels=num_classes, kernel_size=1)
         )
-    
+
     def parameter_count(self):
         """
         returns the number of trainable parameters
         """
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
-    
+
     def forward(self, rgbs, transforms):
         """
         Not used.
@@ -117,7 +117,7 @@ class MassCNN(torch.nn.Module):
         # [A, 128, 256, 205]
         pooled_features = self.pyramid_pooling(aggregated_features, self.output_size)
         return predicted_masks, self.classifier(pooled_features)
-    
+
     def aggregate_data(self, compressed_features, transforms):
         """
         warps compressed features into the view of each agent, before pooling 
@@ -135,7 +135,6 @@ class MassCNN(torch.nn.Module):
             relative_tfs = get_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(self.device)
             warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
-
         return aggregated_features
 
 class LearningToDownsample(nn.Module):
@@ -154,7 +153,6 @@ class LearningToDownsample(nn.Module):
 
 class ConvBNReLU(nn.Module):
     """Conv-BN-ReLU"""
-
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0):
         super(ConvBNReLU, self).__init__()
         self.conv = nn.Sequential(
