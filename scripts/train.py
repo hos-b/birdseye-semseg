@@ -35,8 +35,8 @@ PPM = geom_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 # dataset
 device = torch.device(train_cfg.device)
 train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME, (0.8, 0.2), NEW_SIZE, train_cfg.classes)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
-test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=4)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=4)
 
 # logging
 name = train_cfg.training_name + '-'
@@ -62,7 +62,7 @@ elif train_cfg.loss_function == 'focal':
 else:
     print(f'unknown loss function: {train_cfg.loss_function}')
     exit()
-mask_loss = nn.L1Loss(reduction='none')
+mask_loss = nn.L1Loss(reduction='mean')
 print(f"{(model.parameter_count() / 1e6):.2f}M trainable parameters")
 
 for ep in range(epochs):
@@ -70,36 +70,40 @@ for ep in range(epochs):
     total_train_s_loss = 0.0
     total_valid_m_loss = 0.0
     total_valid_s_loss = 0.0
+    sample_count = 0
     # training
     model.train()
     for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+        sample_count += rgbs.shape[1]
         print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
         # simulate connection drops
         rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
-        # masked loss
+        # semseg loss mask
         aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
                                                   NEW_SIZE[1], CENTER[0], CENTER[1], device)
+        batch_train_m_loss = 0
+        batch_train_s_loss = 0
         optimizer.zero_grad()
         agent_pool.calculate_detached_messages(rgbs)
         for i in range(agent_pool.agent_count):
             mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
             sseg_pred = agent_pool.aggregate_messages(i, car_transforms)
-            m_loss = torch.mean(mask_loss(mask_pred.squeeze(), masks[i]) * aggregate_masks[i], dim=(0, 1))
-            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * masks[i], dim=(0, 1, 2))
+            m_loss = mask_loss(mask_pred.squeeze(), masks[i])
+            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * aggregate_masks[i], dim=(0, 1, 2))
             (m_loss + s_loss).backward()
             optimizer.step()
-            batch_train_m_loss = m_loss.item()
-            batch_train_s_loss = s_loss.item()
+            batch_train_m_loss += m_loss.item()
+            batch_train_s_loss += s_loss.item()
         writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
         writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
         total_train_m_loss += batch_train_m_loss
         total_train_s_loss += batch_train_s_loss
 
-    writer.add_scalar("loss/total_train_msk", total_train_m_loss / len(train_loader), ep + 1)
-    writer.add_scalar("loss/total_train_seg", total_train_s_loss / len(train_loader), ep + 1)
-    print(f'\nepoch loss: {total_train_m_loss / len(train_loader)} mask, '
-                        f'{total_train_s_loss / len(train_loader)} segmentation')
+    writer.add_scalar("loss/total_train_msk", total_train_m_loss / sample_count, ep + 1)
+    writer.add_scalar("loss/total_train_seg", total_train_s_loss / sample_count, ep + 1)
+    print(f'\nepoch loss: {total_train_m_loss / sample_count} mask, '
+                        f'{total_train_s_loss / sample_count} segmentation')
 
     # validation
     model.eval()
@@ -113,18 +117,17 @@ for ep in range(epochs):
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
+            aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
+                                                        NEW_SIZE[1], CENTER[0], CENTER[1], device)
             mask_preds, sseg_preds = model(rgbs, car_transforms)
             sseg_ious += iou_per_class(sseg_preds, labels)
-            # squeezing mask preds along channel dim (= 1)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh).item()
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
-            s_loss = semseg_loss(sseg_preds, labels)
+            s_loss = semseg_loss(sseg_preds, labels) * aggregate_masks
             total_valid_m_loss += torch.mean(m_loss.view(1, -1)).item()
             total_valid_s_loss += torch.mean(s_loss.view(1, -1)).item()
             # visaluize the first agent from the first batch
             if not visaulized:
-                aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
-                                                          NEW_SIZE[1], CENTER[0], CENTER[1], device)
                 ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
                 ss_mask = aggregate_masks[0].cpu()
                 ss_trgt_img[:, ss_mask == 0] = 0
@@ -140,14 +143,14 @@ for ep in range(epochs):
                 visaulized = True
     
     new_metric = 0.0
-    writer.add_scalar("loss/total_valid_msk", total_valid_m_loss / len(test_loader), ep + 1)
-    writer.add_scalar("loss/total_valid_seg", total_valid_s_loss / len(test_loader), ep + 1)
+    writer.add_scalar("loss/total_valid_msk", total_valid_m_loss / sample_count, ep + 1)
+    writer.add_scalar("loss/total_valid_seg", total_valid_s_loss / sample_count, ep + 1)
     writer.add_scalar("iou/mask_iou", mask_ious / sample_count, ep + 1)
     for key, val in classes.items():
         writer.add_scalar(f"iou/{val.lower()}_iou", sseg_ious[key] / sample_count, ep + 1)
         new_metric += sseg_ious[key] / sample_count
     new_metric += mask_ious / sample_count
-    print(f'\nepoch loss: {total_valid_m_loss / len(test_loader)} mask, {total_valid_s_loss / len(test_loader)} segmentation')
+    print(f'\nepoch loss: {total_valid_m_loss / sample_count} mask, {total_valid_s_loss / sample_count} segmentation')
 
     if new_metric > last_metric:
         print(f'saving snapshot at epoch {ep}')
