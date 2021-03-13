@@ -20,11 +20,14 @@ transform and compressed features from other agents --------
 
 __all__ = ['MassCNN']
 
-def get_layer_sizes(mode: str):
-    if mode == 'small':
+def get_layer_sizes(size: str):
+    if size == 'small':
         return 3, 82, 96
-    elif mode == 'large':
+    elif size == 'large':
         return 4, 96, 128
+    else:
+        print(f'unknown model size: {size}')
+        exit()
 
 class MassCNN(torch.nn.Module):
     def __init__(self, sem_cfg: SemanticCloudConfig, num_classes,

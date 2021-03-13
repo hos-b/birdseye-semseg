@@ -48,7 +48,6 @@ class TrainingConfig:
         self.tensorboard_dir = conf['parameters']['tensorboard-dir']
         self.snapshot_dir = conf['parameters']['snapshot-dir']
         self.device = conf['parameters']['device']
-        self.model_size = conf['parameters']['model-size']
 
         self.drop_prob = conf['hyperparameters']['drop-prob']
         self.output_h = conf['hyperparameters']['output-h']
@@ -57,5 +56,7 @@ class TrainingConfig:
         self.num_classes = conf['hyperparameters']['num-classes']
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = conf['hyperparameters']['epochs']
+        self.model_size = conf['hyperparameters']['model-size']
+        self.loss_function = conf['hyperparameters']['loss']
 
         self.mask_detection_thresh = conf['validation']['mask-det-threshold']

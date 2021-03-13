@@ -1,6 +1,7 @@
 import os
 import torch
 import torch.nn as nn
+from kornia.losses.focal import FocalLoss
 from tensorboardX import SummaryWriter
 import subprocess
 
@@ -53,7 +54,14 @@ model = MassCNN(geom_cfg,
 epochs = train_cfg.epochs
 agent_pool = AgentPool(model, device, NEW_SIZE)
 optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
-semseg_loss = nn.CrossEntropyLoss(reduction='none')
+
+if train_cfg.loss_function == 'cross-entropy':
+    semseg_loss = nn.CrossEntropyLoss(reduction='none')
+elif train_cfg.loss_function == 'focal':
+    semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
+else:
+    print(f'unknown loss function: {train_cfg.loss_function}')
+    exit()
 mask_loss = nn.L1Loss(reduction='none')
 print(f"{(model.parameter_count() / 1e6):.2f}M trainable parameters")
 
