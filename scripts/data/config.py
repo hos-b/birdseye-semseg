@@ -48,6 +48,7 @@ class TrainingConfig:
         self.tensorboard_dir = conf['parameters']['tensorboard-dir']
         self.snapshot_dir = conf['parameters']['snapshot-dir']
         self.device = conf['parameters']['device']
+        self.model_size = conf['parameters']['model-size']
 
         self.drop_prob = conf['hyperparameters']['drop-prob']
         self.output_h = conf['hyperparameters']['output-h']
