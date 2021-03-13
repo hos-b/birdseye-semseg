@@ -59,12 +59,10 @@ class AgentPool:
         center_x = 190 # int((self.cfg.cloud_max_x / self.cfg.cloud_x_span) * cf_h)
         center_y = 159 # int((self.cfg.cloud_max_y / self.cfg.cloud_y_span) * cf_w)
         # aggregating [A, 128, 238, 318]
-        aggregated_features = torch.zeros_like(self.detached_features)
-        compressed_features = self.detached_features.clone()
-        compressed_features[agent_idx] = self.agent_features
-        
         relative_tfs = get_relative_img_transform(transforms, agent_idx, ppm, cf_h, cf_w, center_x, center_y).to(self.device)
-        warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
+        warped_features = kornia.warp_affine(self.detached_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
+        # the same features but with gradient
+        warped_features[agent_idx] = self.agent_features
         aggregated_features = warped_features.sum(dim=0) / self.agent_count
         # [A, 128, 256, 205]
         pooled_features = self.model.pyramid_pooling(aggregated_features.unsqueeze(0), self.output_size)
