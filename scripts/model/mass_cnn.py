@@ -3,8 +3,8 @@ import kornia
 import torch.nn as nn
 import torch.nn.functional as F
 
-from data.mask_warp import get_relative_img_transform
-from data.config import SemanticCloudConfig, TrainingConfig
+from data.mask_warp import get_single_relative_img_transform
+from data.config import SemanticCloudConfig
 
 """
 input --> downsample --> bottleneck --------
@@ -33,10 +33,9 @@ def get_layer_sizes(size: str):
 
 class MassCNN(torch.nn.Module):
     def __init__(self, sem_cfg: SemanticCloudConfig, num_classes,
-                 device, mode='small', output_size=(256, 205)):
+                 mode='small', output_size=(256, 205)):
         super(MassCNN, self).__init__()
         self.sem_cfg = sem_cfg
-        self.device = device
         self.output_size = output_size
         # defining model size
         exp, l1, l2 = get_layer_sizes(mode)
@@ -134,7 +133,7 @@ class MassCNN(torch.nn.Module):
         # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(compressed_features)
         for i in range(agent_count):
-            relative_tfs = get_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(self.device)
+            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
             warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
         return aggregated_features

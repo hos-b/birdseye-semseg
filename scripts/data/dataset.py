@@ -55,7 +55,7 @@ class MassHDF5(torch.utils.data.Dataset):
         b_agent_count = self.batch_sizes[idx]
         b_start_idx = self.batch_indices[idx]
         for i in range(b_agent_count):
-            # Agent ID: never used
+            # Agent ID
             ids.append(torch.tensor([self.dataset[b_start_idx + i, "agent_id"]], dtype=torch.long))
             # RGB Image: H, W, C
             rgbs.append(self.rgb_transform(self.dataset[b_start_idx + i, "front_rgb"]
