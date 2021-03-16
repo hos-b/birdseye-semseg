@@ -1,15 +1,18 @@
 import torch
 import kornia
+from torch._C import dtype
 
 from model.mass_cnn import MassCNN
-from data.mask_warp import get_relative_img_transform
+from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 
-class AgentPool:
+class CurriculumPool:
     """
     creates a pool of agents that distribute the computation of
-    the full architecture by simulating message passing.
+    the full architecture by simulating message passing. as the
+    training progresses, the number of agents that are allowed
+    to propagate messages increases, starting with 1.
     """
-    def __init__(self, model: MassCNN, device: torch.device, output_size) -> None:
+    def __init__(self, model: MassCNN, device: torch.device, starting_difficulty, maximum_difficulty, output_size) -> None:
         self.model = model
         self.agent_count = 0
         self.device = device
@@ -18,6 +21,45 @@ class AgentPool:
         self.mask_predictions = None
         self.output_size = output_size
     
+        # connection strategy
+        self.difficulty = starting_difficulty
+        self.maximum_difficulty = maximum_difficulty
+        self.combined_masks = None
+        self.adjacency_matrix = None
+    
+    def generate_connection_strategy(self, ids, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
+        """
+        combines all masks, find the best masks for each agent &
+        create adjacency matrix based on current difficulty
+        """
+        self.agent_count = masks.shape[0]
+        self.adjacency_matrix = torch.zeros((self.agent_count, self.agent_count), dtype=torch.bool)
+        ids = ids.squeeze()
+        # marking the masks
+        for i in range(len(ids.squeeze())):
+            masks[i] *= 1 << ids[i].item()
+        self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
+        # no calculations necessary for highest difficulty
+        if self.difficulty == self.maximum_difficulty:
+            self.combined_masks[self.combined_masks > 1] = 1
+            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.int8)
+            return
+        for i in range(self.agent_count):
+            possible_connections, counts = self.combined_mask[i].unique(sorted=True, return_counts=True)
+            possible_connections = possible_connections.long().tolist()
+            counts = counts.tolist()
+            considered_connections = 0
+            considered_connection_count = 0
+            while considered_connection_count < self.difficulty or len(possible_connections) > 0:
+                current_connection = possible_connections.pop(0)
+                # if already considered this agent
+                if (~considered_connections & current_connection) == 0:
+                    continue
+                # 
+                considered_connections |= current_connection
+                
+
+                
     def calculate_detached_messages(self, rgbs):
         self.agent_count = rgbs.shape[0]
         # ~100 MB per agent
@@ -56,7 +98,7 @@ class AgentPool:
         center_x = 190 # int((self.cfg.cloud_max_x / self.cfg.cloud_x_span) * cf_h)
         center_y = 159 # int((self.cfg.cloud_max_y / self.cfg.cloud_y_span) * cf_w)
         # aggregating [A, 128, 238, 318]
-        relative_tfs = get_relative_img_transform(transforms, agent_idx, ppm, cf_h, cf_w, center_x, center_y).to(self.device)
+        relative_tfs = get_single_relative_img_transform(transforms, agent_idx, ppm, cf_h, cf_w, center_x, center_y).to(self.device)
         warped_features = kornia.warp_affine(self.detached_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
         # the same features but with gradient
         warped_features[agent_idx] = self.agent_features
@@ -64,3 +106,10 @@ class AgentPool:
         # [A, 128, 256, 205]
         pooled_features = self.model.pyramid_pooling(aggregated_features.unsqueeze(0), self.output_size)
         return self.model.classifier(pooled_features)
+
+    def update_adjacency_matrix(self, agent_idx, mask_num, max_difficulty):
+        updated = 0 
+        for i in range(max_difficulty):
+            if mask_num & (1 << i) and self.adjacency_matrix[agent_idx, i]:
+                self.adjacency_matrix[agent_idx, i] = True
+                updated += 1

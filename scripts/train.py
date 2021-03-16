@@ -12,7 +12,7 @@ from data.color_map import __our_classes as classes
 from data.mask_warp import get_all_aggregate_masks
 from data.utils import drop_agent_data, squeeze_all, get_matplotlib_image
 from model.mass_cnn import MassCNN
-from agent.agent_pool import AgentPool
+from agent.agent_pool import CurriculumPool
 from metrics.iou import iou_per_class, mask_iou
 
 def to_device(rgbs, labels, masks, car_transforms, device):
@@ -56,10 +56,9 @@ last_metric = 0.0
 # network stuff -----------------------------
 model = MassCNN(geom_cfg,
                 num_classes=train_cfg.num_classes,
-                device=device,
                 output_size=NEW_SIZE).to(device)
 epochs = train_cfg.epochs
-agent_pool = AgentPool(model, device, NEW_SIZE)
+agent_pool = CurriculumPool(model, device, 1, NEW_SIZE)
 optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
 
 # losses -------------------------------------
@@ -81,18 +80,18 @@ for ep in range(epochs):
     sample_count = 0
     # training
     model.train()
-    for batch_idx, (_, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+    for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
         sample_count += rgbs.shape[1]
         print(f'\repoch: {ep + 1}/{epochs}, training batch: {batch_idx + 1} / {len(train_loader)}', end='')
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
         # simulate connection drops
         rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels, masks, car_transforms, train_cfg.drop_prob)
         # semseg loss mask
-        aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], \
-                                                  NEW_SIZE[1], CENTER[0], CENTER[1], device)
+        aggregate_masks = get_all_aggregate_masks(masks, car_transforms, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
         batch_train_m_loss = 0
         batch_train_s_loss = 0
         optimizer.zero_grad()
+        agent_pool.generate_connection_strategy(ids, masks, car_transforms, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
         agent_pool.calculate_detached_messages(rgbs)
         for i in range(agent_pool.agent_count):
             mask_pred = agent_pool.calculate_agent_mask(rgbs[i])

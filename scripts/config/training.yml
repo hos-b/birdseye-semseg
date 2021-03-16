@@ -1,12 +1,12 @@
 parameters:
-  name: 'focal-BN-ReLU1Maskz'
+  name: 'test'
   dataset-dir: '/export/home/bahadorm/mass-data'
   dataset-file: 'dataset_10k.hdf5'
   dataset-name: 'town-01'
   tensorboard-dir: './tensorboard'
   snapshot-dir: './snapshots'
   device: 'cuda'
-  distributed: 'false' # impossible for now
+  distributed: false # impossible for now
 
 
 hyperparameters:
