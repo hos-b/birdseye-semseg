@@ -1,22 +1,26 @@
 parameters:
-  name: 'test'
-  dataset-dir: '/home/hosein/data'
-  dataset-file: 'testset.hdf5'
+  name: 'focal-BN-ReLU1Maskz'
+  dataset-dir: '/export/home/bahadorm/mass-data'
+  dataset-file: 'dataset_10k.hdf5'
   dataset-name: 'town-01'
   tensorboard-dir: './tensorboard'
   snapshot-dir: './snapshots'
-  device: 'cpu'
+  device: 'cuda'
+  distributed: 'false' # impossible for now
+
 
 hyperparameters:
   # probability that an agent stops transmitting
-  learning-rate: 5e-4
-  epochs: 100
+  learning-rate: 1e-4
+  epochs: 1000
   drop-prob: 0.0
   output-h: 256
   output-w: 205
   classes: 'ours'
   num-classes: 7
+  model-size: 'large'
+  loss: 'focal' # 'cross-entropy'
 
 validation:
   # threshold for counting the mask pixel as detected
-  mask-det-threshold: 0.5
+  mask-det-threshold: 0.6

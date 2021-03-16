@@ -19,7 +19,7 @@ def to_device(rgbs, labels, masks, car_transforms, device):
     return rgbs.to(device), labels.to(device), \
            masks.to(device), car_transforms.to(device)
 
-# opening semantic cloud settings file
+# opening semantic cloud settings file ------
 geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
 train_cfg = TrainingConfig('config/training.yml')
 DATASET_DIR = train_cfg.dset_dir
@@ -28,25 +28,32 @@ DATASET = train_cfg.dset_name
 TENSORBOARD_DIR = train_cfg.tensorboard_dir
 NEW_SIZE = (train_cfg.output_h, train_cfg.output_w)
 
-# image size and center coordinates
+# image size and center coordinates ---------
 CENTER = (geom_cfg.center_x(NEW_SIZE[1]), geom_cfg.center_y(NEW_SIZE[0]))
 PPM = geom_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
-# dataset
+# distributed training -----------------------
+batch_size = 1
+distributed = False
+if train_cfg.distributed_training:
+    print(f'impossible for now')
+    exit()
+
+# dataset -----------------------------------
 device = torch.device(train_cfg.device)
 train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME, (0.8, 0.2), NEW_SIZE, train_cfg.classes)
-train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=4)
-test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=4)
+train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=True, num_workers=4)
+test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=True, num_workers=4)
 
-# logging
+# logging -----------------------------------
 name = train_cfg.training_name + '-'
 name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
 writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
 
-# saving model
+# saving model ------------------------------
 last_metric = 0.0
 
-# network stuff
+# network stuff -----------------------------
 model = MassCNN(geom_cfg,
                 num_classes=train_cfg.num_classes,
                 device=device,
@@ -55,6 +62,7 @@ epochs = train_cfg.epochs
 agent_pool = AgentPool(model, device, NEW_SIZE)
 optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
 
+# losses -------------------------------------
 if train_cfg.loss_function == 'cross-entropy':
     semseg_loss = nn.CrossEntropyLoss(reduction='none')
 elif train_cfg.loss_function == 'focal':

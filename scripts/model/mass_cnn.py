@@ -9,11 +9,13 @@ from data.config import SemanticCloudConfig, TrainingConfig
 """
 input --> downsample --> bottleneck --------
             |             |                 |
-            |             x                 --> aggregation layer ---> total mask, total prediction [loss #2]
-            |             |                             ^   ^
-             -->   mask_pred_mid -----> mask_pred ------|   |
+            |             x                 --> aggregation layer ---> total prediction [loss #2]
+            |             |                 |           ^   ^
+             -->   mask_pred_mid -----------            |   |
+                          |                             |   |
+                           --- mask_pred [loss #1]      |   |
                                                         |   |
-                 transform -----------------------------    |
+                transforms -----------------------------    |
                                                             |
 transform and compressed features from other agents --------
 """
