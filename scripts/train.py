@@ -58,7 +58,7 @@ model = MassCNN(geom_cfg,
                 num_classes=train_cfg.num_classes,
                 output_size=NEW_SIZE).to(device)
 epochs = train_cfg.epochs
-agent_pool = CurriculumPool(model, device, 1, NEW_SIZE)
+agent_pool = CurriculumPool(model, device, 1, 8, NEW_SIZE)
 optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
 
 # losses -------------------------------------
@@ -91,7 +91,7 @@ for ep in range(epochs):
         batch_train_m_loss = 0
         batch_train_s_loss = 0
         optimizer.zero_grad()
-        agent_pool.generate_connection_strategy(ids, masks, car_transforms, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
+        # agent_pool.generate_connection_strategy(ids, masks, car_transforms, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1])
         agent_pool.calculate_detached_messages(rgbs)
         for i in range(agent_pool.agent_count):
             mask_pred = agent_pool.calculate_agent_mask(rgbs[i])
@@ -99,9 +99,10 @@ for ep in range(epochs):
             m_loss = mask_loss(mask_pred.squeeze(), masks[i])
             s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) * aggregate_masks[i], dim=(0, 1, 2))
             (m_loss + s_loss).backward()
-            optimizer.step()
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
+
+        optimizer.step()
         writer.add_scalar("loss/batch_train_msk", batch_train_m_loss, ep * len(train_loader) + batch_idx)
         writer.add_scalar("loss/batch_train_seg", batch_train_s_loss, ep * len(train_loader) + batch_idx)
         total_train_m_loss += batch_train_m_loss
