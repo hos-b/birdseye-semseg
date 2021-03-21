@@ -137,7 +137,8 @@ def test_transforms(transforms, pixels_per_meter, h, w, center_x, center_y):
     relative_tfs_2 = get_all_relative_img_transforms(transforms, pixels_per_meter, h, w, center_x, center_y)
     relative_tfs_1 = torch.zeros_like(relative_tfs_2)
     for i in range(agent_count):
-        relative_tfs_1[i * agent_count : (i + 1) * agent_count] = get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y)
+        relative_tfs_1[i * agent_count : (i + 1) * agent_count] = \
+            get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y)
     if (torch.abs(relative_tfs_1 - relative_tfs_2) < 1e-15).unique() != torch.tensor([True]):
         print('\nrelative transforms are not equal')
     else:

@@ -3,7 +3,7 @@ import kornia
 import torch.nn as nn
 import torch.nn.functional as F
 
-from data.mask_warp import get_single_relative_img_transform
+from data.mask_warp import get_single_relative_img_transform, get_all_relative_img_transforms
 from data.config import SemanticCloudConfig
 
 """
@@ -148,7 +148,7 @@ class DistributedMassCNN(MassCNN):
         self.center_x = 190 # int((self.cfg.cloud_max_x / self.cfg.cloud_x_span) * cf_h)
         self.center_y = 159 # int((self.cfg.cloud_max_y / self.cfg.cloud_y_span) * cf_w)
 
-    def forward(self, rgbs, transforms, detached_features, agent_idx, agents_in_fov):
+    def forward(self, rgbs, transforms, detached_features, agent_idx, adjacency_matrix, evaluating):
         """
         Not used.
         input:
@@ -158,6 +158,8 @@ class DistributedMassCNN(MassCNN):
             predicted masks: agent_count x 256 x 205
             aggr_masks:      agent_count x 256 x 205
         """
+        if evaluating:
+            return self.detached_forward(rgbs, transforms, adjacency_matrix)
         # calculate detached features if not provided
         if detached_features is None:
             with torch.no_grad():
@@ -181,6 +183,7 @@ class DistributedMassCNN(MassCNN):
         # final mask prediction
         mask_prediction = self.mask_prediction_l2(current_latent_mask_prediction)
         # data aggregation
+        outside_fov = torch.where(adjacency_matrix[agent_idx] == 0)[0]
         relative_tfs = get_single_relative_img_transform(transforms,
                                                          agent_idx, self.ppm,
                                                          self.cf_h, self.cf_w,
@@ -188,10 +191,44 @@ class DistributedMassCNN(MassCNN):
         warped_features = kornia.warp_affine(detached_features, relative_tfs, dsize=(self.cf_h, self.cf_w), flags='bilinear')
         # the same features but with gradient
         warped_features[agent_idx] = current_agent_features
-        aggregated_features = warped_features.sum(dim=0) / len(agents_in_fov)
+        warped_features[outside_fov] = 0
+        aggregated_features = warped_features.sum(dim=0) / adjacency_matrix[agent_idx].sum()
         # [A, 128, 256, 205]
         pooled_features = self.pyramid_pooling(aggregated_features.unsqueeze(0), self.output_size)
         return detached_features, mask_prediction, self.classifier(pooled_features)
+
+    @torch.no_grad()
+    def detached_forward(self, rgbs, transforms, adjacency_matrix):
+        """
+        detached version of forward with full batch size, used for validation
+        """
+        agent_count = rgbs.shape[0]
+        # [A, 64, 241, 321]
+        hi_res_features = self.downsample(rgbs)
+        # [3, 96, 239, 319]
+        latent_compressed_features = self.compression_l1(hi_res_features)
+        # [3, 96, 239, 319]
+        latent_mask_prediction = self.mask_prediction_l1(hi_res_features)
+        # [A, 128, 238, 318]
+        compressed_features = self.compression_l2(latent_compressed_features *
+                                                    latent_mask_prediction)
+        # [A,   1, 256, 206]
+        predicted_masks = self.mask_prediction_l2(latent_mask_prediction)
+
+        # [A, 128, 238, 318]
+        relative_tfs = get_all_relative_img_transforms(transforms, self.ppm,
+                                                       self.cf_h, self.cf_w,
+                                                       self.center_x, self.center_y).cuda(self.gpu)
+        compressed_features = compressed_features.repeat(agent_count, 1, 1, 1)
+        outside_fov_rows, outside_fov_cols = torch.where(adjacency_matrix == 0)
+        aggregated_features = kornia.warp_affine(compressed_features, relative_tfs,
+                                                 dsize=(self.cf_h, self.cf_w), flags='bilinear')
+        aggregated_features = aggregated_features.reshape(agent_count, agent_count, 96, 238, 318)
+        aggregated_features[outside_fov_rows, outside_fov_cols] = 0
+        aggregated_features = aggregated_features.sum(dim=1) / adjacency_matrix.sum(dim=1).reshape(agent_count, 1, 1, 1)
+        # [A, 128, 256, 205]
+        pooled_features = self.pyramid_pooling(aggregated_features, self.output_size)
+        return predicted_masks, self.classifier(pooled_features)
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
