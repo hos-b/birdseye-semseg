@@ -7,7 +7,7 @@ parameters:
   snapshot-dir: './snapshots'
   device: 'cuda'
   torch-seed: 0
-  world-size: 1
+  world-size: 2
 
 curriculum:
   initial-difficulty: 1

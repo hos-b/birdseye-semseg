@@ -138,6 +138,61 @@ class MassCNN(torch.nn.Module):
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
         return aggregated_features
 
+class DistributedMassCNN(MassCNN):
+    def __init__(self, sem_cfg: SemanticCloudConfig, gpu, num_classes,
+                 mode='small', output_size=(256, 205)):
+        super(DistributedMassCNN, self).__init__(sem_cfg, num_classes, mode, output_size)
+        self.gpu = gpu
+        self.cf_h, self.cf_w = 238, 318 # compressed_features.shape[2], compressed_features.shape[3]
+        self.ppm = 12.71 # ((cf_h / self.cfg.cloud_x_span) + (cf_w / self.cfg.cloud_y_span)) / 2.0
+        self.center_x = 190 # int((self.cfg.cloud_max_x / self.cfg.cloud_x_span) * cf_h)
+        self.center_y = 159 # int((self.cfg.cloud_max_y / self.cfg.cloud_y_span) * cf_w)
+
+    def forward(self, rgbs, transforms, detached_features, agent_idx, agents_in_fov):
+        """
+        Not used.
+        input:
+            rgbs:       agent_count x 480 x 640
+            transforms: agent_count x 4 x 4
+        output:
+            predicted masks: agent_count x 256 x 205
+            aggr_masks:      agent_count x 256 x 205
+        """
+        # calculate detached features if not provided
+        if detached_features is None:
+            with torch.no_grad():
+                hi_res_features = self.downsample(rgbs)
+                latent_compressed_features = self.compression_l1(hi_res_features)
+                latent_mask_predictions = self.mask_prediction_l1(hi_res_features)
+                latent_mask_predictions = torch.minimum(latent_mask_predictions,
+                                        torch.ones_like(latent_mask_predictions))
+                detached_features = self.compression_l2(
+                    latent_compressed_features * latent_mask_predictions
+                )
+        # latent space masking of curent agent's features
+        current_hi_res_features = self.downsample(rgbs[agent_idx].unsqueeze(0))
+        current_latent_compressed_features = self.compression_l1(current_hi_res_features)
+        current_latent_mask_prediction = self.mask_prediction_l1(current_hi_res_features)
+        current_latent_mask_prediction = torch.minimum(current_latent_mask_prediction,
+                                       torch.ones_like(current_latent_mask_prediction))
+        current_agent_features = self.compression_l2(
+            current_latent_compressed_features * current_latent_mask_prediction
+        )
+        # final mask prediction
+        mask_prediction = self.mask_prediction_l2(current_latent_mask_prediction)
+        # data aggregation
+        relative_tfs = get_single_relative_img_transform(transforms,
+                                                         agent_idx, self.ppm,
+                                                         self.cf_h, self.cf_w,
+                                                         self.center_x, self.center_y).cuda(self.gpu)
+        warped_features = kornia.warp_affine(detached_features, relative_tfs, dsize=(self.cf_h, self.cf_w), flags='bilinear')
+        # the same features but with gradient
+        warped_features[agent_idx] = current_agent_features
+        aggregated_features = warped_features.sum(dim=0) / len(agents_in_fov)
+        # [A, 128, 256, 205]
+        pooled_features = self.pyramid_pooling(aggregated_features.unsqueeze(0), self.output_size)
+        return detached_features, mask_prediction, self.classifier(pooled_features)
+
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
     def __init__(self, in_channels=32, mid_channels=48, out_channels=64):
