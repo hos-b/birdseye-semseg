@@ -84,7 +84,8 @@ def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, 
     # top-left corner transform -> center transform + conversion from meters to pixels
     return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, h, w, center_x, center_y)
 
-def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, w, center_x, center_y, merge_masks=False):
+def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, w,
+                              center_x, center_y, merge_masks=False, flags='bilinear'):
     """
     input: masks & transforms of all agents, target agent id, extra info
     output: accumulative mask for that agent
@@ -92,14 +93,14 @@ def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, 
     assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
     assert agent_id < masks.shape[0], f"given agent index {agent_id} does not exist"
     relative_tfs = get_single_relative_img_transform(transforms, agent_id, pixels_per_meter, h, w, center_x, center_y)
-    warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags='bilinear')
+    warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags=flags)
     warped_mask = warped_mask.sum(dim=0)
     if merge_masks:
         warped_mask[warped_mask > 1] = 1
         warped_mask[warped_mask < 1] = 0
     return warped_mask
 
-def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w, center_x, center_y):
+def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
     """
     input: masks & transforms of all agents, target agent id, extra info
     output: accumulative mask for all agents
@@ -110,11 +111,11 @@ def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w
     all_masks = torch.zeros_like(masks)
     for i in range(agent_count):
         relative_tfs = get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
-        warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags='nearest')
+        warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags=flags)
         all_masks[i] = warped_mask.sum(dim=0)
     return all_masks
 
-def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y):
+def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
     """
     input:
         - all agent masks
@@ -127,7 +128,7 @@ def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x,
     agent_count = masks.shape[0]
     relative_tfs = get_all_relative_img_transforms(transforms, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
     warped_masks = kornia.warp_affine(masks.unsqueeze(1).repeat(agent_count, 1, 1, 1),
-                                      relative_tfs, dsize=(h, w), flags='nearest')
+                                      relative_tfs, dsize=(h, w), flags=flags)
     warped_masks = warped_masks.reshape(agent_count, agent_count, h, w)
     return warped_masks.sum(dim=1)
 
