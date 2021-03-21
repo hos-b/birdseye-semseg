@@ -6,8 +6,15 @@ parameters:
   tensorboard-dir: './tensorboard'
   snapshot-dir: './snapshots'
   device: 'cuda'
-  distributed: false # impossible for now
+  torch-seed: 0
+  world-size: 1
 
+curriculum:
+  initial-difficulty: 1
+  maximum-difficulty: 8
+  maximum-agent-count: 8
+  strategy: 'every-x-epochs'
+  strategy-parameter: 10
 
 hyperparameters:
   # probability that an agent stops transmitting
