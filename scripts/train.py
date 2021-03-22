@@ -58,7 +58,9 @@ def train(gpu, *args):
     # logging ----------------------------------------------------------------------------------
     name = train_cfg.training_name + '-'
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
-    writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
+    writer = None
+    if rank == 0:
+        writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
@@ -89,7 +91,7 @@ def train(gpu, *args):
     for ep in range(epochs):
         total_train_m_loss = 0.0
         total_train_s_loss = 0.0
-        sample_count = torch.tensor([0], dtype=torch.int64).cuda(gpu)
+        sample_count = 0
         # training
         ddp_model.train()
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
@@ -122,8 +124,8 @@ def train(gpu, *args):
                     s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
                                             agent_pool.combined_masks[i],
                                         dim=(0, 1, 2))
-                    batch_train_m_loss += m_loss.detach()
-                    batch_train_s_loss += s_loss.detach()
+                    batch_train_m_loss += m_loss.item()
+                    batch_train_s_loss += s_loss.item()
                     (m_loss + s_loss).backward()
             last_i = agent_pool.agent_count - 1
             # synchronzing fwd-bwd
@@ -135,8 +137,8 @@ def train(gpu, *args):
             s_loss = torch.mean(semseg_loss(sseg_pred, labels[last_i].unsqueeze(0)) *
                                     agent_pool.combined_masks[last_i],
                                 dim=(0, 1, 2))
-            batch_train_m_loss += m_loss.detach()
-            batch_train_s_loss += s_loss.detach()
+            batch_train_m_loss += m_loss.item()
+            batch_train_s_loss += s_loss.item()
             (m_loss + s_loss).backward()
             optimizer.step()
             # writing batch loss
@@ -161,8 +163,8 @@ def train(gpu, *args):
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
         sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(gpu)
-        mask_ious = torch.tensor([0.0], dtype=torch.float64).cuda(gpu)
-        sample_count = torch.tensor([0], dtype=torch.int64).cuda(gpu)
+        mask_ious = 0.0
+        sample_count = 0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
             print(f'\repoch: {ep + 1}/{epochs}, '
                   f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
@@ -183,8 +185,8 @@ def train(gpu, *args):
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
             total_valid_m_loss += torch.mean(m_loss).detach()
             total_valid_s_loss += torch.mean(s_loss).detach()
-            # visaluize the first agent from the first batch in the first process
-            if not visaulized and rank == 0:
+            # visaluize the first agent from the first batch
+            if not visaulized:
                 ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
                 ss_mask = agent_pool.combined_masks[0].cpu()
                 ss_trgt_img[:, ss_mask == 0] = 0
@@ -192,11 +194,11 @@ def train(gpu, *args):
                 ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu()).transpose(2, 0, 1)
                 pred_mask_img = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask_img = get_matplotlib_image(masks[0].cpu())
-                writer.add_image("validation/input_rgb", rgbs[0], ep + 1)
-                writer.add_image("validation/mask_predicted", torch.from_numpy(pred_mask_img).permute(2, 0, 1), ep + 1)
-                writer.add_image("validation/mask_target", torch.from_numpy(trgt_mask_img).permute(2, 0, 1), ep + 1)
-                writer.add_image("validation/segmentation_predicted", ss_pred_img, ep + 1)
-                writer.add_image("validation/segmentation_target", torch.from_numpy(ss_trgt_img), ep + 1)
+                writer.add_image(f'validation/input_rgb[{rank}]', rgbs[0], ep + 1)
+                writer.add_image(f'validation/mask_predicted[{rank}]', torch.from_numpy(pred_mask_img).permute(2, 0, 1), ep + 1)
+                writer.add_image(f'validation/mask_target[{rank}]', torch.from_numpy(trgt_mask_img).permute(2, 0, 1), ep + 1)
+                writer.add_image(f'validation/segmentation_predicted[{rank}]', ss_pred_img, ep + 1)
+                writer.add_image(f'validation/segmentation_target[{rank}]', torch.from_numpy(ss_trgt_img), ep + 1)
                 visaulized = True
 
         new_metric = 0.0
