@@ -6,17 +6,20 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
 from torch.utils.data.distributed import DistributedSampler
 
+import wandb
 import subprocess
 from tensorboardX import SummaryWriter
 from kornia.losses.focal import FocalLoss
 
 from agent.agent_pool import CurriculumPool
 from data.dataset import get_datasets
-from data.dist import sync_tensor, log_scalar, log_string
+from data.dist import sync_tensor
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.color_map import __our_classes as segmentation_classes
-from data.utils import drop_agent_data, squeeze_all, get_matplotlib_image, to_device
+from data.logging import log_scalar, log_image, log_string
+from data.utils import drop_agent_data, squeeze_all, init_wandb
+from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mass_cnn import DistributedMassCNN
 
@@ -37,17 +40,12 @@ def train(gpu, *args):
         device_str += f':{gpu}'
     device = torch.device(device_str)
     torch.manual_seed(train_cfg.torch_seed)
-    # opening semantic cloud settings file -----------------------------------------------------
-    DATASET_DIR = train_cfg.dset_dir
-    PKG_NAME = train_cfg.dset_file
-    DATASET = train_cfg.dset_name
-    TENSORBOARD_DIR = train_cfg.tensorboard_dir
+    # image size and center coordinates --------------------------------------------------------
     NEW_SIZE = (train_cfg.output_h, train_cfg.output_w)
-    # image size and center coordinates -------------------------------------------------------0
     CENTER = (geom_cfg.center_x(NEW_SIZE[1]), geom_cfg.center_y(NEW_SIZE[0]))
     PPM = geom_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
     # dataset ----------------------------------------------------------------------------------
-    train_set, test_set = get_datasets(DATASET, DATASET_DIR, PKG_NAME,
+    train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir, train_cfg.dset_file,
                                       (0.8, 0.2), NEW_SIZE, train_cfg.classes)
     train_sampler = DistributedSampler(train_set, num_replicas=train_cfg.world_size, rank=rank)
     test_sampler = DistributedSampler(test_set, num_replicas=train_cfg.world_size, rank=rank)
@@ -60,7 +58,10 @@ def train(gpu, *args):
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
     writer = None
     if rank == 0:
-        writer = SummaryWriter(os.path.join(TENSORBOARD_DIR, name))
+        if train_cfg.logger == 'tensorboard':
+            writer = SummaryWriter(os.path.join(train_cfg.log_dir, name))
+        elif train_cfg.logger == 'wandb':
+            init_wandb(name, train_cfg)
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
@@ -89,6 +90,8 @@ def train(gpu, *args):
     epochs = train_cfg.epochs
     # training ---------------------------------------------------------------------------------
     for ep in range(epochs):
+        train_sampler.set_epoch(ep)
+        test_sampler.set_epoch(ep)
         total_train_m_loss = 0.0
         total_train_s_loss = 0.0
         sample_count = 0
@@ -143,9 +146,9 @@ def train(gpu, *args):
             optimizer.step()
             # writing batch loss
             log_scalar(rank, batch_train_m_loss, 'loss/batch_train_msk',
-                       ep * len(train_loader) + batch_idx, writer)
+                       ep * len(train_loader) + batch_idx, writer, train_cfg.logger)
             log_scalar(rank, batch_train_s_loss, 'loss/batch_train_seg',
-                       ep * len(train_loader) + batch_idx, writer)
+                       ep * len(train_loader) + batch_idx, writer, train_cfg.logger)
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
 
@@ -153,8 +156,10 @@ def train(gpu, *args):
         # total_train_m_loss = sync_tensor(rank, 0, total_train_m_loss, train_cfg.world_size)
         # total_train_s_loss = sync_tensor(rank, 1, total_train_s_loss, train_cfg.world_size)
         # sample_count = sync_tensor(rank, 2, sample_count, train_cfg.world_size)
-        log_scalar(rank, total_train_m_loss / sample_count, 'loss/total_train_msk', ep + 1, writer)
-        log_scalar(rank, total_train_s_loss / sample_count, 'loss/total_train_seg', ep + 1, writer)
+        log_scalar(rank, total_train_m_loss / sample_count, 'loss/total_train_msk',
+                   ep + 1, writer, train_cfg.logger)
+        log_scalar(rank, total_train_s_loss / sample_count, 'loss/total_train_seg',
+                   ep + 1, writer, train_cfg.logger)
         log_string(rank, f'\nepoch loss: {(total_train_m_loss / sample_count).item()} mask, '
                          f'{(total_train_s_loss / sample_count).item()} segmentation')
         # validation ---------------------------------------------------------------------------
@@ -187,18 +192,31 @@ def train(gpu, *args):
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
             if not visaulized:
+                # masked target semantics
                 ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
                 ss_mask = agent_pool.combined_masks[0].cpu()
                 ss_trgt_img[:, ss_mask == 0] = 0
+                # predicted semantics
                 _, ss_pred = torch.max(sseg_preds[0], dim=0)
                 ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu()).transpose(2, 0, 1)
-                pred_mask_img = get_matplotlib_image(mask_preds[0].squeeze().cpu())
-                trgt_mask_img = get_matplotlib_image(masks[0].cpu())
-                writer.add_image(f'validation/input_rgb[{rank}]', rgbs[0], ep + 1)
-                writer.add_image(f'validation/mask_predicted[{rank}]', torch.from_numpy(pred_mask_img).permute(2, 0, 1), ep + 1)
-                writer.add_image(f'validation/mask_target[{rank}]', torch.from_numpy(trgt_mask_img).permute(2, 0, 1), ep + 1)
-                writer.add_image(f'validation/segmentation_predicted[{rank}]', ss_pred_img, ep + 1)
-                writer.add_image(f'validation/segmentation_target[{rank}]', torch.from_numpy(ss_trgt_img), ep + 1)
+                # predicted & target mask
+                pred_mask = get_matplotlib_image(mask_preds[0].squeeze().cpu())
+                trgt_mask = get_matplotlib_image(masks[0].cpu())
+                log_image(rgbs[0],
+                          f'validation/input_rgb[{rank}]',
+                          ep + 1, writer, train_cfg.logger)
+                log_image(torch.from_numpy(pred_mask).permute(2, 0, 1),
+                          f'validation/mask_predicted[{rank}]',
+                          ep + 1, writer, train_cfg.logger)
+                log_image(torch.from_numpy(trgt_mask).permute(2, 0, 1),
+                          f'validation/mask_target[{rank}]',
+                          ep + 1, writer, train_cfg.logger)
+                log_image(torch.from_numpy(ss_pred_img),
+                          f'validation/segmentation_predicted[{rank}]',
+                          ep + 1, writer, train_cfg.logger)
+                log_image(torch.from_numpy(ss_trgt_img),
+                          f'validation/segmentation_target[{rank}]',
+                          ep + 1, writer, train_cfg.logger)
                 visaulized = True
 
         new_metric = 0.0
@@ -207,11 +225,15 @@ def train(gpu, *args):
         # sseg_ious = sync_tensor(rank, 5, sseg_ious, train_cfg.world_size)
         # mask_ious = sync_tensor(rank, 6, mask_ious, train_cfg.world_size)
         # sample_count = sync_tensor(rank, 7, sample_count, train_cfg.world_size)
-        log_scalar(rank, total_valid_m_loss / sample_count, 'loss/total_valid_msk', ep + 1, writer)
-        log_scalar(rank, total_valid_s_loss / sample_count, 'loss/total_valid_seg', ep + 1, writer)
-        log_scalar(rank, mask_ious / sample_count, 'iou/mask_iou', ep + 1, writer)
+        log_scalar(rank, total_valid_m_loss / sample_count, 'loss/total_valid_msk',
+                   ep + 1, writer, train_cfg.logger)
+        log_scalar(rank, total_valid_s_loss / sample_count, 'loss/total_valid_seg',
+                   ep + 1, writer, train_cfg.logger)
+        log_scalar(rank, mask_ious / sample_count, 'iou/mask_iou',
+                   ep + 1, writer, train_cfg.logger)
         for key, val in segmentation_classes.items():
-            log_scalar(rank, sseg_ious[key] / sample_count, f'iou/{val.lower()}_iou', ep + 1, writer)
+            log_scalar(rank, sseg_ious[key] / sample_count, f'iou/{val.lower()}_iou',
+                       ep + 1, writer, train_cfg.logger)
             new_metric += sseg_ious[key] / sample_count
         new_metric += mask_ious / sample_count
         log_string(rank, f'\nepoch loss: {(total_valid_m_loss / sample_count).item()} mask, '
@@ -225,7 +247,8 @@ def train(gpu, *args):
             torch.save(optimizer.state_dict(), train_cfg.snapshot_dir + '/optimizer_dict')
             torch.save(ddp_model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
 
-    writer.close()
+    if rank == 0:
+        wandb.finish()
 
 
 if __name__ == '__main__':
