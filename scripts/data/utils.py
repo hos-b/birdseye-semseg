@@ -1,9 +1,11 @@
 import cv2
 import torch
+import wandb
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+from data.config import TrainingConfig
 
 def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
     """
@@ -48,3 +50,28 @@ def to_device(rgbs, labels, masks, car_transforms, device, non_blocking):
     """
     return rgbs.to(device, non_blocking=non_blocking), labels.to(device, non_blocking=non_blocking), \
            masks.to(device, non_blocking=non_blocking), car_transforms.to(device, non_blocking=non_blocking)
+
+def init_wandb(name: str, train_cfg: TrainingConfig):
+    wandb.init(
+        project='birdseye-semseg',
+        entity='hos-b',
+        group='initial models',
+        name=name,
+        dir=train_cfg.log_dir,
+        config={
+            'model_size': train_cfg.model_size,
+            'segmentation_loss': train_cfg.loss_function,
+            'epochs': 1000,
+            'learning_rate': train_cfg.learning_rate,
+            'output_h': train_cfg.output_h,
+            'output_w': train_cfg.output_w,
+            'classes': train_cfg.classes,
+            'mask_det_threshold': train_cfg.mask_detection_thresh,
+            'agent_drop_probability': train_cfg.drop_prob,
+            'initial_difficulty': train_cfg.initial_difficulty,
+            'maximum_difficulty': train_cfg.maximum_difficulty,
+            'strategy': train_cfg.strategy,
+            'strategy_parameter': train_cfg.strategy_parameter,
+            'world_size': train_cfg.world_size,
+            'torch_seed': train_cfg.torch_seed
+    })

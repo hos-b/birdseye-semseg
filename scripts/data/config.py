@@ -48,7 +48,8 @@ class TrainingConfig:
         self.dset_dir = conf['parameters']['dataset-dir']
         self.dset_file = conf['parameters']['dataset-file']
         self.dset_name = conf['parameters']['dataset-name']
-        self.tensorboard_dir = conf['parameters']['tensorboard-dir']
+        self.log_dir = conf['parameters']['log-dir']
+        self.logger = conf['parameters']['logger']
         self.snapshot_dir = conf['parameters']['snapshot-dir']
         self.device = conf['parameters']['device']
         self.world_size = int(conf['parameters']['world-size'])
