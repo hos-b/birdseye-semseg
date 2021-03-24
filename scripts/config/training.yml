@@ -1,9 +1,10 @@
 parameters:
-  name: 'test'
+  name: 'single'
   dataset-dir: '/export/home/bahadorm/mass-data'
   dataset-file: 'dataset_10k.hdf5'
   dataset-name: 'town-01'
-  tensorboard-dir: './tensorboard'
+  log-dir: './log'
+  logger: 'wandb' # or tensorboard
   snapshot-dir: './snapshots'
   device: 'cuda'
   torch-seed: 0

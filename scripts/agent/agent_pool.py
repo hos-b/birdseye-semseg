@@ -7,12 +7,15 @@ from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_
 
 class CurriculumPool:
     """
-    creates a pool of agents that distribute the computation of
-    the full architecture by simulating message passing. as the
-    training progresses, the number of agents that are allowed
+    controls the difficulity of the segmentation task by limiting the
+    extents of message passing between the agents. for each connected 
+    graph, the adjacency matrix is calculated and used to control the
+    information flow between agents.
+    as the training progresses, the number of agents that are allowed
     to propagate messages increases, starting with 1.
     """
-    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count) -> None:
+    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count,
+                 strategy, strategy_parameter) -> None:
         self.agent_count = 0
         # connection strategy
         self.difficulty = starting_difficulty
@@ -20,6 +23,8 @@ class CurriculumPool:
         self.combined_masks = None
         self.adjacency_matrix = None
         self.max_agent_count = maximum_agent_count
+        self.curriculum_strat = strategy
+        self.curriculum_strat_param = strategy_parameter
 
     def generate_connection_strategy(self, ids, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
         """
@@ -75,6 +80,13 @@ class CurriculumPool:
             # combining the mask of selected connections and setting everything else to 0
             self.combined_masks[i] = self.combined_masks[i] & accepted_connections
             self.combined_masks[i][self.combined_masks[i] != 0] = 1
+
+    def update_difficulty(self, parameter):
+        if self.curriculum_strat == 'every-x-epochs':
+            # increase difficulty
+            if (parameter + 1) % int(self.curriculum_strat_param) == 0:
+                self.difficulty = min(self.difficulty + 1, self.maximum_difficulty)
+                print(f'\n==========>> difficulty increased to {self.difficulty} <<==========')
 
 def decompose_binary_elements(mask_value) -> list:
     """

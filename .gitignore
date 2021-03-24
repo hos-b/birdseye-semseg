@@ -12,4 +12,7 @@ mass_data_collector/guide/
 mass_data_collector/.cache
 mass_data_collector/.clangd
 **/tensorboard
-scripts/snapshots
+**/snapshots
+**/wandb
+**/log
+scripts/train.py

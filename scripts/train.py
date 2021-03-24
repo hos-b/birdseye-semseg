@@ -1,3 +1,4 @@
+from logging import log
 import os
 import torch
 import torch.nn as nn
@@ -17,7 +18,7 @@ from data.dist import sync_tensor
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.color_map import __our_classes as segmentation_classes
-from data.logging import log_scalar, log_image, log_string
+from data.logging import log_scalar_wandb, log_image_wandb, log_string
 from data.utils import drop_agent_data, squeeze_all, init_wandb
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
@@ -50,37 +51,40 @@ def train(gpu, *args):
     train_sampler = DistributedSampler(train_set, num_replicas=train_cfg.world_size, rank=rank)
     test_sampler = DistributedSampler(test_set, num_replicas=train_cfg.world_size, rank=rank)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, pin_memory=True,
-                                               num_workers=0, sampler=train_sampler)
+                                               num_workers=2, sampler=train_sampler)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, pin_memory=True,
-                                              num_workers=0, sampler=test_sampler)
+                                              num_workers=2, sampler=test_sampler)
     # logging ----------------------------------------------------------------------------------
     name = train_cfg.training_name + '-'
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
-    writer = None
     if rank == 0:
         if train_cfg.logger == 'tensorboard':
-            writer = SummaryWriter(os.path.join(train_cfg.log_dir, name))
+            print('tensorboard logging is disabled')
+            exit()
         elif train_cfg.logger == 'wandb':
             init_wandb(name, train_cfg)
+        else:
+            log_string(rank, f'logging mode {train_cfg.logger} not recognized')
+            exit()
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
     model = DistributedMassCNN(geom_cfg, gpu,
                                num_classes=train_cfg.num_classes,
                                output_size=NEW_SIZE).cuda(gpu)
-    print(f"{(model.parameter_count() / 1e6):.2f}M trainable parameters")
+    log_string(rank, f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     ddp_model = DistributedDataParallel(model, device_ids=[gpu])
-    agent_pool = CurriculumPool(train_cfg.initial_difficulty,
-                                train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count)
+    agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
+                                train_cfg.max_agent_count, 
+                                train_cfg.strategy, train_cfg.strategy_parameter)
     # losses -----------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     else:
-        print(f'unknown loss function: {train_cfg.loss_function}')
+        log_string(rank, f'unknown loss function: {train_cfg.loss_function}')
         exit()
     mask_loss = nn.L1Loss(reduction='mean')
     # send to gpu if distributed
@@ -104,7 +108,7 @@ def train(gpu, *args):
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                             masks, car_transforms,
                                                             device, True)
-            # simulate connection drops [disabled for now]
+            # simulate connection drops
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
@@ -145,23 +149,21 @@ def train(gpu, *args):
             (m_loss + s_loss).backward()
             optimizer.step()
             # writing batch loss
-            log_scalar(rank, batch_train_m_loss, 'loss/batch_train_msk',
-                       ep * len(train_loader) + batch_idx, writer, train_cfg.logger)
-            log_scalar(rank, batch_train_s_loss, 'loss/batch_train_seg',
-                       ep * len(train_loader) + batch_idx, writer, train_cfg.logger)
+            log_scalar_wandb(rank, {
+                'batch train mask': batch_train_m_loss,
+                'batch train seg': batch_train_s_loss
+            })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
 
-        # syncing tensors for wandb logging ----------------------------------------------------
-        # total_train_m_loss = sync_tensor(rank, 0, total_train_m_loss, train_cfg.world_size)
-        # total_train_s_loss = sync_tensor(rank, 1, total_train_s_loss, train_cfg.world_size)
-        # sample_count = sync_tensor(rank, 2, sample_count, train_cfg.world_size)
-        log_scalar(rank, total_train_m_loss / sample_count, 'loss/total_train_msk',
-                   ep + 1, writer, train_cfg.logger)
-        log_scalar(rank, total_train_s_loss / sample_count, 'loss/total_train_seg',
-                   ep + 1, writer, train_cfg.logger)
-        log_string(rank, f'\nepoch loss: {(total_train_m_loss / sample_count).item()} mask, '
-                         f'{(total_train_s_loss / sample_count).item()} segmentation')
+        # wandb logging ------------------------------------------------------------------------
+        log_scalar_wandb(rank, {
+            'total train mask loss': total_train_m_loss / sample_count,
+            'total train seg loss': total_train_s_loss / sample_count,
+            'epoch': ep + 1
+        })
+        log_string(rank, f'\nepoch train loss: {total_train_m_loss / sample_count} mask, '
+                         f'{total_train_s_loss / sample_count} segmentation')
         # validation ---------------------------------------------------------------------------
         ddp_model.eval()
         visaulized = False
@@ -171,8 +173,8 @@ def train(gpu, *args):
         mask_ious = 0.0
         sample_count = 0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
-            print(f'\repoch: {ep + 1}/{epochs}, '
-                  f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
+            log_string(rank, f'\repoch: {ep + 1}/{epochs}, '
+                            f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
@@ -182,16 +184,16 @@ def train(gpu, *args):
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             mask_preds, sseg_preds = ddp_model(rgbs, car_transforms,
-                                              detached_features, -1,
-                                              agent_pool.adjacency_matrix, True)
+                                            detached_features, -1,
+                                            agent_pool.adjacency_matrix, True)
             sseg_ious += iou_per_class(sseg_preds, labels).cuda(gpu)
-            mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh).item()
+            mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
             total_valid_m_loss += torch.mean(m_loss).detach()
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
-            if not visaulized:
+            if not visaulized and rank == 0:
                 # masked target semantics
                 ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
                 ss_mask = agent_pool.combined_masks[0].cpu()
@@ -202,50 +204,45 @@ def train(gpu, *args):
                 # predicted & target mask
                 pred_mask = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask = get_matplotlib_image(masks[0].cpu())
-                log_image(rgbs[0],
-                          f'validation/input_rgb[{rank}]',
-                          ep + 1, writer, train_cfg.logger)
-                log_image(torch.from_numpy(pred_mask).permute(2, 0, 1),
-                          f'validation/mask_predicted[{rank}]',
-                          ep + 1, writer, train_cfg.logger)
-                log_image(torch.from_numpy(trgt_mask).permute(2, 0, 1),
-                          f'validation/mask_target[{rank}]',
-                          ep + 1, writer, train_cfg.logger)
-                log_image(torch.from_numpy(ss_pred_img),
-                          f'validation/segmentation_predicted[{rank}]',
-                          ep + 1, writer, train_cfg.logger)
-                log_image(torch.from_numpy(ss_trgt_img),
-                          f'validation/segmentation_target[{rank}]',
-                          ep + 1, writer, train_cfg.logger)
+                log_image_wandb(rank, {
+                    'input rgb' : [
+                        wandb.Image(rgbs[0], caption='input image'),
+                    ],
+                    'output': [
+                        wandb.Image(pred_mask, caption='predicted mask'),
+                        wandb.Image(trgt_mask, caption='target mask'),
+                        wandb.Image(ss_pred_img.transpose(1, 2, 0), caption='predicted semantics'),
+                        wandb.Image(ss_trgt_img.transpose(1, 2, 0), caption='target semantics')
+                    ],
+                    'epoch': ep + 1
+                })
                 visaulized = True
 
+        # more wandb logging -------------------------------------------------------------------
         new_metric = 0.0
-        # total_valid_m_loss = sync_tensor(rank, 3, total_valid_m_loss, train_cfg.world_size)
-        # total_valid_s_loss = sync_tensor(rank, 4, total_valid_s_loss, train_cfg.world_size)
-        # sseg_ious = sync_tensor(rank, 5, sseg_ious, train_cfg.world_size)
-        # mask_ious = sync_tensor(rank, 6, mask_ious, train_cfg.world_size)
-        # sample_count = sync_tensor(rank, 7, sample_count, train_cfg.world_size)
-        log_scalar(rank, total_valid_m_loss / sample_count, 'loss/total_valid_msk',
-                   ep + 1, writer, train_cfg.logger)
-        log_scalar(rank, total_valid_s_loss / sample_count, 'loss/total_valid_seg',
-                   ep + 1, writer, train_cfg.logger)
-        log_scalar(rank, mask_ious / sample_count, 'iou/mask_iou',
-                   ep + 1, writer, train_cfg.logger)
+        logged_dict = {}
         for key, val in segmentation_classes.items():
-            log_scalar(rank, sseg_ious[key] / sample_count, f'iou/{val.lower()}_iou',
-                       ep + 1, writer, train_cfg.logger)
+            logged_dict[f'iou/{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
             new_metric += sseg_ious[key] / sample_count
         new_metric += mask_ious / sample_count
-        log_string(rank, f'\nepoch loss: {(total_valid_m_loss / sample_count).item()} mask, '
-                         f'{(total_valid_s_loss / sample_count).item()} segmentation')
-
+        logged_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
+        logged_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
+        logged_dict['mask iou'] = (mask_ious / sample_count).item()
+        logged_dict['epoch'] = ep + 1
+        log_scalar_wandb(rank, logged_dict)
+        log_string(rank, f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
+                         f'{total_valid_s_loss / sample_count} segmentation')
+        # saving the new model if it's better --------------------------------------------------
         if new_metric > last_metric and rank == 0:
-            print(f'saving snapshot at epoch {ep}')
+            log_string(rank, f'saving snapshot at epoch {ep + 1}')
             last_metric = new_metric
             if not os.path.exists(train_cfg.snapshot_dir):
                 os.makedirs(train_cfg.snapshot_dir)
             torch.save(optimizer.state_dict(), train_cfg.snapshot_dir + '/optimizer_dict')
             torch.save(ddp_model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
+        # update curriculum difficulty ---------------------------------------------------------
+        if train_cfg.strategy == 'every-x-epochs':
+            agent_pool.update_difficulty(ep + 1)
 
     if rank == 0:
         wandb.finish()
