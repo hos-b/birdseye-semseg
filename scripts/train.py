@@ -156,6 +156,8 @@ def train(gpu, *args):
         sample_count = 0
         # training
         model.train()
+        total_train_m_loss = 0.0
+        total_train_s_loss = 0.0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             log_string(rank, f'\repoch: {ep + 1}/{epochs}, '
@@ -168,27 +170,24 @@ def train(gpu, *args):
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
             # semseg & mask loss
-            batch_train_m_loss = 0.0
-            batch_train_s_loss = 0.0
             optimizer.zero_grad()
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             if train_cfg.distributed:
-                total_train_m_loss, total_train_s_loss = train_batch_distributed(
+                batch_train_m_loss, batch_train_s_loss = train_batch_distributed(
                                                             rgbs, car_transforms,
                                                             masks, labels,
                                                             mask_loss,semseg_loss,
                                                             model, agent_pool
                                                         )
             else:
-                total_train_m_loss, total_train_s_loss = train_batch_single(
+                batch_train_m_loss, batch_train_s_loss = train_batch_single(
                                                             rgbs, car_transforms,
                                                             masks, labels,
                                                             mask_loss,semseg_loss,
                                                             model, agent_pool
                                                         )
-            optimizer.step()
             # writing batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0:
                 log_scalar_wandb(rank, {
@@ -197,6 +196,7 @@ def train(gpu, *args):
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
+            optimizer.step()
 
         # wandb logging ------------------------------------------------------------------------
         log_scalar_wandb(rank, {
@@ -216,7 +216,7 @@ def train(gpu, *args):
         sample_count = 0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
             log_string(rank, f'\repoch: {ep + 1}/{epochs}, '
-                            f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
+                             f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
