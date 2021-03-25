@@ -196,8 +196,6 @@ def train(gpu, *args):
             })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
-            if batch_idx == 10:
-                break
 
         # wandb logging ------------------------------------------------------------------------
         log_scalar_wandb(rank, {
@@ -260,8 +258,6 @@ def train(gpu, *args):
                     'epoch': ep + 1
                 })
                 visaulized = True
-            if batch_idx == 10:
-                break
 
         # more wandb logging -------------------------------------------------------------------
         new_metric = 0.0
