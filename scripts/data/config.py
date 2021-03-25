@@ -51,6 +51,7 @@ class TrainingConfig:
         self.training_name = conf['logging']['name']
         self.log_dir = conf['logging']['log-dir']
         self.logger = conf['logging']['logger']
+        self.log_every = conf['logging']['log-every']
         self.snapshot_dir = conf['logging']['snapshot-dir']
         # training config
         self.device = conf['training']['device']

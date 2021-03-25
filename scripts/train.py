@@ -190,10 +190,11 @@ def train(gpu, *args):
                                                         )
             optimizer.step()
             # writing batch loss
-            log_scalar_wandb(rank, {
-                'batch train mask': batch_train_m_loss,
-                'batch train seg': batch_train_s_loss
-            })
+            if (batch_idx + 1) % train_cfg.log_every == 0:
+                log_scalar_wandb(rank, {
+                    'batch train mask': batch_train_m_loss,
+                    'batch train seg': batch_train_s_loss
+                })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
 
@@ -263,7 +264,7 @@ def train(gpu, *args):
         new_metric = 0.0
         logged_dict = {}
         for key, val in segmentation_classes.items():
-            logged_dict[f'iou/{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
+            logged_dict[f'{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
             new_metric += sseg_ious[key] / sample_count
         new_metric += mask_ious / sample_count
         logged_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()

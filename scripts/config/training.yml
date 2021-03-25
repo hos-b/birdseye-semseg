@@ -6,6 +6,7 @@ dataset:
 logging:
   name: 'non-dist-cuda1'
   log-dir: './log'
+  log-every: 5 # batch
   logger: 'wandb' # or tensorboard
   snapshot-dir: './snapshots'
 
