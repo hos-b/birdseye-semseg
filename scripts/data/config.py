@@ -43,18 +43,25 @@ class TrainingConfig:
         yaml_file = open(file_path)
         conf = yaml.load(yaml_file, Loader=yaml.FullLoader)
         yaml_file.close()
-        # basic config
-        self.training_name = conf['parameters']['name']
-        self.dset_dir = conf['parameters']['dataset-dir']
-        self.dset_file = conf['parameters']['dataset-file']
-        self.dset_name = conf['parameters']['dataset-name']
-        self.log_dir = conf['parameters']['log-dir']
-        self.logger = conf['parameters']['logger']
-        self.snapshot_dir = conf['parameters']['snapshot-dir']
-        self.device = conf['parameters']['device']
-        self.world_size = int(conf['parameters']['world-size'])
-        self.torch_seed = int(conf['parameters']['torch-seed'])
-        # curriculum stuff
+        # dataset config
+        self.dset_dir = conf['dataset']['dataset-dir']
+        self.dset_file = conf['dataset']['dataset-file']
+        self.dset_name = conf['dataset']['dataset-name']
+        # logging config
+        self.training_name = conf['logging']['name']
+        self.log_dir = conf['logging']['log-dir']
+        self.logger = conf['logging']['logger']
+        self.snapshot_dir = conf['logging']['snapshot-dir']
+        # training config
+        self.device = conf['training']['device']
+        self.world_size = int(conf['training']['world-size'])
+        self.torch_seed = int(conf['training']['torch-seed'])
+        self.distributed = conf['training']['distributed']
+        # dataloader config
+        self.loader_workers = int(conf['dataloader']['dataloder-workers'])
+        self.pin_memory = bool(conf['dataloader']['pin-memory'])
+        self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
+        # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])

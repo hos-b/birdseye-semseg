@@ -5,10 +5,10 @@ import cv2
 import torch
 import torch.utils.data
 import torchvision.transforms as transforms
+from torch.utils.data.distributed import DistributedSampler
 from PIL import Image as PILImage
 
 from data.color_map import carla_semantics_to_our_semantics
-
 
 
 class MassHDF5(torch.utils.data.Dataset):
@@ -154,3 +154,19 @@ def get_datasets(dataset, path, hdf5name, split=(0.8, 0.2), size=(500, 400), cla
     dset = MassHDF5(dataset=dataset, path=path, hdf5name=hdf5name,
                     size=size, classes=classes)
     return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])
+
+
+def get_dataloaders(world_size, rank, train_set, test_set, pin_memory, num_workers, batch_size):
+    if world_size == 1:
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size,
+                                                   pin_memory=pin_memory, num_workers=num_workers)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size,
+                                                  pin_memory=pin_memory, num_workers=num_workers)
+    else:
+        train_sampler = DistributedSampler(train_set, num_replicas=world_size, rank=rank)
+        test_sampler = DistributedSampler(test_set, num_replicas=world_size, rank=rank)
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, pin_memory=pin_memory,
+                                                   num_workers=num_workers, sampler=train_sampler)
+        test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, pin_memory=pin_memory,
+                                                  num_workers=num_workers, sampler=test_sampler)
+    return train_loader, test_loader

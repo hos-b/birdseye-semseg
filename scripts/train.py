@@ -5,36 +5,88 @@ import torch.nn as nn
 import torch.multiprocessing as mp
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel
-from torch.utils.data.distributed import DistributedSampler
 
 import wandb
 import subprocess
-from tensorboardX import SummaryWriter
 from kornia.losses.focal import FocalLoss
 
 from agent.agent_pool import CurriculumPool
-from data.dataset import get_datasets
-from data.dist import sync_tensor
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.color_map import __our_classes as segmentation_classes
-from data.logging import log_scalar_wandb, log_image_wandb, log_string
-from data.utils import drop_agent_data, squeeze_all, init_wandb
+from data.dataset import get_datasets, get_dataloaders
+from data.logging import log_scalar_wandb, log_image_wandb, log_string, init_wandb
+from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mass_cnn import DistributedMassCNN
+
+def train_batch_distributed(rgbs, car_transforms, masks, labels, mask_loss, semseg_loss,
+                            model: DistributedDataParallel, agent_pool: CurriculumPool):
+    batch_train_m_loss = 0.0
+    batch_train_s_loss = 0.0
+    detached_features = None
+    # async fwd-bwd
+    with model.no_sync():
+        for i in range(agent_pool.agent_count - 1):
+            detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
+                                                            detached_features, i,
+                                                            agent_pool.adjacency_matrix,
+                                                            False)
+            m_loss = mask_loss(mask_pred.squeeze(), masks[i])
+            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
+                                    agent_pool.combined_masks[i],
+                                dim=(0, 1, 2))
+            batch_train_m_loss += m_loss.item()
+            batch_train_s_loss += s_loss.item()
+            (m_loss + s_loss).backward()
+    last_i = agent_pool.agent_count - 1
+    # synchronzing fwd-bwd
+    detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
+                                                    detached_features, last_i,
+                                                    agent_pool.adjacency_matrix,
+                                                    False)
+    m_loss = mask_loss(mask_pred.squeeze(), masks[last_i])
+    s_loss = torch.mean(semseg_loss(sseg_pred, labels[last_i].unsqueeze(0)) *
+                            agent_pool.combined_masks[last_i],
+                        dim=(0, 1, 2))
+    batch_train_m_loss += m_loss.item()
+    batch_train_s_loss += s_loss.item()
+    (m_loss + s_loss).backward()
+    return batch_train_m_loss, batch_train_s_loss
+
+def train_batch_single(rgbs, car_transforms, masks, labels, mask_loss, semseg_loss,
+                       model: DistributedMassCNN, agent_pool: CurriculumPool):
+    batch_train_m_loss = 0.0
+    batch_train_s_loss = 0.0
+    detached_features = None
+    # async fwd-bwd
+    for i in range(agent_pool.agent_count):
+        detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
+                                                        detached_features, i,
+                                                        agent_pool.adjacency_matrix,
+                                                        False)
+        m_loss = mask_loss(mask_pred.squeeze(), masks[i])
+        s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
+                                agent_pool.combined_masks[i],
+                            dim=(0, 1, 2))
+        batch_train_m_loss += m_loss.item()
+        batch_train_s_loss += s_loss.item()
+        (m_loss + s_loss).backward()
+    return batch_train_m_loss, batch_train_s_loss
 
 def train(gpu, *args):
     geom_cfg: SemanticCloudConfig = args[0]
     train_cfg: TrainingConfig = args[1]
     # distributed training ---------------------------------------------------------------------
     rank = gpu
-    dist.init_process_group(
-        backend='nccl',
-        init_method='env://',
-        world_size=train_cfg.world_size,
-        rank=rank
-    )
+    if train_cfg.distributed:
+        dist.init_process_group(
+            backend='nccl',
+            init_method='env://',
+            world_size=train_cfg.world_size,
+            rank=rank
+        )
     device_str = train_cfg.device
     if train_cfg.device == 'cuda':
         torch.cuda.set_device(gpu)
@@ -48,15 +100,16 @@ def train(gpu, *args):
     # dataset ----------------------------------------------------------------------------------
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir, train_cfg.dset_file,
                                       (0.8, 0.2), NEW_SIZE, train_cfg.classes)
-    train_sampler = DistributedSampler(train_set, num_replicas=train_cfg.world_size, rank=rank)
-    test_sampler = DistributedSampler(test_set, num_replicas=train_cfg.world_size, rank=rank)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, pin_memory=True,
-                                               num_workers=2, sampler=train_sampler)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1, pin_memory=True,
-                                              num_workers=2, sampler=test_sampler)
+    train_loader, test_loader = get_dataloaders(train_cfg.world_size, rank, train_set, test_set,
+                                                train_cfg.pin_memory, train_cfg.loader_workers, 1)
     # logging ----------------------------------------------------------------------------------
     name = train_cfg.training_name + '-'
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
+    # checking for --dirty
+    git_diff = subprocess.Popen(['/usr/bin/git', 'diff', '--quiet'], stdout=subprocess.PIPE)
+    ret_code = git_diff.wait()
+    if ret_code != 0:
+        name += '-dirty'
     if rank == 0:
         if train_cfg.logger == 'tensorboard':
             print('tensorboard logging is disabled')
@@ -74,10 +127,11 @@ def train(gpu, *args):
                                output_size=NEW_SIZE).cuda(gpu)
     log_string(rank, f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
-    ddp_model = DistributedDataParallel(model, device_ids=[gpu])
+    if train_cfg.distributed:
+        model = DistributedDataParallel(model, device_ids=[gpu])
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count, 
-                                train_cfg.strategy, train_cfg.strategy_parameter)
+                                train_cfg.max_agent_count,  train_cfg.strategy,
+                                train_cfg.strategy_parameter, device)
     # losses -----------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
@@ -87,20 +141,21 @@ def train(gpu, *args):
         log_string(rank, f'unknown loss function: {train_cfg.loss_function}')
         exit()
     mask_loss = nn.L1Loss(reduction='mean')
-    # send to gpu if distributed
+    # send to gpu
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.cuda(gpu)
         mask_loss = mask_loss.cuda(gpu)
     epochs = train_cfg.epochs
     # training ---------------------------------------------------------------------------------
     for ep in range(epochs):
-        train_sampler.set_epoch(ep)
-        test_sampler.set_epoch(ep)
-        total_train_m_loss = 0.0
-        total_train_s_loss = 0.0
+        # required in shuffled distributed samplers
+        if train_cfg.distributed and train_cfg.shuffle_data:
+            train_loader.sampler.set_epoch(ep)
+            test_loader.sampler.set_epoch(ep)
+        
         sample_count = 0
         # training
-        ddp_model.train()
+        model.train()
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             log_string(rank, f'\repoch: {ep + 1}/{epochs}, '
@@ -119,34 +174,20 @@ def train(gpu, *args):
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
-            detached_features = None
-            # async fwd-bwd
-            with ddp_model.no_sync():
-                for i in range(agent_pool.agent_count - 1):
-                    detached_features, mask_pred, sseg_pred = ddp_model(rgbs, car_transforms,
-                                                                        detached_features, i,
-                                                                        agent_pool.adjacency_matrix,
-                                                                        False)
-                    m_loss = mask_loss(mask_pred.squeeze(), masks[i])
-                    s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
-                                            agent_pool.combined_masks[i],
-                                        dim=(0, 1, 2))
-                    batch_train_m_loss += m_loss.item()
-                    batch_train_s_loss += s_loss.item()
-                    (m_loss + s_loss).backward()
-            last_i = agent_pool.agent_count - 1
-            # synchronzing fwd-bwd
-            detached_features, mask_pred, sseg_pred = ddp_model(rgbs, car_transforms,
-                                                                detached_features, last_i,
-                                                                agent_pool.adjacency_matrix,
-                                                                False)
-            m_loss = mask_loss(mask_pred.squeeze(), masks[last_i])
-            s_loss = torch.mean(semseg_loss(sseg_pred, labels[last_i].unsqueeze(0)) *
-                                    agent_pool.combined_masks[last_i],
-                                dim=(0, 1, 2))
-            batch_train_m_loss += m_loss.item()
-            batch_train_s_loss += s_loss.item()
-            (m_loss + s_loss).backward()
+            if train_cfg.distributed:
+                total_train_m_loss, total_train_s_loss = train_batch_distributed(
+                                                            rgbs, car_transforms,
+                                                            masks, labels,
+                                                            mask_loss,semseg_loss,
+                                                            model, agent_pool
+                                                        )
+            else:
+                total_train_m_loss, total_train_s_loss = train_batch_single(
+                                                            rgbs, car_transforms,
+                                                            masks, labels,
+                                                            mask_loss,semseg_loss,
+                                                            model, agent_pool
+                                                        )
             optimizer.step()
             # writing batch loss
             log_scalar_wandb(rank, {
@@ -155,6 +196,8 @@ def train(gpu, *args):
             })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
+            if batch_idx == 10:
+                break
 
         # wandb logging ------------------------------------------------------------------------
         log_scalar_wandb(rank, {
@@ -165,7 +208,7 @@ def train(gpu, *args):
         log_string(rank, f'\nepoch train loss: {total_train_m_loss / sample_count} mask, '
                          f'{total_train_s_loss / sample_count} segmentation')
         # validation ---------------------------------------------------------------------------
-        ddp_model.eval()
+        model.eval()
         visaulized = False
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
@@ -183,9 +226,9 @@ def train(gpu, *args):
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
-            mask_preds, sseg_preds = ddp_model(rgbs, car_transforms,
-                                            detached_features, -1,
-                                            agent_pool.adjacency_matrix, True)
+            mask_preds, sseg_preds = model(rgbs, car_transforms,
+                                           None, -1,
+                                           agent_pool.adjacency_matrix, True)
             sseg_ious += iou_per_class(sseg_preds, labels).cuda(gpu)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
@@ -217,6 +260,8 @@ def train(gpu, *args):
                     'epoch': ep + 1
                 })
                 visaulized = True
+            if batch_idx == 10:
+                break
 
         # more wandb logging -------------------------------------------------------------------
         new_metric = 0.0
@@ -239,7 +284,7 @@ def train(gpu, *args):
             if not os.path.exists(train_cfg.snapshot_dir):
                 os.makedirs(train_cfg.snapshot_dir)
             torch.save(optimizer.state_dict(), train_cfg.snapshot_dir + '/optimizer_dict')
-            torch.save(ddp_model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
+            torch.save(model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
         # update curriculum difficulty ---------------------------------------------------------
         if train_cfg.strategy == 'every-x-epochs':
             agent_pool.update_difficulty(ep + 1)
@@ -253,4 +298,7 @@ if __name__ == '__main__':
     train_cfg = TrainingConfig('config/training.yml')
     os.environ['MASTER_ADDR'] = '127.0.0.1'
     os.environ['MASTER_PORT'] = '8888'
-    mp.spawn(train, nprocs=train_cfg.world_size, args=(geom_cfg, train_cfg))
+    if train_cfg.distributed:
+        mp.spawn(train, nprocs=train_cfg.world_size, args=(geom_cfg, train_cfg))
+    else:
+        train(0, geom_cfg, train_cfg)

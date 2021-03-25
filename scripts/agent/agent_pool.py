@@ -15,7 +15,8 @@ class CurriculumPool:
     to propagate messages increases, starting with 1.
     """
     def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count,
-                 strategy, strategy_parameter) -> None:
+                 strategy, strategy_parameter, device) -> None:
+        self.device = device
         self.agent_count = 0
         # connection strategy
         self.difficulty = starting_difficulty
@@ -35,12 +36,12 @@ class CurriculumPool:
         # also no calculations necessary for difficulty = 1
         if self.difficulty ==  1:
             self.combined_masks = masks
-            self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
+            self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool, device=self.device)
             return
         # no calculations necessary for max possible difficulty (!= max_difficulty)
         elif self.difficulty == self.max_agent_count:
             self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
-            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.bool)
+            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.bool, device=self.device)
             return
         # for other cases, need to do some stuff
         self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
@@ -80,6 +81,8 @@ class CurriculumPool:
             # combining the mask of selected connections and setting everything else to 0
             self.combined_masks[i] = self.combined_masks[i] & accepted_connections
             self.combined_masks[i][self.combined_masks[i] != 0] = 1
+
+        self.adjacency_matrix.to(self.device)
 
     def update_difficulty(self, parameter):
         if self.curriculum_strat == 'every-x-epochs':
