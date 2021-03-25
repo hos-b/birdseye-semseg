@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'dist-test'
+  name: 'non-dist-cuda1'
   log-dir: './log'
   logger: 'wandb' # or tensorboard
   snapshot-dir: './snapshots'
@@ -12,7 +12,7 @@ logging:
 training:
   device: 'cuda'
   torch-seed: 0
-  distributed: true
+  distributed: false
   world-size: 2
 
 dataloader:
