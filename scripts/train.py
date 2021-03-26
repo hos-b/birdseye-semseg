@@ -1,10 +1,7 @@
-from logging import log
 import os
 import torch
 import torch.nn as nn
 import torch.multiprocessing as mp
-import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel
 
 import wandb
 import subprocess
@@ -14,79 +11,16 @@ from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.color_map import __our_classes as segmentation_classes
-from data.dataset import get_datasets, get_dataloaders
-from data.logging import log_scalar_wandb, log_image_wandb, log_string, init_wandb
+from data.dataset import get_datasets
+from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mass_cnn import DistributedMassCNN
 
-def train_batch_distributed(rgbs, car_transforms, masks, labels, mask_loss, semseg_loss,
-                            model: DistributedDataParallel, agent_pool: CurriculumPool):
-    batch_train_m_loss = 0.0
-    batch_train_s_loss = 0.0
-    detached_features = None
-    # async fwd-bwd
-    with model.no_sync():
-        for i in range(agent_pool.agent_count - 1):
-            detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
-                                                            detached_features, i,
-                                                            agent_pool.adjacency_matrix,
-                                                            False)
-            m_loss = mask_loss(mask_pred.squeeze(), masks[i])
-            s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
-                                    agent_pool.combined_masks[i],
-                                dim=(0, 1, 2))
-            batch_train_m_loss += m_loss.item()
-            batch_train_s_loss += s_loss.item()
-            (m_loss + s_loss).backward()
-    last_i = agent_pool.agent_count - 1
-    # synchronzing fwd-bwd
-    detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
-                                                    detached_features, last_i,
-                                                    agent_pool.adjacency_matrix,
-                                                    False)
-    m_loss = mask_loss(mask_pred.squeeze(), masks[last_i])
-    s_loss = torch.mean(semseg_loss(sseg_pred, labels[last_i].unsqueeze(0)) *
-                            agent_pool.combined_masks[last_i],
-                        dim=(0, 1, 2))
-    batch_train_m_loss += m_loss.item()
-    batch_train_s_loss += s_loss.item()
-    (m_loss + s_loss).backward()
-    return batch_train_m_loss, batch_train_s_loss
+def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
+    # gpu selection ----------------------------------------------------------------------------
 
-def train_batch_single(rgbs, car_transforms, masks, labels, mask_loss, semseg_loss,
-                       model: DistributedMassCNN, agent_pool: CurriculumPool):
-    batch_train_m_loss = 0.0
-    batch_train_s_loss = 0.0
-    detached_features = None
-    # async fwd-bwd
-    for i in range(agent_pool.agent_count):
-        detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
-                                                        detached_features, i,
-                                                        agent_pool.adjacency_matrix,
-                                                        False)
-        m_loss = mask_loss(mask_pred.squeeze(), masks[i])
-        s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
-                                agent_pool.combined_masks[i],
-                            dim=(0, 1, 2))
-        batch_train_m_loss += m_loss.item()
-        batch_train_s_loss += s_loss.item()
-        (m_loss + s_loss).backward()
-    return batch_train_m_loss, batch_train_s_loss
-
-def train(gpu, *args):
-    geom_cfg: SemanticCloudConfig = args[0]
-    train_cfg: TrainingConfig = args[1]
-    # distributed training ---------------------------------------------------------------------
-    rank = gpu
-    if train_cfg.distributed:
-        dist.init_process_group(
-            backend='nccl',
-            init_method='env://',
-            world_size=train_cfg.world_size,
-            rank=rank
-        )
     device_str = train_cfg.device
     if train_cfg.device == 'cuda':
         torch.cuda.set_device(gpu)
@@ -100,8 +34,12 @@ def train(gpu, *args):
     # dataset ----------------------------------------------------------------------------------
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir, train_cfg.dset_file,
                                       (0.8, 0.2), NEW_SIZE, train_cfg.classes)
-    train_loader, test_loader = get_dataloaders(train_cfg.world_size, rank, train_set, test_set,
-                                                train_cfg.pin_memory, train_cfg.loader_workers, 1)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
+                                               pin_memory=train_cfg.pin_memory,
+                                               num_workers=train_cfg.loader_workers)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
+                                              pin_memory=train_cfg.pin_memory,
+                                              num_workers=train_cfg.loader_workers)
     # logging ----------------------------------------------------------------------------------
     name = train_cfg.training_name + '-'
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
@@ -110,25 +48,18 @@ def train(gpu, *args):
     ret_code = git_diff.wait()
     if ret_code != 0:
         name += '-dirty'
-    if rank == 0:
-        if train_cfg.logger == 'tensorboard':
-            print('tensorboard logging is disabled')
-            exit()
-        elif train_cfg.logger == 'wandb':
-            init_wandb(name, train_cfg)
-        else:
-            log_string(rank, f'logging mode {train_cfg.logger} not recognized')
-            exit()
+    if train_cfg.logger == 'wandb':
+        init_wandb(name, train_cfg)
+    else:
+        print(f'unsupported logger')
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
-    model = DistributedMassCNN(geom_cfg, gpu,
+    model = DistributedMassCNN(geom_cfg,
                                num_classes=train_cfg.num_classes,
                                output_size=NEW_SIZE).cuda(gpu)
-    log_string(rank, f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
+    print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
-    if train_cfg.distributed:
-        model = DistributedDataParallel(model, device_ids=[gpu])
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
                                 train_cfg.max_agent_count,  train_cfg.strategy,
                                 train_cfg.strategy_parameter, device)
@@ -138,7 +69,7 @@ def train(gpu, *args):
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     else:
-        log_string(rank, f'unknown loss function: {train_cfg.loss_function}')
+        print(f'unknown loss function: {train_cfg.loss_function}')
         exit()
     mask_loss = nn.L1Loss(reduction='mean')
     # send to gpu
@@ -148,64 +79,65 @@ def train(gpu, *args):
     epochs = train_cfg.epochs
     # training ---------------------------------------------------------------------------------
     for ep in range(epochs):
-        # required in shuffled distributed samplers
-        if train_cfg.distributed and train_cfg.shuffle_data:
-            train_loader.sampler.set_epoch(ep)
-            test_loader.sampler.set_epoch(ep)
-        
+        total_train_m_loss = 0.0
+        total_train_s_loss = 0.0
         sample_count = 0
         # training
         model.train()
-        total_train_m_loss = 0.0
-        total_train_s_loss = 0.0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
-            log_string(rank, f'\repoch: {ep + 1}/{epochs}, '
-                             f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
+            print(f'\repoch: {ep + 1}/{epochs}, '
+                  f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                             masks, car_transforms,
-                                                            device, True)
-            # simulate connection drops
+                                                            device, train_cfg.pin_memory)
+            # simulate connection drops [disabled for now]
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
-            # semseg & mask loss
-            optimizer.zero_grad()
+            # semseg & mask batch loss
+            batch_train_m_loss = 0.0
+            batch_train_s_loss = 0.0
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
-            if train_cfg.distributed:
-                batch_train_m_loss, batch_train_s_loss = train_batch_distributed(
-                                                            rgbs, car_transforms,
-                                                            masks, labels,
-                                                            mask_loss,semseg_loss,
-                                                            model, agent_pool
-                                                        )
-            else:
-                batch_train_m_loss, batch_train_s_loss = train_batch_single(
-                                                            rgbs, car_transforms,
-                                                            masks, labels,
-                                                            mask_loss,semseg_loss,
-                                                            model, agent_pool
-                                                        )
+            # agent count x fwd-bwd
+            detached_features = None
+            optimizer.zero_grad()
+            for i in range(agent_pool.agent_count):
+                detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
+                                                                detached_features, i,
+                                                                agent_pool.adjacency_matrix,
+                                                                False)
+                m_loss = mask_loss(mask_pred.squeeze(), masks[i])
+                s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
+                                        agent_pool.combined_masks[i],
+                                    dim=(0, 1, 2))
+                batch_train_m_loss += m_loss.item()
+                batch_train_s_loss += s_loss.item()
+                (m_loss + s_loss).backward()
+            optimizer.step()
+
             # writing batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0:
-                log_scalar_wandb(rank, {
+                wandb.log({
                     'batch train mask': batch_train_m_loss,
                     'batch train seg': batch_train_s_loss
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
-            optimizer.step()
 
-        # wandb logging ------------------------------------------------------------------------
-        log_scalar_wandb(rank, {
+        # syncing tensors for wandb logging ----------------------------------------------------
+        # total_train_m_loss = sync_tensor(rank, 0, total_train_m_loss, train_cfg.world_size)
+        # total_train_s_loss = sync_tensor(rank, 1, total_train_s_loss, train_cfg.world_size)
+        # sample_count = sync_tensor(rank, 2, sample_count, train_cfg.world_size)
+        wandb.log({
             'total train mask loss': total_train_m_loss / sample_count,
             'total train seg loss': total_train_s_loss / sample_count,
             'epoch': ep + 1
         })
-        log_string(rank, f'\nepoch train loss: {total_train_m_loss / sample_count} mask, '
-                         f'{total_train_s_loss / sample_count} segmentation')
+        print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
+              f'{(total_train_s_loss / sample_count)} segmentation')
         # validation ---------------------------------------------------------------------------
         model.eval()
         visaulized = False
@@ -215,13 +147,13 @@ def train(gpu, *args):
         mask_ious = 0.0
         sample_count = 0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
-            log_string(rank, f'\repoch: {ep + 1}/{epochs}, '
-                             f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
+            print(f'\repoch: {ep + 1}/{epochs}, '
+                  f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                             masks, car_transforms,
-                                                            device, True)
+                                                            device, train_cfg.pin_memory)
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
@@ -235,7 +167,7 @@ def train(gpu, *args):
             total_valid_m_loss += torch.mean(m_loss).detach()
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
-            if not visaulized and rank == 0:
+            if not visaulized:
                 # masked target semantics
                 ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
                 ss_mask = agent_pool.combined_masks[0].cpu()
@@ -246,7 +178,7 @@ def train(gpu, *args):
                 # predicted & target mask
                 pred_mask = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask = get_matplotlib_image(masks[0].cpu())
-                log_image_wandb(rank, {
+                wandb.log({
                     'input rgb' : [
                         wandb.Image(rgbs[0], caption='input image'),
                     ],
@@ -256,27 +188,25 @@ def train(gpu, *args):
                         wandb.Image(ss_pred_img.transpose(1, 2, 0), caption='predicted semantics'),
                         wandb.Image(ss_trgt_img.transpose(1, 2, 0), caption='target semantics')
                     ],
-                    'epoch': ep + 1
                 })
                 visaulized = True
 
         # more wandb logging -------------------------------------------------------------------
         new_metric = 0.0
-        logged_dict = {}
+        log_dict = {}
         for key, val in segmentation_classes.items():
-            logged_dict[f'{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
+            log_dict[f'{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
             new_metric += sseg_ious[key] / sample_count
         new_metric += mask_ious / sample_count
-        logged_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
-        logged_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
-        logged_dict['mask iou'] = (mask_ious / sample_count).item()
-        logged_dict['epoch'] = ep + 1
-        log_scalar_wandb(rank, logged_dict)
-        log_string(rank, f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
-                         f'{total_valid_s_loss / sample_count} segmentation')
+        log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
+        log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
+        log_dict['mask iou'] = (mask_ious / sample_count).item()
+        wandb.log(log_dict)
+        print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
+              f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model if it's better --------------------------------------------------
-        if new_metric > last_metric and rank == 0:
-            log_string(rank, f'saving snapshot at epoch {ep + 1}')
+        if new_metric > last_metric:
+            print(f'saving snapshot at epoch {ep + 1}')
             last_metric = new_metric
             if not os.path.exists(train_cfg.snapshot_dir):
                 os.makedirs(train_cfg.snapshot_dir)
@@ -286,16 +216,13 @@ def train(gpu, *args):
         if train_cfg.strategy == 'every-x-epochs':
             agent_pool.update_difficulty(ep + 1)
 
-    if rank == 0:
-        wandb.finish()
+    wandb.finish()
 
 
 if __name__ == '__main__':
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     train_cfg = TrainingConfig('config/training.yml')
-    os.environ['MASTER_ADDR'] = '127.0.0.1'
-    os.environ['MASTER_PORT'] = '8888'
     if train_cfg.distributed:
-        mp.spawn(train, nprocs=train_cfg.world_size, args=(geom_cfg, train_cfg))
-    else:
-        train(0, geom_cfg, train_cfg)
+        print('change training.distributed to false in the configs')
+        exit()
+    train(0, geom_cfg, train_cfg)
