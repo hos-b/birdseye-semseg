@@ -139,10 +139,9 @@ class MassCNN(torch.nn.Module):
         return aggregated_features
 
 class DistributedMassCNN(MassCNN):
-    def __init__(self, sem_cfg: SemanticCloudConfig, gpu, num_classes,
+    def __init__(self, sem_cfg: SemanticCloudConfig, num_classes,
                  mode='small', output_size=(256, 205)):
         super(DistributedMassCNN, self).__init__(sem_cfg, num_classes, mode, output_size)
-        self.gpu = gpu
         self.cf_h, self.cf_w = 238, 318 # compressed_features.shape[2], compressed_features.shape[3]
         self.ppm = 12.71 # ((cf_h / self.cfg.cloud_x_span) + (cf_w / self.cfg.cloud_y_span)) / 2.0
         self.center_x = 190 # int((self.cfg.cloud_max_x / self.cfg.cloud_x_span) * cf_h)
@@ -187,7 +186,7 @@ class DistributedMassCNN(MassCNN):
         relative_tfs = get_single_relative_img_transform(transforms,
                                                          agent_idx, self.ppm,
                                                          self.cf_h, self.cf_w,
-                                                         self.center_x, self.center_y).cuda(self.gpu)
+                                                         self.center_x, self.center_y).to(rgbs.device)
         warped_features = kornia.warp_affine(detached_features, relative_tfs, dsize=(self.cf_h, self.cf_w), flags='bilinear')
         # the same features but with gradient
         warped_features[agent_idx] = current_agent_features
@@ -218,7 +217,7 @@ class DistributedMassCNN(MassCNN):
         # [A, 128, 238, 318]
         relative_tfs = get_all_relative_img_transforms(transforms, self.ppm,
                                                        self.cf_h, self.cf_w,
-                                                       self.center_x, self.center_y).cuda(self.gpu)
+                                                       self.center_x, self.center_y).to(rgbs.device)
         compressed_features = compressed_features.repeat(agent_count, 1, 1, 1)
         outside_fov_rows, outside_fov_cols = torch.where(adjacency_matrix == 0)
         aggregated_features = kornia.warp_affine(compressed_features, relative_tfs,
