@@ -45,10 +45,9 @@ class CurriculumPool:
             return
         # for other cases, need to do some stuff
         self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
-        ids = ids.squeeze()
         # identifying the masks
-        for i in range(len(ids)):
-            masks[i] *= 1 << ids[i].item()
+        for i in range(ids.shape[1]):
+            masks[i] *= 1 << ids[0, i, 0].item() # the id tensors are fucked but squeeze() makes it worse
         self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w,
                                                       center_x, center_y, 'nearest').long()
         # using the unique values of the mask to find agent view overlaps
@@ -63,17 +62,17 @@ class CurriculumPool:
             accepted_connections = 1 << i
             accepted_connection_count = 1
             # while 
-            while accepted_connection_count < self.difficulty or len(possible_connections) > 0:
+            while accepted_connection_count < self.difficulty and len(possible_connections) > 0:
                 current_connection = possible_connections.pop(0)
                 # if already accepted this connection earlier in another
                 if (~accepted_connections & current_connection) == 0:
                     continue
                 # considering the constituent mask elements
-                for agent_idx in decompose_binary_elements(current_connection):
+                for uniq_mask_id in decompose_binary_elements(current_connection):
                     # if agent has not been considered before
-                    if (agent_idx & ~accepted_connections):
-                        self.adjacency_matrix[i, agent_idx] = 1
-                        accepted_connections |= agent_idx
+                    if (uniq_mask_id & ~accepted_connections):
+                        self.adjacency_matrix[i, uniq_mask_id] = 1
+                        accepted_connections |= uniq_mask_id
                         accepted_connection_count += 1
                         # not adding too many
                         if accepted_connection_count == self.difficulty:
@@ -98,9 +97,11 @@ def decompose_binary_elements(mask_value) -> list:
     Example: mask_value = 2 + 16 + 32 + 64 -> [1, 4, 5, 6]
     """
     elements = []
-    max_mask_value = 1
+    shifts = 0
+    max_mask_value = 1 << shifts
     while mask_value >= max_mask_value:
         if mask_value & max_mask_value:
-            elements.append(max_mask_value)
-        max_mask_value = max_mask_value << 1
+            elements.append(shifts)
+        shifts += 1
+        max_mask_value = 1 << shifts
     return elements
