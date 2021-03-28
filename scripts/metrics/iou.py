@@ -8,7 +8,7 @@ def iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, num_classes=7
     """
     assert len(predictions.shape) == 4, f"expected [B x num_classes x H x W], got {predictions.shape}"
     assert len(labels.shape) == 3, f"expected [B x H x W], got {labels.shape}"
-    assert predictions.shape[1] == num_classes, f"expected second dim to be {num_classes}, got{predictions.shape[1]}"
+    assert predictions.shape[1] == num_classes, f"expected second dim to be {num_classes}, got {predictions.shape[1]}"
 
     pred_argmax = torch.argmax(predictions, dim=1)
     ious = torch.zeros((num_classes, 1), dtype=torch.float64)

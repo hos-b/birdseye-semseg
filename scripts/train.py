@@ -2,6 +2,8 @@ import os
 import torch
 import torch.nn as nn
 import torch.multiprocessing as mp
+from torchvision import transforms
+from torch.optim import lr_scheduler
 
 import wandb
 import subprocess
@@ -16,9 +18,11 @@ from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
-from model.mass_cnn import DistributedMassCNN
+# from model.mass_cnn import DistributedMassCNN
+# from model.fast_scnn import FastSCNN
+from model.mass_cnn_small import MCNN
 
-def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
+def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # gpu selection ----------------------------------------------------------------------------
 
     device_str = train_cfg.device
@@ -35,9 +39,11 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir, train_cfg.dset_file,
                                       (0.8, 0.2), NEW_SIZE, train_cfg.classes)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
+                                               shuffle=train_cfg.shuffle_data,
                                                pin_memory=train_cfg.pin_memory,
                                                num_workers=train_cfg.loader_workers)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
+                                              shuffle=train_cfg.shuffle_data,
                                               pin_memory=train_cfg.pin_memory,
                                               num_workers=train_cfg.loader_workers)
     # logging ----------------------------------------------------------------------------------
@@ -55,14 +61,14 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
-    model = DistributedMassCNN(geom_cfg,
-                               num_classes=train_cfg.num_classes,
-                               output_size=NEW_SIZE).cuda(gpu)
+    model = MCNN(3, train_cfg.num_classes, NEW_SIZE, geom_cfg).cuda(gpu)
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count,  train_cfg.strategy,
+                                train_cfg.max_agent_count, train_cfg.strategy,
                                 train_cfg.strategy_parameter, device)
+    lr_lambda = lambda epoch: pow((1 - ((epoch - 1) / train_cfg.epochs)), 0.9)
+    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
     # losses -----------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
@@ -102,20 +108,14 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # agent count x fwd-bwd
-            detached_features = None
             optimizer.zero_grad()
-            for i in range(agent_pool.agent_count):
-                detached_features, mask_pred, sseg_pred = model(rgbs, car_transforms,
-                                                                detached_features, i,
-                                                                agent_pool.adjacency_matrix,
-                                                                False)
-                m_loss = mask_loss(mask_pred.squeeze(), masks[i])
-                s_loss = torch.mean(semseg_loss(sseg_pred, labels[i].unsqueeze(0)) *
-                                        agent_pool.combined_masks[i],
-                                    dim=(0, 1, 2))
-                batch_train_m_loss += m_loss.item()
-                batch_train_s_loss += s_loss.item()
-                (m_loss + s_loss).backward()
+            sseg_pred, mask_pred = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+            m_loss = mask_loss(mask_pred.squeeze(1), masks)
+            s_loss = torch.mean(semseg_loss(sseg_pred, labels) * agent_pool.combined_masks,
+                                dim=(0, 1, 2))
+            batch_train_m_loss += m_loss.item()
+            batch_train_s_loss += s_loss.item()
+            (m_loss + s_loss).backward()
             optimizer.step()
 
             # writing batch loss
@@ -157,9 +157,8 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
-            mask_preds, sseg_preds = model(rgbs, car_transforms,
-                                           None, -1,
-                                           agent_pool.adjacency_matrix, True)
+            with torch.no_grad():
+                sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             sseg_ious += iou_per_class(sseg_preds, labels).cuda(gpu)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
@@ -188,6 +187,7 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                         wandb.Image(ss_pred_img.transpose(1, 2, 0), caption='predicted semantics'),
                         wandb.Image(ss_trgt_img.transpose(1, 2, 0), caption='target semantics')
                     ],
+                    'epoch': ep + 1
                 })
                 visaulized = True
 
@@ -201,6 +201,7 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
+        log_dict['epoch'] = ep + 1
         wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
@@ -213,6 +214,7 @@ def train(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
             torch.save(optimizer.state_dict(), train_cfg.snapshot_dir + '/optimizer_dict')
             torch.save(model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
         # update curriculum difficulty ---------------------------------------------------------
+        scheduler.step()
         if train_cfg.strategy == 'every-x-epochs':
             agent_pool.update_difficulty(ep + 1)
 
@@ -225,4 +227,4 @@ if __name__ == '__main__':
     if train_cfg.distributed:
         print('change training.distributed to false in the configs')
         exit()
-    train(0, geom_cfg, train_cfg)
+    main(1, geom_cfg, train_cfg)

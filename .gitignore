@@ -15,4 +15,4 @@ mass_data_collector/.clangd
 **/snapshots
 **/wandb
 **/log
-scripts/train.py
+scripts/test-seg

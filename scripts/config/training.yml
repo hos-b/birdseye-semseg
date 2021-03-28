@@ -4,10 +4,10 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'comms-every-15'
+  name: 'smolnet'
   log-dir: './log'
   log-every: 5 # batch
-  logger: 'wandb' # or tensorboard
+  logger: 'wandb'
   snapshot-dir: './snapshots'
 
 training:
@@ -19,7 +19,7 @@ training:
 dataloader:
   pin-memory: false
   dataloder-workers: 1
-  shuffle-data: false
+  shuffle-data: true
 
 curriculum:
   initial-difficulty: 1
@@ -30,8 +30,8 @@ curriculum:
 
 hyperparameters:
   # probability that an agent stops transmitting
-  learning-rate: 1e-4
-  epochs: 1000
+  learning-rate: 5e-3
+  epochs: 400
   drop-prob: 0.0
   output-h: 256
   output-w: 205
