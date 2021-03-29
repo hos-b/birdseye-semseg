@@ -18,7 +18,7 @@ training:
 
 dataloader:
   pin-memory: false
-  dataloder-workers: 1
+  dataloder-workers: 4
   shuffle-data: true
 
 curriculum:
@@ -31,7 +31,7 @@ curriculum:
 hyperparameters:
   # probability that an agent stops transmitting
   learning-rate: 5e-3
-  epochs: 400
+  epochs: 500
   drop-prob: 0.0
   output-h: 256
   output-w: 205

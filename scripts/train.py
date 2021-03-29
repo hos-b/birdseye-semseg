@@ -227,4 +227,4 @@ if __name__ == '__main__':
     if train_cfg.distributed:
         print('change training.distributed to false in the configs')
         exit()
-    main(1, geom_cfg, train_cfg)
+    main(0, geom_cfg, train_cfg)

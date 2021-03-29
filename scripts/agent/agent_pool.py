@@ -1,6 +1,5 @@
 import torch
 import kornia
-from torch._C import dtype
 
 from model.mass_cnn import MassCNN
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
@@ -57,7 +56,11 @@ class CurriculumPool:
             counts = counts.cpu().tolist()
             # get mask IDs sorted based on count
             possible_connections = [x for _, x in sorted(zip(counts, possible_connections), reverse=True)]
-            possible_connections.remove(0)
+            try:
+                # no one cares where mask is 0
+                possible_connections.remove(0)
+            except ValueError:
+                pass
             # the ego-mask is always pre-selected
             accepted_connections = 1 << i
             accepted_connection_count = 1
