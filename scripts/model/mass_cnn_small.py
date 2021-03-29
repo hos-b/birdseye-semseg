@@ -2,7 +2,7 @@ import torch
 import kornia
 from torch import nn
 from torch.nn import functional as F
-from data.mask_warp import get_all_relative_img_transforms, get_single_relative_img_transform
+from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
 
 class MCNN(torch.nn.Module):
@@ -59,6 +59,70 @@ class MCNN(torch.nn.Module):
         """
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+class MCNN4(torch.nn.Module):
+    def __init__(self, input_channel, num_classes, output_size, sem_cfg: SemanticCloudConfig):
+        super().__init__()
+        self.learning_to_downsample = LearningToDownsample(input_channel)
+        self.semantic_global_feature_extractor = GlobalFeatureExtractor()
+        self.semantic_feature_fusion = FeatureFusionModule()
+        self.mask_global_feature_extractor = GlobalFeatureExtractor()
+        self.mask_feature_fusion = FeatureFusionModule()
+        self.classifier = Classifier(num_classes)
+        self.maskifier = Classifier(1)
+        self.output_size = output_size
+        self.sem_cfg = sem_cfg
+
+    def forward(self, x, transforms, adjacency_matrix):
+        # B, 3, 480, 640: input size
+        # B, 64, 60, 80
+        shared = self.learning_to_downsample(x)
+        
+        # ------------mask branch------------
+        # B, 128, 15, 20
+        x_semantic = self.semantic_global_feature_extractor(shared)
+        # B, 128, 60, 80
+        x_semantic = self.semantic_feature_fusion(shared, x_semantic)
+        # ----------semantic branch----------
+        # B, 128, 15, 20
+        x_mask = self.mask_global_feature_extractor(shared)
+        # B, 128, 60, 80
+        x_mask = self.mask_feature_fusion(shared, x_mask)
+        # --latent masking into aggregation--
+        # B, 128, 60, 80
+        x_semantic = self.aggregate_features(F.sigmoid(x_mask) * x_semantic, transforms, adjacency_matrix)
+        # B, 7, 60, 80
+        x_semantic = self.classifier(x_semantic)
+        # B, 7, 480, 640
+        sseg = F.interpolate(x_semantic, self.output_size, mode='bilinear', align_corners=True)
+        # B, 1, 60, 80
+        mask = self.maskifier(x_mask)
+        # B, 1, 480, 640
+        mask = F.sigmoid(F.interpolate(mask, self.output_size, mode='bilinear', align_corners=True))
+        return sseg, mask
+
+    def aggregate_features(self, x, transforms, adjacency_matrix):
+        # calculating constants
+        agent_count = transforms.shape[0]
+        cf_h, cf_w = 60, 80 # x.shape[2], x.shape[3]
+        ppm = 3.2 # ((cf_h / self.sem_cfg.cloud_x_span) + (cf_w / self.sem_cfg.cloud_y_span)) / 2.0
+        center_x = 48 # int((self.sem_cfg.cloud_max_x / self.sem_cfg.cloud_x_span) * cf_h)
+        center_y = 40 # int((self.sem_cfg.cloud_max_y / self.sem_cfg.cloud_y_span) * cf_w)
+        # aggregating [A, 128, 238, 318]
+        aggregated_features = torch.zeros_like(x)
+        for i in range(agent_count):
+            outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
+            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
+            warped_features[outside_fov] = 0
+            aggregated_features[i, ...] = warped_features.sum(dim=0) / adjacency_matrix[i].sum()
+        return aggregated_features
+    
+    def parameter_count(self):
+        """
+        returns the number of trainable parameters
+        """
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
 class LearningToDownsample(torch.nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -82,7 +146,6 @@ class LearningToDownsample(torch.nn.Module):
         x = self.sconv2(x)
         return x
 
-
 class GlobalFeatureExtractor(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -103,7 +166,6 @@ class GlobalFeatureExtractor(torch.nn.Module):
         x = self.third_block(x)
         x = self.ppm(x)
         return x
-
 
 # Modified from https://github.com/tonylins/pytorch-mobilenet-v2
 class InvertedResidual(nn.Module):
@@ -146,7 +208,6 @@ class InvertedResidual(nn.Module):
         else:
             return self.conv(x)
 
-
 # Modified from https://github.com/Lextal/pspnet-pytorch/blob/master/pspnet.py
 class PSPModule(nn.Module):
     def __init__(self, features, out_features=1024, sizes=(1, 2, 3, 6)):
@@ -169,7 +230,6 @@ class PSPModule(nn.Module):
         bottle = self.bottleneck(torch.cat(priors, 1))
         return self.relu(bottle)
 
-
 class FeatureFusionModule(torch.nn.Module):
     def __init__(self):
         super().__init__()
@@ -188,7 +248,6 @@ class FeatureFusionModule(torch.nn.Module):
         x = torch.add(high_res_input, low_res_input)
         return self.relu(x)
 
-
 class Classifier(torch.nn.Module):
     def __init__(self, num_classes):
         super().__init__()
@@ -201,7 +260,6 @@ class Classifier(torch.nn.Module):
         x = self.sconv1(x)
         return self.conv(x)
 
-
 class ConvBlock(torch.nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=2, padding=1, dilation=1, groups=1):
         super().__init__()
@@ -213,7 +271,6 @@ class ConvBlock(torch.nn.Module):
     def forward(self, input):
         x = self.conv1(input)
         return self.relu(self.bn(x))
-
 
 if __name__ == '__main__':
     model = MCNN(input_channel=3, num_classes=10)
