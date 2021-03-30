@@ -89,7 +89,7 @@ class MCNN4(torch.nn.Module):
         x_mask = self.mask_feature_fusion(shared, x_mask)
         # --latent masking into aggregation--
         # B, 128, 60, 80
-        x_semantic = self.aggregate_features(F.sigmoid(x_mask) * x_semantic, transforms, adjacency_matrix)
+        x_semantic = self.aggregate_features(detached_normalized(x_mask) * x_semantic, transforms, adjacency_matrix)
         # B, 7, 60, 80
         x_semantic = self.classifier(x_semantic)
         # B, 7, 480, 640
@@ -97,7 +97,7 @@ class MCNN4(torch.nn.Module):
         # B, 1, 60, 80
         mask = self.maskifier(x_mask)
         # B, 1, 480, 640
-        mask = F.sigmoid(F.interpolate(mask, self.output_size, mode='bilinear', align_corners=True))
+        mask = torch.sigmoid(F.interpolate(mask, self.output_size, mode='bilinear', align_corners=True))
         return sseg, mask
 
     def aggregate_features(self, x, transforms, adjacency_matrix):
@@ -122,6 +122,12 @@ class MCNN4(torch.nn.Module):
         returns the number of trainable parameters
         """
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+def detached_normalized(tensor: torch.Tensor):
+    """
+    tight sigmoid shifted forward
+    """
+    return 1 / (1 + torch.exp(-5.0 * (tensor - 0.5)))
 
 class LearningToDownsample(torch.nn.Module):
     def __init__(self, in_channels):

@@ -20,7 +20,7 @@ from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
 # from model.mass_cnn import DistributedMassCNN
 # from model.fast_scnn import FastSCNN
-from model.mass_cnn_small import MCNN
+from model.mcnn import MCNN4
 
 def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # gpu selection ----------------------------------------------------------------------------
@@ -61,7 +61,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
-    model = MCNN(3, train_cfg.num_classes, NEW_SIZE, geom_cfg).cuda(gpu)
+    model = MCNN4(3, train_cfg.num_classes, NEW_SIZE, geom_cfg).cuda(gpu)
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,

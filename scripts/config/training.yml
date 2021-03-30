@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'bignet-latemask-ele10'
+  name: 'bognet-latentmask-attached'
   log-dir: './log'
   log-every: 5 # batch
   logger: 'wandb'
@@ -18,7 +18,7 @@ training:
 
 dataloader:
   pin-memory: false
-  dataloder-workers: 2
+  dataloder-workers: 1
   shuffle-data: true
 
 curriculum:
@@ -26,7 +26,7 @@ curriculum:
   maximum-difficulty: 8
   maximum-agent-count: 8
   strategy: 'every-x-epochs'
-  strategy-parameter: 10
+  strategy-parameter: 15
 
 hyperparameters:
   # probability that an agent stops transmitting
