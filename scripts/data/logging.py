@@ -33,7 +33,7 @@ def init_wandb(name: str, train_cfg: TrainingConfig):
         config={
             'model_size': train_cfg.model_size,
             'segmentation_loss': train_cfg.loss_function,
-            'epochs': 1000,
+            'epochs': train_cfg.epochs,
             'learning_rate': train_cfg.learning_rate,
             'output_h': train_cfg.output_h,
             'output_w': train_cfg.output_w,

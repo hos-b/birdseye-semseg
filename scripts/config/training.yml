@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'bognet-latentmask-attached'
+  name: 'bognet-latentmask-detached'
   log-dir: './log'
   log-every: 5 # batch
   logger: 'wandb'
