@@ -76,7 +76,7 @@ class MCNN4(torch.nn.Module):
         # B, 3, 480, 640: input size
         # B, 64, 60, 80
         shared = self.learning_to_downsample(x)
-        
+
         # ------------mask branch------------
         # B, 128, 15, 20
         x_semantic = self.semantic_global_feature_extractor(shared)
@@ -89,7 +89,7 @@ class MCNN4(torch.nn.Module):
         x_mask = self.mask_feature_fusion(shared, x_mask)
         # --latent masking into aggregation--
         # B, 128, 60, 80
-        x_semantic = self.aggregate_features(detached_normalized(x_mask) * x_semantic, transforms, adjacency_matrix)
+        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic, transforms, adjacency_matrix)
         # B, 7, 60, 80
         x_semantic = self.classifier(x_semantic)
         # B, 1, 60, 80
@@ -124,7 +124,7 @@ class MCNN4(torch.nn.Module):
         """
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
-def detached_normalized(tensor: torch.Tensor):
+def attached_normalized(tensor: torch.Tensor):
     """
     tight sigmoid shifted forward
     """

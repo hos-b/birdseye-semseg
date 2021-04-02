@@ -1,0 +1,16 @@
+[ ] find singular transform
+[X] use (weighted?) cross entropy
+[ ] try with no difficulty elevation
+[ ] better metric for eleveation
+[ ] increase batch size
+[ ] better latent masking
+[ ] adapt distributed training script
+
+what possibly made it worse:
+[X] changing tight sigmoid to sigmoid
+[X] changing detached to attached
+[X] weight losses
+
+trying this round:
+training 1: detached sigmoid
+training 2: tight sigmoid attached
