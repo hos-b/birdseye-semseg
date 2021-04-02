@@ -206,8 +206,8 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
-        log_dict['mask loss weight'] = mask_loss_weight.item()
-        log_dict['sseg loss weight'] = sseg_loss_weight.item()
+        log_dict['mask loss weight'] = torch.exp(-mask_loss_weight).item()
+        log_dict['sseg loss weight'] = torch.exp(-sseg_loss_weight).item()
         log_dict['epoch'] = ep + 1
         wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '

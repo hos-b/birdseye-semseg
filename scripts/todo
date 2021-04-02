@@ -12,5 +12,5 @@ what possibly made it worse:
 [X] weight losses
 
 trying this round:
-training 1: detached sigmoid
-training 2: tight sigmoid attached
+training 1: detached sigmoid + focal
+training 2: detached sigmoid + ce

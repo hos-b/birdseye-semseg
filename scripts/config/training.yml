@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'bognet-att-FOC-noele'
+  name: 'bognet-det-CE-noele'
   log-dir: './log'
   log-every: 5 # batch
   logger: 'wandb'
@@ -38,7 +38,7 @@ hyperparameters:
   classes: 'ours'
   num-classes: 7
   model-size: 'large'
-  loss: 'focal' # 'cross-entropy'
+  loss: 'cross-entropy' # 'focal'
 
 validation:
   # threshold for counting the mask pixel as detected
