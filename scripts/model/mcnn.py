@@ -89,7 +89,7 @@ class MCNN4(torch.nn.Module):
         x_mask = self.mask_feature_fusion(shared, x_mask)
         # --latent masking into aggregation--
         # B, 128, 60, 80
-        x_semantic = self.aggregate_features(torch.sigmoid(x_mask).detach() * x_semantic, transforms, adjacency_matrix)
+        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic, transforms, adjacency_matrix)
         # B, 7, 60, 80
         x_semantic = self.classifier(x_semantic)
         # B, 1, 60, 80

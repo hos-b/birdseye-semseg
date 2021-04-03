@@ -18,8 +18,6 @@ from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
-# from model.mass_cnn import DistributedMassCNN
-# from model.fast_scnn import FastSCNN
 from model.mcnn import MCNN4
 
 def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
@@ -68,11 +66,6 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                                 train_cfg.strategy_parameter, device)
     lr_lambda = lambda epoch: pow((1 - ((epoch - 1) / train_cfg.epochs)), 0.9)
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-    # custom loss parameters
-    mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
-    sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
-    optimizer.add_param_group({"params": mask_loss_weight})
-    optimizer.add_param_group({"params": sseg_loss_weight})
     # losses -----------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
@@ -119,8 +112,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
-            (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
-             s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight).backward()
+            (m_loss + s_loss ).backward()
             optimizer.step()
 
             # writing batch loss
@@ -206,8 +198,6 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
-        log_dict['mask loss weight'] = torch.exp(-mask_loss_weight).item()
-        log_dict['sseg loss weight'] = torch.exp(-sseg_loss_weight).item()
         log_dict['epoch'] = ep + 1
         wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '

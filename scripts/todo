@@ -5,12 +5,18 @@
 [ ] increase batch size
 [ ] better latent masking
 [ ] adapt distributed training script
+[ ] full step by step pipeline check
+[ ] try small net but detach for mask
 
 what possibly made it worse:
 [X] changing tight sigmoid to sigmoid
-[X] changing detached to attached
-[X] weight losses
+[ ] changing detached to attached -> probably not
+[X] weight losses -> very likely
 
 trying this round:
-training 1: detached sigmoid + focal
-training 2: detached sigmoid + ce
+training 1: attached sigmoid + focal - weighted losses
+training 2: attached sigmoid + ce	 - weighted losses
+
+to do if it wasn't detach():
+another round with tight sigmoid
+another round without weighted losses
