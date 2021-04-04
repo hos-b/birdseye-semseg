@@ -12,12 +12,12 @@
 what possibly made it worse:
 [X] changing tight sigmoid to sigmoid
 [ ] changing detached to attached -> probably not
-[X] weight losses -> 
+[X] weight losses -> ruins both sort of
+[X] MCNN4 + attached sigmoid masking -> performance degradation leaks to mask branch
 
 trying this round:
-training 1: attached sigmoid + focal - weighted losses
-training 2: attached sigmoid + ce	 - weighted losses
+training 1: small net + detach for mask
+training 2: small net just for semseg
 
 to do if it wasn't detach():
 another round with tight sigmoid
-another round without weighted losses

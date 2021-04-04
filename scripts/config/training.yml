@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'smol-det-mask'
+  name: 'smol-only-seg'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './snapshots'

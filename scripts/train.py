@@ -60,7 +60,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
-    model = MCNN4(3, train_cfg.num_classes, NEW_SIZE, geom_cfg).cuda(gpu)
+    model = MCNN(3, train_cfg.num_classes, NEW_SIZE, geom_cfg).cuda(gpu)
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
@@ -114,7 +114,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
-            (m_loss + s_loss ).backward()
+            (s_loss).backward()
             optimizer.step()
 
             # writing batch loss
