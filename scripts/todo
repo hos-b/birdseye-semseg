@@ -1,17 +1,18 @@
 [ ] find singular transform
 [X] use (weighted?) cross entropy
-[ ] try with no difficulty elevation
+[X] try with no difficulty elevation
 [ ] better metric for eleveation
 [ ] increase batch size
 [ ] better latent masking
 [ ] adapt distributed training script
 [ ] full step by step pipeline check
 [ ] try small net but detach for mask
+[ ] try just fitting semseg
 
 what possibly made it worse:
 [X] changing tight sigmoid to sigmoid
 [ ] changing detached to attached -> probably not
-[X] weight losses -> very likely
+[X] weight losses -> 
 
 trying this round:
 training 1: attached sigmoid + focal - weighted losses

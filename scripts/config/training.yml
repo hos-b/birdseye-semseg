@@ -4,10 +4,9 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'bog-sig-att-FOC-noele'
+  name: 'smol-det-mask'
   log-dir: './log'
   log-every: 10 # batch
-  logger: 'wandb'
   snapshot-dir: './snapshots'
 
 training:
@@ -29,9 +28,9 @@ curriculum:
   strategy-parameter: 500
 
 hyperparameters:
-  # probability that an agent stops transmitting
   learning-rate: 5e-3
   epochs: 500
+  # probability that an agent stops transmitting
   drop-prob: 0.0
   output-h: 256
   output-w: 205

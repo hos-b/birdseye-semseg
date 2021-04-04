@@ -1,8 +1,7 @@
 import os
+import cv2
 import torch
 import torch.nn as nn
-import torch.multiprocessing as mp
-from torchvision import transforms
 from torch.optim import lr_scheduler
 
 import wandb
@@ -18,7 +17,9 @@ from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
-from model.mcnn import MCNN4
+from model.mcnn import MCNN, MCNN4
+
+
 
 def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # gpu selection ----------------------------------------------------------------------------
@@ -49,12 +50,13 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
     # checking for --dirty
     git_diff = subprocess.Popen(['/usr/bin/git', 'diff', '--quiet'], stdout=subprocess.PIPE)
     ret_code = git_diff.wait()
+    log_enable = train_cfg.training_name != 'debug'
     if ret_code != 0:
         name += '-dirty'
-    if train_cfg.logger == 'wandb':
+    if log_enable:
         init_wandb(name, train_cfg)
     else:
-        print(f'unsupported logger')
+        print(f'disabled logging')
     # saving snapshots -------------------------------------------------------------------------
     last_metric = 0.0
     # network stuff ----------------------------------------------------------------------------
@@ -116,23 +118,19 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
             optimizer.step()
 
             # writing batch loss
-            if (batch_idx + 1) % train_cfg.log_every == 0:
+            if (batch_idx + 1) % train_cfg.log_every == 0 and log_enable:
                 wandb.log({
                     'batch train mask': batch_train_m_loss,
                     'batch train seg': batch_train_s_loss
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
-
-        # syncing tensors for wandb logging ----------------------------------------------------
-        # total_train_m_loss = sync_tensor(rank, 0, total_train_m_loss, train_cfg.world_size)
-        # total_train_s_loss = sync_tensor(rank, 1, total_train_s_loss, train_cfg.world_size)
-        # sample_count = sync_tensor(rank, 2, sample_count, train_cfg.world_size)
-        wandb.log({
-            'total train mask loss': total_train_m_loss / sample_count,
-            'total train seg loss': total_train_s_loss / sample_count,
-            'epoch': ep + 1
-        })
+        if log_enable:
+            wandb.log({
+                'total train mask loss': total_train_m_loss / sample_count,
+                'total train seg loss': total_train_s_loss / sample_count,
+                'epoch': ep + 1
+            })
         print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
               f'{(total_train_s_loss / sample_count)} segmentation')
         # validation ---------------------------------------------------------------------------
@@ -174,18 +172,19 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                 # predicted & target mask
                 pred_mask = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask = get_matplotlib_image(masks[0].cpu())
-                wandb.log({
-                    'input rgb' : [
-                        wandb.Image(rgbs[0], caption='input image'),
-                    ],
-                    'output': [
-                        wandb.Image(pred_mask, caption='predicted mask'),
-                        wandb.Image(trgt_mask, caption='target mask'),
-                        wandb.Image(ss_pred_img.transpose(1, 2, 0), caption='predicted semantics'),
-                        wandb.Image(ss_trgt_img.transpose(1, 2, 0), caption='target semantics')
-                    ],
-                    'epoch': ep + 1
-                })
+                if log_enable:
+                    wandb.log({
+                        'input rgb' : [
+                            wandb.Image(rgbs[0], caption='input image'),
+                        ],
+                        'output': [
+                            wandb.Image(pred_mask, caption='predicted mask'),
+                            wandb.Image(trgt_mask, caption='target mask'),
+                            wandb.Image(ss_pred_img.transpose(1, 2, 0), caption='predicted semantics'),
+                            wandb.Image(ss_trgt_img.transpose(1, 2, 0), caption='target semantics')
+                        ],
+                        'epoch': ep + 1
+                    })
                 visaulized = True
 
         # more wandb logging -------------------------------------------------------------------
@@ -199,7 +198,8 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
         log_dict['epoch'] = ep + 1
-        wandb.log(log_dict)
+        if log_enable:
+            wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model if it's better --------------------------------------------------
@@ -215,7 +215,8 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         if train_cfg.strategy == 'every-x-epochs':
             agent_pool.update_difficulty(ep + 1)
 
-    wandb.finish()
+    if log_enable:
+        wandb.finish()
 
 
 if __name__ == '__main__':

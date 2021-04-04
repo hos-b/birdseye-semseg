@@ -31,7 +31,7 @@ class MCNN(torch.nn.Module):
         # B, 7, 480, 640
         sseg = F.interpolate(sseg, self.output_size, mode='bilinear', align_corners=True)
         # B, 1, 60, 80
-        mask = self.mask_prediction(x)
+        mask = self.mask_prediction(x.detach())
         # B, 1, 480, 640
         mask = F.interpolate(mask, self.output_size, mode='bilinear', align_corners=True)
         return sseg, mask
