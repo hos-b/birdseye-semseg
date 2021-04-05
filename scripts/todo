@@ -7,7 +7,8 @@
 [ ] adapt distributed training script
 [ ] full step by step pipeline check
 [ ] try small net but detach for mask
-[ ] try just fitting semseg
+[X] try just fitting semseg
+[ ] try just fitting semseg without feature warping
 
 what possibly made it worse:
 [X] changing tight sigmoid to sigmoid
@@ -16,8 +17,7 @@ what possibly made it worse:
 [X] MCNN4 + attached sigmoid masking -> performance degradation leaks to mask branch
 
 trying this round:
-training 1: small net + detach for mask
+training 1: small net just for semseg w/o aggregation
 training 2: small net just for semseg
 
-to do if it wasn't detach():
-another round with tight sigmoid
+

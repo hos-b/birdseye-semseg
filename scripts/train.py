@@ -1,5 +1,6 @@
 import os
 import cv2
+from numpy.lib.utils import _lookfor_generate_cache
 import torch
 import torch.nn as nn
 from torch.optim import lr_scheduler
@@ -20,69 +21,24 @@ from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
 
 
-
-def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
-    # gpu selection ----------------------------------------------------------------------------
-    device_str = train_cfg.device
-    if train_cfg.device == 'cuda':
-        torch.cuda.set_device(gpu)
-        device_str += f':{gpu}'
-    device = torch.device(device_str)
-    torch.manual_seed(train_cfg.torch_seed)
-    # image size and center coordinates --------------------------------------------------------
-    NEW_SIZE = (train_cfg.output_h, train_cfg.output_w)
-    CENTER = (geom_cfg.center_x(NEW_SIZE[1]), geom_cfg.center_y(NEW_SIZE[0]))
-    PPM = geom_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
-    # dataset ----------------------------------------------------------------------------------
-    train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir, train_cfg.dset_file,
-                                      (0.8, 0.2), NEW_SIZE, train_cfg.classes)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
-                                               shuffle=train_cfg.shuffle_data,
-                                               pin_memory=train_cfg.pin_memory,
-                                               num_workers=train_cfg.loader_workers)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
-                                              shuffle=train_cfg.shuffle_data,
-                                              pin_memory=train_cfg.pin_memory,
-                                              num_workers=train_cfg.loader_workers)
-    # logging ----------------------------------------------------------------------------------
-    name = train_cfg.training_name + '-'
-    name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
-    # checking for --dirty
-    git_diff = subprocess.Popen(['/usr/bin/git', 'diff', '--quiet'], stdout=subprocess.PIPE)
-    ret_code = git_diff.wait()
-    log_enable = train_cfg.training_name != 'debug'
-    if ret_code != 0:
-        name += '-dirty'
-    if log_enable:
-        init_wandb(name, train_cfg)
-    else:
-        print(f'disabled logging')
-    # saving snapshots -------------------------------------------------------------------------
-    last_metric = 0.0
-    # network stuff ----------------------------------------------------------------------------
-    model = MCNN(3, train_cfg.num_classes, NEW_SIZE, geom_cfg).cuda(gpu)
-    print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
-    optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
-    agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count, train_cfg.strategy,
-                                train_cfg.strategy_parameter, device)
-    lr_lambda = lambda epoch: pow((1 - ((epoch - 1) / train_cfg.epochs)), 0.9)
-    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-    # losses -----------------------------------------------------------------------------------
-    if train_cfg.loss_function == 'cross-entropy':
-        semseg_loss = nn.CrossEntropyLoss(reduction='none')
-    elif train_cfg.loss_function == 'focal':
-        semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
-    else:
-        print(f'unknown loss function: {train_cfg.loss_function}')
-        exit()
-    mask_loss = nn.L1Loss(reduction='mean')
-    # send to gpu
-    if train_cfg.device == 'cuda':
-        semseg_loss = semseg_loss.cuda(gpu)
-        mask_loss = mask_loss.cuda(gpu)
+def train(**kwargs):
+    train_cfg = kwargs.get('train_cfg')
+    NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
+    log_enable = kwargs.get('log_enable')
+    # network & cuda
+    device = kwargs.get('device')
+    model = kwargs.get('model')
+    agent_pool = kwargs.get('agent_pool')
+    # losses & optimization
+    scheduler = kwargs.get('scheduler')
+    optimizer = kwargs.get('optimizer')
+    mask_loss = kwargs.get('mask_loss')
+    semseg_loss = kwargs.get('semseg_loss')
+    # dataset
+    train_loader = kwargs.get('train_loader')
+    test_loader = kwargs.get('test_loader')
     epochs = train_cfg.epochs
-    # training ---------------------------------------------------------------------------------
+
     for ep in range(epochs):
         total_train_m_loss = 0.0
         total_train_s_loss = 0.0
@@ -114,7 +70,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
-            (s_loss).backward()
+            (m_loss + s_loss).backward()
             optimizer.step()
 
             # writing batch loss
@@ -138,7 +94,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         visaulized = False
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
-        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(gpu)
+        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(0)
         mask_ious = 0.0
         sample_count = 0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
@@ -154,7 +110,7 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            sseg_ious += iou_per_class(sseg_preds, labels).cuda(gpu)
+            sseg_ious += iou_per_class(sseg_preds, labels).cuda(0)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
@@ -202,14 +158,16 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
             wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
-        # saving the new model if it's better --------------------------------------------------
+        # saving the new model -----------------------------------------------------------------
+        snapshot_name = f'{train_cfg.training_name}_last'
         if new_metric > last_metric:
-            print(f'saving snapshot at epoch {ep + 1}')
+            print(f'best model @ epoch {ep + 1}')
             last_metric = new_metric
-            if not os.path.exists(train_cfg.snapshot_dir):
-                os.makedirs(train_cfg.snapshot_dir)
-            torch.save(optimizer.state_dict(), train_cfg.snapshot_dir + '/optimizer_dict')
-            torch.save(model.state_dict(), train_cfg.snapshot_dir + '/model_snapshot.pth')
+            snapshot_name += f'{train_cfg.training_name}_best'
+        torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
+                    f'/{train_cfg.training_name}_optimizer')
+        torch.save(model.state_dict(), train_cfg.snapshot_dir +
+                    f'/{train_cfg.training_name}_model.pth')
         # update curriculum difficulty ---------------------------------------------------------
         scheduler.step()
         if train_cfg.strategy == 'every-x-epochs':
@@ -219,10 +177,77 @@ def main(gpu, geom_cfg: SemanticCloudConfig, train_cfg: TrainingConfig):
         wandb.finish()
 
 
-if __name__ == '__main__':
+def parse_and_execute():
+    # parsing config file
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     train_cfg = TrainingConfig('config/training.yml')
+    debug = train_cfg.training_name == 'debug'
     if train_cfg.distributed:
         print('change training.distributed to false in the configs')
         exit()
-    main(0, geom_cfg, train_cfg)
+    # gpu selection ----------------------------------------------------------------------------
+    device_str = train_cfg.device
+    if train_cfg.device == 'cuda':
+        torch.cuda.set_device(0)
+        device_str += f':{0}'
+    device = torch.device(device_str)
+    torch.manual_seed(train_cfg.torch_seed)
+    # image size and center coordinates --------------------------------------------------------
+    new_size = (train_cfg.output_h, train_cfg.output_w)
+    center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
+    ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
+    # dataset ----------------------------------------------------------------------------------
+    train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
+                                       train_cfg.dset_file, (0.8, 0.2),
+                                       new_size, train_cfg.classes)
+    train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
+                                               shuffle=train_cfg.shuffle_data,
+                                               pin_memory=train_cfg.pin_memory,
+                                               num_workers=train_cfg.loader_workers \
+                                                           if not debug else 0)
+    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
+                                              shuffle=train_cfg.shuffle_data,
+                                              pin_memory=train_cfg.pin_memory,
+                                              num_workers=train_cfg.loader_workers \
+                                                          if not debug else 0)
+    # logging ----------------------------------------------------------------------------------
+    name = train_cfg.training_name + '-'
+    name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
+    # checking for --dirty
+    git_diff = subprocess.Popen(['/usr/bin/git', 'diff', '--quiet'], stdout=subprocess.PIPE)
+    ret_code = git_diff.wait()
+    name += '-dirty' if ret_code != 0 else ''
+    log_enable = train_cfg.training_name != 'debug'
+    init_wandb(name, train_cfg) if log_enable else print(f'disabled logging')
+    # saving snapshots -------------------------------------------------------------------------
+    last_metric = 0.0
+    if not os.path.exists(train_cfg.snapshot_dir):
+        os.makedirs(train_cfg.snapshot_dir)
+    # network stuff ----------------------------------------------------------------------------
+    model = MCNN(3, train_cfg.num_classes, new_size, geom_cfg).cuda(0)
+    print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
+    optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
+    agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
+                                train_cfg.max_agent_count, train_cfg.strategy,
+                                train_cfg.strategy_parameter, device)
+    lr_lambda = lambda epoch: pow((1 - ((epoch - 1) / train_cfg.epochs)), 0.9)
+    scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
+    # losses -----------------------------------------------------------------------------------
+    if train_cfg.loss_function == 'cross-entropy':
+        semseg_loss = nn.CrossEntropyLoss(reduction='none')
+    elif train_cfg.loss_function == 'focal':
+        semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
+    else:
+        print(f'unknown loss function: {train_cfg.loss_function}')
+        exit()
+    mask_loss = nn.L1Loss(reduction='mean')
+    # send to gpu
+    if train_cfg.device == 'cuda':
+        semseg_loss = semseg_loss.cuda(0)
+        mask_loss = mask_loss.cuda(0)
+    train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
+          agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
+          geom_properties=(new_size, center, ppm), train_loader=train_loader, test_loader= test_loader)
+
+if __name__ == '__main__':
+    parse_and_execute()
