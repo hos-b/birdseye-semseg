@@ -48,7 +48,7 @@ class MCNN(torch.nn.Module):
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='nearest')
             warped_features[outside_fov] = 0
             aggregated_features[i, ...] = warped_features.sum(dim=0) / adjacency_matrix[i].sum()
         return aggregated_features
@@ -113,7 +113,7 @@ class MCNN4(torch.nn.Module):
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='nearest')
             warped_features[outside_fov] = 0
             aggregated_features[i, ...] = warped_features.sum(dim=0) / adjacency_matrix[i].sum()
         return aggregated_features

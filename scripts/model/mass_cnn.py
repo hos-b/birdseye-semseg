@@ -134,7 +134,7 @@ class MassCNN(torch.nn.Module):
         aggregated_features = torch.zeros_like(compressed_features)
         for i in range(agent_count):
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='bilinear')
+            warped_features = kornia.warp_affine(compressed_features, relative_tfs, dsize=(cf_h, cf_w), flags='nearest')
             aggregated_features[i, ...] = warped_features.sum(dim=0) / agent_count
         return aggregated_features
 
