@@ -1,4 +1,3 @@
-import os
 import torch
 import matplotlib.pyplot as plt
 import random
@@ -46,9 +45,9 @@ for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
 
         # create subplot and append to ax
         ax = []
-        ax.append(fig.add_subplot(rows, columns, i * columns + 1))
 
         # front RGB image
+        ax.append(fig.add_subplot(rows, columns, i * columns + 1))
         ax[-1].set_title(f"rgb_{i}")
         plt.imshow(rgb)
 

@@ -1,6 +1,5 @@
 import os
 import cv2
-from numpy.lib.utils import _lookfor_generate_cache
 import torch
 import torch.nn as nn
 from torch.optim import lr_scheduler
@@ -22,17 +21,17 @@ from model.mcnn import MCNN, MCNN4
 
 
 def train(**kwargs):
-    train_cfg = kwargs.get('train_cfg')
+    train_cfg: TrainingConfig = kwargs.get('train_cfg')
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
     log_enable = kwargs.get('log_enable')
     # network & cuda
     device = kwargs.get('device')
     model = kwargs.get('model')
-    agent_pool = kwargs.get('agent_pool')
+    agent_pool: CurriculumPool = kwargs.get('agent_pool')
     # losses & optimization
-    scheduler = kwargs.get('scheduler')
-    optimizer = kwargs.get('optimizer')
-    mask_loss = kwargs.get('mask_loss')
+    scheduler: lr_scheduler.LambdaLR = kwargs.get('scheduler')
+    optimizer: torch.optim.Adam = kwargs.get('optimizer')
+    mask_loss: nn.L1Loss = kwargs.get('mask_loss')
     semseg_loss = kwargs.get('semseg_loss')
     last_metric = 0.0
     # dataset
@@ -160,15 +159,15 @@ def train(**kwargs):
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
-        snapshot_name = f'{train_cfg.training_name}_last'
+        snapshot_tag = 'last'
         if new_metric > last_metric:
             print(f'best model @ epoch {ep + 1}')
             last_metric = new_metric
-            snapshot_name += f'{train_cfg.training_name}_best'
+            snapshot_tag = 'best'
         torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
-                    f'/{train_cfg.training_name}_optimizer')
+                    f'/{snapshot_tag}_optimizer')
         torch.save(model.state_dict(), train_cfg.snapshot_dir +
-                    f'/{train_cfg.training_name}_model.pth')
+                    f'/{snapshot_tag}_model.pth')
         # update curriculum difficulty ---------------------------------------------------------
         scheduler.step()
         if train_cfg.strategy == 'every-x-epochs':

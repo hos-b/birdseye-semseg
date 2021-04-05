@@ -16,3 +16,4 @@ mass_data_collector/.clangd
 **/wandb
 **/log
 scripts/test-seg
+scripts/plots

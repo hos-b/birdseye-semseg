@@ -4,10 +4,10 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'smol-only-seg'
+  name: 'debug'
   log-dir: './log'
   log-every: 10 # batch
-  snapshot-dir: './snapshots'
+  snapshot-dir: './runs/{}/snapshots'
 
 training:
   device: 'cuda'
@@ -42,3 +42,13 @@ hyperparameters:
 validation:
   # threshold for counting the mask pixel as detected
   mask-det-threshold: 0.6
+
+evaluation:
+  dataset: 'test'
+  run: 'seg-only-warp'
+  model: 'last' # or 'best'
+  random-samples: false
+  count: 50
+  plot: 'disk' # or 'show'
+  plot-dir: './runs/{}/plots'
+  difficulty: 1
