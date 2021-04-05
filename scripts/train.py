@@ -34,11 +34,11 @@ def train(**kwargs):
     optimizer = kwargs.get('optimizer')
     mask_loss = kwargs.get('mask_loss')
     semseg_loss = kwargs.get('semseg_loss')
+    last_metric = 0.0
     # dataset
     train_loader = kwargs.get('train_loader')
     test_loader = kwargs.get('test_loader')
     epochs = train_cfg.epochs
-
     for ep in range(epochs):
         total_train_m_loss = 0.0
         total_train_s_loss = 0.0
@@ -70,7 +70,8 @@ def train(**kwargs):
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
-            (m_loss + s_loss).backward()
+            # (m_loss + s_loss).backward()
+            s_loss.backward()
             optimizer.step()
 
             # writing batch loss
@@ -203,13 +204,11 @@ def parse_and_execute():
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
                                                pin_memory=train_cfg.pin_memory,
-                                               num_workers=train_cfg.loader_workers \
-                                                           if not debug else 0)
+                                               num_workers=train_cfg.loader_workers)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
                                               shuffle=train_cfg.shuffle_data,
                                               pin_memory=train_cfg.pin_memory,
-                                              num_workers=train_cfg.loader_workers \
-                                                          if not debug else 0)
+                                              num_workers=train_cfg.loader_workers)
     # logging ----------------------------------------------------------------------------------
     name = train_cfg.training_name + '-'
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
@@ -220,7 +219,6 @@ def parse_and_execute():
     log_enable = train_cfg.training_name != 'debug'
     init_wandb(name, train_cfg) if log_enable else print(f'disabled logging')
     # saving snapshots -------------------------------------------------------------------------
-    last_metric = 0.0
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------

@@ -7,17 +7,19 @@
 [ ] adapt distributed training script
 [ ] full step by step pipeline check
 [ ] try small net but detach for mask
-[X] try just fitting semseg
-[ ] try just fitting semseg without feature warping
+[ ] try just fitting semseg
+[ ] try just fitting semseg w/o feature warping
+[ ] batch norm?
 
 what possibly made it worse:
 [X] changing tight sigmoid to sigmoid
 [ ] changing detached to attached -> probably not
 [X] weight losses -> ruins both sort of
 [X] MCNN4 + attached sigmoid masking -> performance degradation leaks to mask branch
+[X] feature warping -> even with identity transform, the warping was changing the features
 
 trying this round:
-training 1: small net just for semseg w/o aggregation
+training 1: small net just for semseg w/o feature warping
 training 2: small net just for semseg
 
 
