@@ -69,7 +69,7 @@ def train(**kwargs):
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
-            # (m_loss + s_loss).backward()
+            # (m_loss + s_loss).backward() TODO: uncomment
             s_loss.backward()
             optimizer.step()
 
@@ -81,6 +81,7 @@ def train(**kwargs):
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
+
         if log_enable:
             wandb.log({
                 'total train mask loss': total_train_m_loss / sample_count,
@@ -119,12 +120,12 @@ def train(**kwargs):
             # visaluize the first agent from the first batch
             if not visaulized:
                 # masked target semantics
-                ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu()).transpose(2, 0, 1)
+                ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu())
                 ss_mask = agent_pool.combined_masks[0].cpu()
-                ss_trgt_img[:, ss_mask == 0] = 0
+                ss_trgt_img[ss_mask == 0, :] = 0
                 # predicted semantics
-                _, ss_pred = torch.max(sseg_preds[0], dim=0)
-                ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu()).transpose(2, 0, 1)
+                ss_pred = torch.max(sseg_preds[0], dim=0)[1]
+                ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
                 # predicted & target mask
                 pred_mask = get_matplotlib_image(mask_preds[0].squeeze().cpu())
                 trgt_mask = get_matplotlib_image(masks[0].cpu())
@@ -136,8 +137,8 @@ def train(**kwargs):
                         'output': [
                             wandb.Image(pred_mask, caption='predicted mask'),
                             wandb.Image(trgt_mask, caption='target mask'),
-                            wandb.Image(ss_pred_img.transpose(1, 2, 0), caption='predicted semantics'),
-                            wandb.Image(ss_trgt_img.transpose(1, 2, 0), caption='target semantics')
+                            wandb.Image(ss_pred_img, caption='predicted semantics'),
+                            wandb.Image(ss_trgt_img, caption='target semantics')
                         ],
                         'epoch': ep + 1
                     })
