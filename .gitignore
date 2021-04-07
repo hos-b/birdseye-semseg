@@ -17,3 +17,4 @@ mass_data_collector/.clangd
 **/log
 scripts/test-seg
 scripts/plots
+scripts/runs

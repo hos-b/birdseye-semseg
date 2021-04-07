@@ -52,7 +52,6 @@ class TrainingConfig:
         self.log_dir = conf['logging']['log-dir']
         self.log_every = conf['logging']['log-every']
         self.snapshot_dir = conf['logging']['snapshot-dir']
-        self.snapshot_dir = self.snapshot_dir.format(self.training_name)
         # training config
         self.device = conf['training']['device']
         self.world_size = int(conf['training']['world-size'])
@@ -89,4 +88,3 @@ class TrainingConfig:
         self.evaluation_difficulty = conf['evaluation']['difficulty']
         self.evaluation_plot_count = conf['evaluation']['count']
         self.evaluation_plot_dir = conf['evaluation']['plot-dir']
-        self.evaluation_plot_dir = self.evaluation_plot_dir.format(self.training_name)

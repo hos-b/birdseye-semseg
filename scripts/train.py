@@ -1,12 +1,16 @@
 import os
-import cv2
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.optim import lr_scheduler
+from kornia.losses.focal import FocalLoss
 
 import wandb
 import subprocess
-from kornia.losses.focal import FocalLoss
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 
 from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig, TrainingConfig
@@ -18,7 +22,7 @@ from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_matplotlib_image, to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
-
+from evaluate import plot_batch
 
 def train(**kwargs):
     train_cfg: TrainingConfig = kwargs.get('train_cfg')
@@ -63,9 +67,9 @@ def train(**kwargs):
                                                     CENTER[0], CENTER[1])
             # agent count x fwd-bwd
             optimizer.zero_grad()
-            sseg_pred, mask_pred = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            m_loss = mask_loss(mask_pred.squeeze(1), masks)
-            s_loss = torch.mean(semseg_loss(sseg_pred, labels) * agent_pool.combined_masks,
+            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+            m_loss = mask_loss(mask_preds.squeeze(1), masks)
+            s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
@@ -81,6 +85,8 @@ def train(**kwargs):
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
+            if batch_idx == 100:
+                break
 
         if log_enable:
             wandb.log({
@@ -118,31 +124,17 @@ def train(**kwargs):
             total_valid_m_loss += torch.mean(m_loss).detach()
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
-            if not visaulized:
-                # masked target semantics
-                ss_trgt_img = our_semantics_to_cityscapes_rgb(labels[0].cpu())
-                ss_mask = agent_pool.combined_masks[0].cpu()
-                ss_trgt_img[ss_mask == 0, :] = 0
-                # predicted semantics
-                ss_pred = torch.max(sseg_preds[0], dim=0)[1]
-                ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
-                # predicted & target mask
-                pred_mask = get_matplotlib_image(mask_preds[0].squeeze().cpu())
-                trgt_mask = get_matplotlib_image(masks[0].cpu())
-                if log_enable:
-                    wandb.log({
-                        'input rgb' : [
-                            wandb.Image(rgbs[0], caption='input image'),
-                        ],
-                        'output': [
-                            wandb.Image(pred_mask, caption='predicted mask'),
-                            wandb.Image(trgt_mask, caption='target mask'),
-                            wandb.Image(ss_pred_img, caption='predicted semantics'),
-                            wandb.Image(ss_trgt_img, caption='target semantics')
-                        ],
-                        'epoch': ep + 1
-                    })
+            if not visaulized and log_enable:
+                batch = plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, 'image')
+                wandb.log({
+                    'batch' : [
+                        wandb.Image(batch, caption='input image'),
+                    ],
+                    'epoch': ep + 1
+                })
                 visaulized = True
+            if batch_idx == 100:
+                break
 
         # more wandb logging -------------------------------------------------------------------
         new_metric = 0.0
@@ -219,6 +211,7 @@ def parse_and_execute():
     log_enable = train_cfg.training_name != 'debug'
     init_wandb(name, train_cfg) if log_enable else print(f'disabled logging')
     # saving snapshots -------------------------------------------------------------------------
+    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------

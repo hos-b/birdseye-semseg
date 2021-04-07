@@ -1,7 +1,7 @@
+from hashlib import pbkdf2_hmac
 import os
 import cv2
 import torch
-import random
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -13,6 +13,74 @@ from data.utils import squeeze_all, to_device
 from model.mcnn import MCNN, MCNN4
 from agent.agent_pool import CurriculumPool
 
+def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
+               mask_preds: torch.Tensor, agent_pool: CurriculumPool, plot_dest: str, 
+               filename = 'test.png'):
+    agent_count = rgbs.shape[0]
+    columns = 6
+    fig = plt.figure(figsize=(22, agent_count * 4))
+    for i in range(agent_count):
+        rgb = rgbs[i, ...].permute(1, 2, 0)
+        rgb = (rgb + 1) / 2
+        gt_mask = agent_pool.combined_masks[i].cpu()
+        ss_gt_img = our_semantics_to_cityscapes_rgb(labels[i].cpu())
+        ss_gt_img[gt_mask == 0] = 0
+
+        # create subplot and append to ax
+        ax = []
+
+        # front RGB image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1))
+        ax[-1].set_title(f"rgb {i}")
+        plt.imshow(rgb.cpu())
+
+        # basic mask
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2))
+        ax[-1].set_title(f"target mask {i}")
+        plt.imshow(gt_mask)
+
+        # predicted mask
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3))
+        ax[-1].set_title(f"predicted mask {i}")
+        plt.imshow(mask_preds[i].squeeze().cpu())
+
+        # masked semantic BEV image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4))
+        ax[-1].set_title(f"target BEV {i}")
+        plt.imshow(ss_gt_img)
+
+        # predicted semseg
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5))
+        ax[-1].set_title(f"predicted BEV {i}")
+        ss_pred = torch.max(sseg_preds[i], dim=0)[1]
+        ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
+        plt.imshow(ss_pred_img)
+
+        # masked predicted semseg
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6))
+        ax[-1].set_title(f"masked prediction {i}")
+        ss_pred_img[gt_mask == 0] = 0
+        plt.imshow(ss_pred_img)
+    
+    if plot_dest == 'disk':
+        fig.canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+        fig.clear()
+        plt.close(fig)
+        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    elif plot_dest == 'image':
+        fig.canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+        fig.clear()
+        plt.close(fig)
+        return image
+    elif plot_dest == 'show':
+        plt.show()
+
 def evaluate(**kwargs):
     train_cfg: TrainingConfig = kwargs.get('train_cfg')
     model = kwargs.get('model')
@@ -20,11 +88,13 @@ def evaluate(**kwargs):
     device = kwargs.get('device')
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
+    sample_plot_prob = 1.0 / train_cfg.evaluation_plot_count
+    probs = [1 - sample_plot_prob, sample_plot_prob] 
     # plot stuff
     columns = 6
     for idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(loader):
         # randomly skip samples (useful for large datasets)
-        if train_cfg.evaluation_random_samples and bool(random.randint(0, 1)):
+        if train_cfg.evaluation_random_samples and np.random.choice([True, False], 1, p=probs):
             continue
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
@@ -35,64 +105,14 @@ def evaluate(**kwargs):
                                                 CENTER[0], CENTER[1])
         print(f"index {idx + 1}/{len(loader)}")
         agent_count = rgbs.shape[0]
-        fig = plt.figure(figsize=(22, agent_count * 4))
+        
         # network output
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-        for i in range(agent_count):
-            rgb = rgbs[i, ...].permute(1, 2, 0)
-            rgb = (rgb + 1) / 2
-            gt_mask = agent_pool.combined_masks[i].cpu()
-            ss_gt_img = our_semantics_to_cityscapes_rgb(labels[i].cpu())
-            ss_gt_img[gt_mask == 0] = 0
+        plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, train_cfg.evaluation_plot,
+                   f'{train_cfg.evaluation_plot_dir}/{train_cfg.evaluation_run}_batch{idx}.png')
 
-            # create subplot and append to ax
-            ax = []
-
-            # front RGB image
-            ax.append(fig.add_subplot(agent_count, columns, i * columns + 1))
-            ax[-1].set_title(f"rgb {i}")
-            plt.imshow(rgb.cpu())
-
-            # basic mask
-            ax.append(fig.add_subplot(agent_count, columns, i * columns + 2))
-            ax[-1].set_title(f"target mask {i}")
-            plt.imshow(gt_mask)
-
-            # predicted mask
-            ax.append(fig.add_subplot(agent_count, columns, i * columns + 3))
-            ax[-1].set_title(f"predicted mask {i}")
-            plt.imshow(mask_preds[i].squeeze().cpu())
-
-            # masked semantic BEV image
-            ax.append(fig.add_subplot(agent_count, columns, i * columns + 4))
-            ax[-1].set_title(f"target BEV {i}")
-            plt.imshow(ss_gt_img)
-
-            # predicted semseg
-            ax.append(fig.add_subplot(agent_count, columns, i * columns + 5))
-            ax[-1].set_title(f"predicted BEV {i}")
-            _, ss_pred = torch.max(sseg_preds[i], dim=0)
-            ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
-            plt.imshow(ss_pred_img)
-
-            # masked predicted semseg
-            ax.append(fig.add_subplot(agent_count, columns, i * columns + 6))
-            ax[-1].set_title(f"masked prediction {i}")
-            ss_pred_img[gt_mask == 0] = 0
-            plt.imshow(ss_pred_img)
-
-        if train_cfg.evaluation_plot == 'disk':
-            fig.canvas.draw()
-            width, height = fig.get_size_inches() * fig.get_dpi()
-            width, height = int(width), int(height)
-            image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-            cv2.imwrite(f'{train_cfg.evaluation_plot_dir}/{train_cfg.evaluation_run}_batch{idx}.png',
-                        cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-            fig.clear()
-            plt.close(fig)
-        elif train_cfg.evaluation_plot == 'show':
-            plt.show()
+        
         train_cfg.evaluation_plot_count -= 1
         if train_cfg.evaluation_plot_count == 0:
             print('\ndone!')
@@ -114,6 +134,7 @@ def main():
     # seed to insure the same train/test split
     torch.manual_seed(train_cfg.torch_seed)
     # plot stuff 
+    train_cfg.evaluation_plot_dir = train_cfg.evaluation_plot_dir.format(train_cfg.evaluation_run)
     if not os.path.exists(train_cfg.evaluation_plot_dir):
         os.makedirs(train_cfg.evaluation_plot_dir)
     if train_cfg.evaluation_plot == 'disk':
@@ -128,7 +149,8 @@ def main():
     if train_cfg.evaluation_model != 'best' and train_cfg.evaluation_model != 'last':
         print("valid model options are 'best' and 'last'")
         exit()
-    snapshot_path = f'{train_cfg.training_name}_model.pth'
+    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.evaluation_run)
+    snapshot_path = f'{train_cfg.evaluation_model}_model.pth'
     snapshot_path = train_cfg.snapshot_dir + '/' + snapshot_path
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
