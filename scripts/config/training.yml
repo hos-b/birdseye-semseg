@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'newviz-FOC'
+  name: 'nostats-BN-CE'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './runs/{}/snapshots'
@@ -41,7 +41,7 @@ hyperparameters:
   output-w: 205
   classes: 'ours'
   num-classes: 7
-  loss: 'focal' # 'cross-entropy'
+  loss: 'cross-entropy' # 'focal'
 
 validation:
   # threshold for counting the mask pixel as detected

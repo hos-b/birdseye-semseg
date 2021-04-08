@@ -32,21 +32,16 @@ def init_wandb(name: str, train_cfg: TrainingConfig):
         dir=train_cfg.log_dir,
         config={
             'model_name': train_cfg.model_name,
+            'batchnorm_stats': train_cfg.batchnorm_keep_stats,
             'segmentation_loss': train_cfg.loss_function,
             'epochs': train_cfg.epochs,
             'learning_rate': train_cfg.learning_rate,
-            'output_h': train_cfg.output_h,
-            'output_w': train_cfg.output_w,
-            'classes': train_cfg.classes,
             'mask_det_threshold': train_cfg.mask_detection_thresh,
             'agent_drop_probability': train_cfg.drop_prob,
             'initial_difficulty': train_cfg.initial_difficulty,
             'maximum_difficulty': train_cfg.maximum_difficulty,
             'strategy': train_cfg.strategy,
             'strategy_parameter': train_cfg.strategy_parameter,
-            'world_size': train_cfg.world_size,
             'torch_seed': train_cfg.torch_seed,
-            'pin_memory': train_cfg.pin_memory,
-            'loader-workers': train_cfg.loader_workers,
             'shuffle_data': train_cfg.shuffle_data
     })
