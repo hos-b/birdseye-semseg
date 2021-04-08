@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'newviz-CE'
+  name: 'newviz-FOC'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './runs/{}/snapshots'
@@ -20,12 +20,17 @@ dataloader:
   dataloder-workers: 1
   shuffle-data: true
 
+network:
+  model-name: 'mcnn'
+  batchnorm-keep-stats: false
+
 curriculum:
   initial-difficulty: 1
   maximum-difficulty: 1
   maximum-agent-count: 8
   strategy: 'every-x-epochs'
-  strategy-parameter: 100
+  strategy-parameter: 500
+
 
 hyperparameters:
   learning-rate: 5e-3
@@ -36,8 +41,7 @@ hyperparameters:
   output-w: 205
   classes: 'ours'
   num-classes: 7
-  model-size: 'large'
-  loss: 'cross-entropy' # 'focal'
+  loss: 'focal' # 'cross-entropy'
 
 validation:
   # threshold for counting the mask pixel as detected
@@ -45,10 +49,13 @@ validation:
 
 evaluation:
   dataset: 'test'
-  run: 'wishful-thiking-focal'
-  model: 'last' # or 'last'
+  run: 'newviz-FOC'
+  model-name: 'mcnn'
+  batchnorm-keep-stats: true
+  model-version: 'last' # || 'best'
   random-samples: true
-  count: 100
-  plot: 'disk' # or 'show'
+  count: 50
+  plot: 'disk' # 'show' || 'image' for getting rgb
   plot-dir: './runs/{}/plots'
+  plot-tag: 'nostats' # added to dir name
   difficulty: 1

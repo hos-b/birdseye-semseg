@@ -107,8 +107,7 @@ def train(**kwargs):
                   f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
-                                                            masks, car_transforms,
+            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms,
                                                             device, train_cfg.pin_memory)
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
@@ -123,11 +122,9 @@ def train(**kwargs):
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
             if not visaulized and log_enable:
-                batch = plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, 'image')
+                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, 'image')
                 wandb.log({
-                    'batch' : [
-                        wandb.Image(batch, caption='input image'),
-                    ],
+                    'results': wandb.Image(img, caption='full batch predictions'),
                     'epoch': ep + 1
                 })
                 visaulized = True
@@ -211,7 +208,14 @@ def parse_and_execute():
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
-    model = MCNN(3, train_cfg.num_classes, new_size, geom_cfg).cuda(0)
+    if train_cfg.model_name == 'mcnn':
+        model = MCNN(3, train_cfg.num_classes, new_size,
+                     geom_cfg, train_cfg.batchnorm_keep_stats).cuda(0)
+    elif train_cfg.model_name == 'mcnn4':
+        model = MCNN4(3, train_cfg.num_classes, new_size,
+                      geom_cfg, train_cfg.batchnorm_keep_stats).cuda(0)
+    else:
+        print('unknown network architecture {train_cfg.model_name}')
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,

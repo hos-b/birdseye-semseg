@@ -61,6 +61,9 @@ class TrainingConfig:
         self.loader_workers = int(conf['dataloader']['dataloder-workers'])
         self.pin_memory = bool(conf['dataloader']['pin-memory'])
         self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
+        # network
+        self.model_name = conf['network']['model-name']
+        self.batchnorm_keep_stats = conf['network']['batchnorm-keep-stats']
         # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])
@@ -75,16 +78,18 @@ class TrainingConfig:
         self.num_classes = int(conf['hyperparameters']['num-classes'])
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = int(conf['hyperparameters']['epochs'])
-        self.model_size = conf['hyperparameters']['model-size']
         self.loss_function = conf['hyperparameters']['loss']
         # validation parameters
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
         # evaluation parameters
-        self.evaluation_dataset = conf['evaluation']['dataset']
-        self.evaluation_run = conf['evaluation']['run']
-        self.evaluation_model = conf['evaluation']['model']
-        self.evaluation_random_samples = conf['evaluation']['random-samples']
-        self.evaluation_plot = conf['evaluation']['plot']
-        self.evaluation_difficulty = conf['evaluation']['difficulty']
-        self.evaluation_plot_count = conf['evaluation']['count']
-        self.evaluation_plot_dir = conf['evaluation']['plot-dir']
+        self.eval_dataset = conf['evaluation']['dataset']
+        self.eval_run = conf['evaluation']['run']
+        self.eval_model_version = conf['evaluation']['model-version']
+        self.eval_random_samples = conf['evaluation']['random-samples']
+        self.eval_plot = conf['evaluation']['plot']
+        self.eval_difficulty = conf['evaluation']['difficulty']
+        self.eval_plot_count = conf['evaluation']['count']
+        self.eval_plot_dir = conf['evaluation']['plot-dir']
+        self.eval_plot_tag = conf['evaluation']['plot-tag']
+        self.eval_model_name = conf['evaluation']['model-name']
+        self.eval_batchnorm_keep_stats = conf['evaluation']['batchnorm-keep-stats']

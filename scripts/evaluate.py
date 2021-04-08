@@ -87,14 +87,15 @@ def evaluate(**kwargs):
     loader = kwargs.get('loader')
     device = kwargs.get('device')
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
+    model.eval()
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
-    sample_plot_prob = 1.0 / train_cfg.evaluation_plot_count
+    sample_plot_prob = 1.0 / train_cfg.eval_plot_count
     probs = [1 - sample_plot_prob, sample_plot_prob] 
     # plot stuff
     columns = 6
     for idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(loader):
         # randomly skip samples (useful for large datasets)
-        if train_cfg.evaluation_random_samples and np.random.choice([True, False], 1, p=probs):
+        if train_cfg.eval_random_samples and np.random.choice([True, False], 1, p=probs):
             continue
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
@@ -109,12 +110,12 @@ def evaluate(**kwargs):
         # network output
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-        plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, train_cfg.evaluation_plot,
-                   f'{train_cfg.evaluation_plot_dir}/{train_cfg.evaluation_run}_batch{idx}.png')
+        plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, train_cfg.eval_plot,
+                   f'{train_cfg.eval_plot_dir}/{train_cfg.eval_run}_batch{idx + 1}.png')
 
         
-        train_cfg.evaluation_plot_count -= 1
-        if train_cfg.evaluation_plot_count == 0:
+        train_cfg.eval_plot_count -= 1
+        if train_cfg.eval_plot_count == 0:
             print('\ndone!')
             break
 
@@ -134,48 +135,60 @@ def main():
     # seed to insure the same train/test split
     torch.manual_seed(train_cfg.torch_seed)
     # plot stuff 
-    train_cfg.evaluation_plot_dir = train_cfg.evaluation_plot_dir.format(train_cfg.evaluation_run)
-    if not os.path.exists(train_cfg.evaluation_plot_dir):
-        os.makedirs(train_cfg.evaluation_plot_dir)
-    if train_cfg.evaluation_plot == 'disk':
+    train_cfg.eval_plot_dir = train_cfg.eval_plot_dir.format(train_cfg.eval_run)
+    train_cfg.eval_plot_dir += '_' + train_cfg.eval_plot_tag
+    if not os.path.exists(train_cfg.eval_plot_dir):
+        os.makedirs(train_cfg.eval_plot_dir)
+    if train_cfg.eval_plot == 'disk':
         print('saving plots to disk')
         matplotlib.use('Agg')
-    elif train_cfg.evaluation_plot == 'show':
+    elif train_cfg.eval_plot == 'show':
         print('showing plots')
     else:
         print("valid plot options are 'show' and 'disk'")
         exit()
     # network stuff
-    if train_cfg.evaluation_model != 'best' and train_cfg.evaluation_model != 'last':
+    if train_cfg.eval_model_version != 'best' and train_cfg.eval_model_version != 'last':
         print("valid model options are 'best' and 'last'")
         exit()
-    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.evaluation_run)
-    snapshot_path = f'{train_cfg.evaluation_model}_model.pth'
+    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.eval_run)
+    snapshot_path = f'{train_cfg.eval_model_version}_model.pth'
     snapshot_path = train_cfg.snapshot_dir + '/' + snapshot_path
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
         exit()
-    model = MCNN(3, train_cfg.num_classes, new_size, geom_cfg).cuda(0)
+    if train_cfg.eval_model_name == 'mcnn':
+        model = MCNN(3, train_cfg.num_classes, new_size,
+                     geom_cfg, train_cfg.eval_batchnorm_keep_stats).cuda(0)
+    elif train_cfg.eval_model_name == 'mcnn4':
+        model = MCNN4(3, train_cfg.num_classes, new_size,
+                      geom_cfg, train_cfg.eval_batchnorm_keep_stats).cuda(0)
+    else:
+        print('unknown network architecture {train_cfg.eval_model_name}')
     model.load_state_dict(torch.load(snapshot_path))
-    agent_pool = CurriculumPool(train_cfg.evaluation_difficulty,
-                                train_cfg.evaluation_difficulty,
+    agent_pool = CurriculumPool(train_cfg.eval_difficulty,
+                                train_cfg.eval_difficulty,
                                 train_cfg.max_agent_count, train_cfg.strategy,
                                 train_cfg.strategy_parameter, device)
     # dataloader stuff
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
                                        train_cfg.dset_file, (0.8, 0.2),
                                        new_size, train_cfg.classes)
-    if train_cfg.evaluation_dataset == 'train':
+    if train_cfg.eval_dataset == 'train':
         eval_set = train_set
-    elif train_cfg.evaluation_dataset == 'test':
+    elif train_cfg.eval_dataset == 'test':
         eval_set = test_set
     else:
-        print(f'uknown dataset split {train_cfg.evaluation_dataset}')
+        print(f'uknown dataset split {train_cfg.eval_dataset}')
         exit()
     eval_loader = torch.utils.data.DataLoader(eval_set, batch_size=1,
                                               shuffle=train_cfg.shuffle_data,
                                               pin_memory=train_cfg.pin_memory,
                                               num_workers=train_cfg.loader_workers)
+    print(f'evaluating run {train_cfg.eval_run} with {train_cfg.eval_model_version} '
+          f'snapshot of {train_cfg.eval_model_name}')
+    print(f'gathering at most {train_cfg.eval_plot_count} from the {train_cfg.eval_dataset} '
+          f'set randomly? {train_cfg.eval_random_samples}, w/ difficulty = {train_cfg.eval_difficulty}')
     evaluate(train_cfg=train_cfg, model=model, agent_pool=agent_pool, loader=eval_loader,
              geom_properties=(new_size, center, ppm), device=device)
 
