@@ -36,7 +36,7 @@ def train(**kwargs):
     semseg_loss = kwargs.get('semseg_loss')
     mask_loss_weight = kwargs.get('mask_loss_weight')
     sseg_loss_weight = kwargs.get('sseg_loss_weight')
-    last_metric = 0.0
+    last_snapshot_metric = 0.0
     # dataset
     train_loader = kwargs.get('train_loader')
     test_loader = kwargs.get('test_loader')
@@ -134,16 +134,22 @@ def train(**kwargs):
                 visaulized = True
 
         # more wandb logging -------------------------------------------------------------------
-        new_metric = 0.0
+        elevation_metric = 0.0
+        new_snapshot_metric = 0.0
         log_dict = {}
         for key, val in segmentation_classes.items():
             log_dict[f'{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
-            new_metric += sseg_ious[key] / sample_count
-        new_metric += mask_ious / sample_count
+            new_snapshot_metric += sseg_ious[key] / sample_count
+            if val != 'Misc' and val != 'Water':
+                elevation_metric += sseg_ious[key] / sample_count
+        new_snapshot_metric += mask_ious / sample_count
+        elevation_metric += mask_ious / sample_count
         log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
         log_dict['epoch'] = ep + 1
+        if train_cfg.strategy == 'metric':
+            log_dict['elevation metric'] = (elevation_metric / 6).item()
         if train_cfg.weight_losses:
             log_dict['sseg loss weight'] = torch.exp(-sseg_loss_weight).item()
             log_dict['mask loss weight'] = torch.exp(-mask_loss_weight).item()
@@ -153,9 +159,9 @@ def train(**kwargs):
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
-        if new_metric > last_metric:
+        if new_snapshot_metric > last_snapshot_metric:
             print(f'best model @ epoch {ep + 1}')
-            last_metric = new_metric
+            last_snapshot_metric = new_snapshot_metric
             snapshot_tag = 'best'
         torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
                     f'/{snapshot_tag}_optimizer')
@@ -167,15 +173,10 @@ def train(**kwargs):
         if train_cfg.strategy == 'every-x-epochs':
             if (ep + 1) % int(train_cfg.strategy_parameter) == 0:
                 increase_diff = True
-        elif train_cfg.strategy == 'metric': # metric = avg of important class IoUs + mask IoU
-            metric = 0.0
-            for key, val in segmentation_classes.items():
-                if val == 'Misc' or val == 'Water':
-                    continue # these classes don't matter
-                metric += sseg_ious[key] / sample_count
-            metric = (metric + log_dict['mask iou']) / 6
-            print(f'elevation metric = {metric.item()}')
-            if metric >= train_cfg.strategy_parameter:
+        elif train_cfg.strategy == 'metric':
+            # elevation metric = avg[avg[important class IoU] + avg[mask IoU]]
+            elevation_metric /= 6
+            if elevation_metric >= train_cfg.strategy_parameter:
                 increase_diff = True
         if increase_diff:
             agent_pool.difficulty = min(agent_pool.difficulty + 1,
