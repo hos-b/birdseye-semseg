@@ -160,8 +160,22 @@ def train(**kwargs):
                     f'/{snapshot_tag}_model.pth')
         # update curriculum difficulty ---------------------------------------------------------
         scheduler.step()
+        increase_diff = False
         if train_cfg.strategy == 'every-x-epochs':
-            agent_pool.update_difficulty(ep + 1)
+            if (ep + 1) % int(train_cfg.strategy_parameter) == 0:
+                increase_diff = True
+        elif train_cfg.strategy == 'metric':
+            metric = 0.0
+            for key, val in segmentation_classes.items():
+                if val == 'Misc' or val == 'Water':
+                    continue # these classes don't matter
+                metric += sseg_ious[key] / sample_count
+            if metric >= train_cfg.strategy_parameter:
+                increase_diff = True
+        if increase_diff:
+            agent_pool.difficulty = min(agent_pool.difficulty + 1,
+                                        agent_pool.maximum_difficulty)
+            print(f'\n==========>> difficulty increased to {agent_pool.difficulty} <<==========')
 
     if log_enable:
         wandb.finish()
@@ -229,8 +243,7 @@ def parse_and_execute():
     else:
         mask_loss_weight, sseg_loss_weight = None, None
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count, train_cfg.strategy,
-                                train_cfg.strategy_parameter, device)
+                                train_cfg.max_agent_count, device)
     lr_lambda = lambda epoch: pow((1 - ((epoch - 1) / train_cfg.epochs)), 0.9)
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
     # losses -----------------------------------------------------------------------------------

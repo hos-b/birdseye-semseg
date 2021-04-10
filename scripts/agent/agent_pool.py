@@ -1,7 +1,6 @@
 import torch
 import kornia
 
-from model.mass_cnn import MassCNN
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 
 class CurriculumPool:
@@ -13,8 +12,7 @@ class CurriculumPool:
     as the training progresses, the number of agents that are allowed
     to propagate messages increases, starting with 1.
     """
-    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count,
-                 strategy, strategy_parameter, device) -> None:
+    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count, device):
         self.device = device
         self.agent_count = 0
         # connection strategy
@@ -23,8 +21,6 @@ class CurriculumPool:
         self.combined_masks = None
         self.adjacency_matrix = None
         self.max_agent_count = maximum_agent_count
-        self.curriculum_strat = strategy
-        self.curriculum_strat_param = strategy_parameter
 
     def generate_connection_strategy(self, ids, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
         """
@@ -85,13 +81,6 @@ class CurriculumPool:
             self.combined_masks[i][self.combined_masks[i] != 0] = 1
 
         self.adjacency_matrix.to(self.device)
-
-    def update_difficulty(self, parameter):
-        if self.curriculum_strat == 'every-x-epochs':
-            # increase difficulty
-            if (parameter + 1) % int(self.curriculum_strat_param) == 0:
-                self.difficulty = min(self.difficulty + 1, self.maximum_difficulty)
-                print(f'\n==========>> difficulty increased to {self.difficulty} <<==========')
 
 def decompose_binary_elements(mask_value) -> list:
     """

@@ -30,8 +30,8 @@ curriculum:
   initial-difficulty: 1
   maximum-difficulty: 1
   maximum-agent-count: 8
-  strategy: 'every-x-epochs'
-  strategy-parameter: 500
+  strategy: 'metric'
+  strategy-parameter: 0.7
 
 
 hyperparameters:

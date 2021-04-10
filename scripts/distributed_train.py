@@ -77,8 +77,7 @@ def train(gpu, *args):
     log_string(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count, train_cfg.strategy,
-                                train_cfg.strategy_parameter, device)
+                                train_cfg.max_agent_count, device)
     log_string(rank, f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     ddp_model = DistributedDataParallel(model, device_ids=[gpu])
