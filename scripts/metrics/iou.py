@@ -1,6 +1,6 @@
 import torch
 
-def iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, num_classes=7) -> dict:
+def iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, masks: torch.Tensor, num_classes=7) -> dict:
     """
     returns a [num_classes x 1] tensor containing the sum iou of each class for all images.
     in the end, the aggregated ious should be devided by the number of images, skipped here
@@ -9,15 +9,16 @@ def iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, num_classes=7
     assert len(predictions.shape) == 4, f"expected [B x num_classes x H x W], got {predictions.shape}"
     assert len(labels.shape) == 3, f"expected [B x H x W], got {labels.shape}"
     assert predictions.shape[1] == num_classes, f"expected second dim to be {num_classes}, got {predictions.shape[1]}"
-
+    import pdb; pdb.set_trace()
+    bool_mask = masks == 1.0
     pred_argmax = torch.argmax(predictions, dim=1)
     ious = torch.zeros((num_classes, 1), dtype=torch.float64)
     for i in range(num_classes):
         pred_class_i = pred_argmax == i
         labl_class_i = labels == i
         # image lvl iou for each class
-        intersection = (pred_class_i & labl_class_i).sum(dim=(1, 2))
-        union = (pred_class_i | labl_class_i).sum(dim=(1, 2))
+        intersection = (pred_class_i & labl_class_i & bool_mask).sum(dim=(1, 2))
+        union = ((pred_class_i | labl_class_i) & bool_mask).sum(dim=(1, 2))
         iou = intersection / union
         # set NaNs to zero
         iou[iou != iou] = 0

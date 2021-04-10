@@ -14,7 +14,7 @@ from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.color_map import __our_classes as segmentation_classes
 from data.dataset import get_datasets
-from data.logging import log_string, init_wandb
+from data.logging import log_string, init_wandb, log_wandb
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
 from evaluate import plot_batch
@@ -68,10 +68,10 @@ def train(gpu, *args):
     # network stuff ----------------------------------------------------------------------------
     if train_cfg.model_name == 'mcnn':
         model = MCNN(3, train_cfg.num_classes, NEW_SIZE,
-                     geom_cfg, train_cfg.batchnorm_keep_stats).cuda(0)
+                     geom_cfg, train_cfg.norm_keep_stats).cuda(gpu)
     elif train_cfg.model_name == 'mcnn4':
         model = MCNN4(3, train_cfg.num_classes, NEW_SIZE,
-                      geom_cfg, train_cfg.batchnorm_keep_stats).cuda(0)
+                      geom_cfg, train_cfg.norm_keep_stats).cuda(gpu)
     else:
         log_string(f'unknown network architecture {train_cfg.model_name}')
     log_string(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
@@ -136,7 +136,7 @@ def train(gpu, *args):
 
             # writing batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0 and log_enable:
-                wandb.log({
+                log_wandb({
                     'batch train mask': batch_train_m_loss,
                     'batch train seg': batch_train_s_loss
                 })
@@ -144,7 +144,7 @@ def train(gpu, *args):
             total_train_s_loss += batch_train_s_loss
 
         if log_enable:
-            wandb.log({
+            log_wandb({
                 'total train mask loss': total_train_m_loss / sample_count,
                 'total train seg loss': total_train_s_loss / sample_count,
                 'epoch': ep + 1
@@ -156,7 +156,7 @@ def train(gpu, *args):
         visaulized = False
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
-        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(0)
+        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(gpu)
         mask_ious = 0.0
         sample_count = 0
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
@@ -171,7 +171,7 @@ def train(gpu, *args):
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            sseg_ious += iou_per_class(sseg_preds, labels).cuda(0)
+            sseg_ious += iou_per_class(sseg_preds, labels, masks).cuda(gpu)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
@@ -180,7 +180,7 @@ def train(gpu, *args):
             # visaluize the first agent from the first batch
             if not visaulized and log_enable:
                 img = plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, 'image')
-                wandb.log({
+                log_wandb({
                     'results': wandb.Image(img, caption='full batch predictions'),
                     'epoch': ep + 1
                 })
@@ -198,7 +198,7 @@ def train(gpu, *args):
         log_dict['mask iou'] = (mask_ious / sample_count).item()
         log_dict['epoch'] = ep + 1
         if log_enable:
-            wandb.log(log_dict)
+            log_wandb(log_dict)
         log_string(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
                    f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------

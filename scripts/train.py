@@ -34,6 +34,8 @@ def train(**kwargs):
     optimizer: torch.optim.Adam = kwargs.get('optimizer')
     mask_loss: nn.L1Loss = kwargs.get('mask_loss')
     semseg_loss = kwargs.get('semseg_loss')
+    mask_loss_weight = kwargs.get('mask_loss_weight')
+    sseg_loss_weight = kwargs.get('sseg_loss_weight')
     last_metric = 0.0
     # dataset
     train_loader = kwargs.get('train_loader')
@@ -70,11 +72,15 @@ def train(**kwargs):
                                 dim=(0, 1, 2))
             batch_train_m_loss += m_loss.item()
             batch_train_s_loss += s_loss.item()
-            # (m_loss + s_loss).backward() TODO: uncomment
-            s_loss.backward()
+            # weighted losses
+            if train_cfg.weight_losses:
+                (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
+                 s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight).backward()
+            else:
+                (m_loss + s_loss).backward()
             optimizer.step()
 
-            # writing batch loss
+            # log batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0 and log_enable:
                 wandb.log({
                     'batch train mask': batch_train_m_loss,
@@ -83,6 +89,7 @@ def train(**kwargs):
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
 
+        # log train epoch loss
         if log_enable:
             wandb.log({
                 'total train mask loss': total_train_m_loss / sample_count,
@@ -111,7 +118,7 @@ def train(**kwargs):
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            sseg_ious += iou_per_class(sseg_preds, labels).cuda(0)
+            sseg_ious += iou_per_class(sseg_preds, labels, masks).cuda(0)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
@@ -207,14 +214,20 @@ def parse_and_execute():
     # network stuff ----------------------------------------------------------------------------
     if train_cfg.model_name == 'mcnn':
         model = MCNN(3, train_cfg.num_classes, new_size,
-                     geom_cfg, train_cfg.batchnorm_keep_stats).cuda(0)
+                     geom_cfg, train_cfg.norm_keep_stats).cuda(0)
     elif train_cfg.model_name == 'mcnn4':
         model = MCNN4(3, train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.batchnorm_keep_stats).cuda(0)
+                      geom_cfg, train_cfg.norm_keep_stats).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
+    if train_cfg.weight_losses:
+        mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
+        sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
+        optimizer.add_param_group({"params": [mask_loss_weight, sseg_loss_weight]})
+    else:
+        mask_loss_weight, sseg_loss_weight = None, None
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
                                 train_cfg.max_agent_count, train_cfg.strategy,
                                 train_cfg.strategy_parameter, device)
@@ -235,7 +248,8 @@ def parse_and_execute():
         mask_loss = mask_loss.cuda(0)
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
-          geom_properties=(new_size, center, ppm), train_loader=train_loader, test_loader= test_loader)
+          geom_properties=(new_size, center, ppm), train_loader=train_loader, test_loader=test_loader,
+          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight)
 
 if __name__ == '__main__':
     parse_and_execute()
