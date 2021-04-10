@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'nostats-BN-CE'
+  name: 'debug'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './runs/{}/snapshots'
@@ -14,6 +14,8 @@ training:
   torch-seed: 0
   distributed: false
   world-size: 2
+  loss: 'cross-entropy' # 'focal'
+  weight-losses: false
 
 dataloader:
   pin-memory: false
@@ -22,7 +24,7 @@ dataloader:
 
 network:
   model-name: 'mcnn'
-  batchnorm-keep-stats: false
+  norm-keep-stats: false # instance norm
 
 curriculum:
   initial-difficulty: 1
@@ -41,7 +43,6 @@ hyperparameters:
   output-w: 205
   classes: 'ours'
   num-classes: 7
-  loss: 'cross-entropy' # 'focal'
 
 validation:
   # threshold for counting the mask pixel as detected

@@ -6,13 +6,13 @@ from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
 
 class MCNN(torch.nn.Module):
-    def __init__(self, input_channel, num_classes, output_size, sem_cfg: SemanticCloudConfig, bn_keep_stats=False):
+    def __init__(self, input_channel, num_classes, output_size, sem_cfg: SemanticCloudConfig, norm_keep_stats=False):
         super().__init__()
-        self.learning_to_downsample = LearningToDownsample(input_channel, bn_keep_stats)
-        self.global_feature_extractor = GlobalFeatureExtractor(bn_keep_stats)
-        self.feature_fusion = FeatureFusionModule(bn_keep_stats)
-        self.classifier = Classifier(num_classes, bn_keep_stats)
-        self.mask_prediction = Classifier(1, bn_keep_stats)
+        self.learning_to_downsample = LearningToDownsample(input_channel, norm_keep_stats)
+        self.global_feature_extractor = GlobalFeatureExtractor(norm_keep_stats)
+        self.feature_fusion = FeatureFusionModule(norm_keep_stats)
+        self.classifier = Classifier(num_classes, norm_keep_stats)
+        self.mask_prediction = Classifier(1, norm_keep_stats)
         self.output_size = output_size
         self.sem_cfg = sem_cfg
 
@@ -60,15 +60,15 @@ class MCNN(torch.nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 class MCNN4(torch.nn.Module):
-    def __init__(self, input_channel, num_classes, output_size, sem_cfg: SemanticCloudConfig, bn_keep_stats=False):
+    def __init__(self, input_channel, num_classes, output_size, sem_cfg: SemanticCloudConfig, norm_keep_stats=False):
         super().__init__()
-        self.learning_to_downsample = LearningToDownsample(input_channel, bn_keep_stats)
-        self.semantic_global_feature_extractor = GlobalFeatureExtractor(bn_keep_stats)
-        self.semantic_feature_fusion = FeatureFusionModule(bn_keep_stats)
-        self.mask_global_feature_extractor = GlobalFeatureExtractor(bn_keep_stats)
-        self.mask_feature_fusion = FeatureFusionModule(bn_keep_stats)
-        self.classifier = Classifier(num_classes, bn_keep_stats)
-        self.maskifier = Classifier(1, bn_keep_stats)
+        self.learning_to_downsample = LearningToDownsample(input_channel, norm_keep_stats)
+        self.semantic_global_feature_extractor = GlobalFeatureExtractor(norm_keep_stats)
+        self.semantic_feature_fusion = FeatureFusionModule(norm_keep_stats)
+        self.mask_global_feature_extractor = GlobalFeatureExtractor(norm_keep_stats)
+        self.mask_feature_fusion = FeatureFusionModule(norm_keep_stats)
+        self.classifier = Classifier(num_classes, norm_keep_stats)
+        self.maskifier = Classifier(1, norm_keep_stats)
         self.output_size = output_size
         self.sem_cfg = sem_cfg
 
@@ -131,20 +131,20 @@ def attached_normalized(tensor: torch.Tensor):
     return 1 / (1 + torch.exp(-5.0 * (tensor.detach() - 0.5)))
 
 class LearningToDownsample(torch.nn.Module):
-    def __init__(self, in_channels, bn_keep_stats):
+    def __init__(self, in_channels, norm_keep_stats):
         super().__init__()
-        self.conv1 = ConvBlock(in_channels=in_channels, out_channels=32, bn_keep_stats=bn_keep_stats, stride=2)
+        self.conv1 = ConvBlock(in_channels=in_channels, out_channels=32, norm_keep_stats=norm_keep_stats, stride=2)
         self.sconv1 = nn.Sequential(
             nn.Conv2d(32, 32, kernel_size=3, stride=2, padding=1, dilation=1, groups=32, bias=False),
-            nn.BatchNorm2d(32, track_running_stats=bn_keep_stats),
+            nn.InstanceNorm2d(32, track_running_stats=norm_keep_stats),
             nn.Conv2d(32, 48, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, bias=False),
-            nn.BatchNorm2d(48, track_running_stats=bn_keep_stats),
+            nn.InstanceNorm2d(48, track_running_stats=norm_keep_stats),
             nn.ReLU(inplace=True))
         self.sconv2 = nn.Sequential(
             nn.Conv2d(48, 48, kernel_size=3, stride=2, padding=1, dilation=1, groups=48, bias=False),
-            nn.BatchNorm2d(48, track_running_stats=bn_keep_stats),
+            nn.InstanceNorm2d(48, track_running_stats=norm_keep_stats),
             nn.Conv2d(48, 64, kernel_size=1, stride=1, padding=0, dilation=1, groups=1, bias=False),
-            nn.BatchNorm2d(64, track_running_stats=bn_keep_stats),
+            nn.InstanceNorm2d(64, track_running_stats=norm_keep_stats),
             nn.ReLU(inplace=True))
 
     def forward(self, x):
@@ -154,17 +154,17 @@ class LearningToDownsample(torch.nn.Module):
         return x
 
 class GlobalFeatureExtractor(torch.nn.Module):
-    def __init__(self, bn_keep_stats):
+    def __init__(self, norm_keep_stats):
         super().__init__()
-        self.first_block = nn.Sequential(InvertedResidual(64, 64, 2, 6, bn_keep_stats),
-                                         InvertedResidual(64, 64, 1, 6, bn_keep_stats),
-                                         InvertedResidual(64, 64, 1, 6, bn_keep_stats))
-        self.second_block = nn.Sequential(InvertedResidual(64, 96, 2, 6, bn_keep_stats),
-                                          InvertedResidual(96, 96, 1, 6, bn_keep_stats),
-                                          InvertedResidual(96, 96, 1, 6, bn_keep_stats))
-        self.third_block = nn.Sequential(InvertedResidual(96, 128, 1, 6, bn_keep_stats),
-                                         InvertedResidual(128, 128, 1, 6, bn_keep_stats),
-                                         InvertedResidual(128, 128, 1, 6, bn_keep_stats))
+        self.first_block = nn.Sequential(InvertedResidual(64, 64, 2, 6, norm_keep_stats),
+                                         InvertedResidual(64, 64, 1, 6, norm_keep_stats),
+                                         InvertedResidual(64, 64, 1, 6, norm_keep_stats))
+        self.second_block = nn.Sequential(InvertedResidual(64, 96, 2, 6, norm_keep_stats),
+                                          InvertedResidual(96, 96, 1, 6, norm_keep_stats),
+                                          InvertedResidual(96, 96, 1, 6, norm_keep_stats))
+        self.third_block = nn.Sequential(InvertedResidual(96, 128, 1, 6, norm_keep_stats),
+                                         InvertedResidual(128, 128, 1, 6, norm_keep_stats),
+                                         InvertedResidual(128, 128, 1, 6, norm_keep_stats))
         self.ppm = PSPModule(128, 128)
 
     def forward(self, x):
@@ -176,7 +176,7 @@ class GlobalFeatureExtractor(torch.nn.Module):
 
 # Modified from https://github.com/tonylins/pytorch-mobilenet-v2
 class InvertedResidual(nn.Module):
-    def __init__(self, inp, oup, stride, expand_ratio, bn_keep_stats):
+    def __init__(self, inp, oup, stride, expand_ratio, norm_keep_stats):
         super(InvertedResidual, self).__init__()
         self.stride = stride
         assert stride in [1, 2]
@@ -188,25 +188,25 @@ class InvertedResidual(nn.Module):
             self.conv = nn.Sequential(
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
-                nn.BatchNorm2d(hidden_dim, track_running_stats=bn_keep_stats),
+                nn.InstanceNorm2d(hidden_dim, track_running_stats=norm_keep_stats),
                 nn.ReLU(inplace=True),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(oup, track_running_stats=bn_keep_stats),
+                nn.InstanceNorm2d(oup, track_running_stats=norm_keep_stats),
             )
         else:
             self.conv = nn.Sequential(
                 # pw
                 nn.Conv2d(inp, hidden_dim, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(hidden_dim, track_running_stats=bn_keep_stats),
+                nn.InstanceNorm2d(hidden_dim, track_running_stats=norm_keep_stats),
                 nn.ReLU(inplace=True),
                 # dw
                 nn.Conv2d(hidden_dim, hidden_dim, 3, stride, 1, groups=hidden_dim, bias=False),
-                nn.BatchNorm2d(hidden_dim, track_running_stats=bn_keep_stats),
+                nn.InstanceNorm2d(hidden_dim, track_running_stats=norm_keep_stats),
                 nn.ReLU(inplace=True),
                 # pw-linear
                 nn.Conv2d(hidden_dim, oup, 1, 1, 0, bias=False),
-                nn.BatchNorm2d(oup, track_running_stats=bn_keep_stats),
+                nn.InstanceNorm2d(oup, track_running_stats=norm_keep_stats),
             )
 
     def forward(self, x):
@@ -238,9 +238,9 @@ class PSPModule(nn.Module):
         return self.relu(bottle)
 
 class FeatureFusionModule(torch.nn.Module):
-    def __init__(self, bn_keep_stats):
+    def __init__(self, norm_keep_stats):
         super().__init__()
-        self.sconv1 = ConvBlock(in_channels=128, out_channels=128, bn_keep_stats=bn_keep_stats, stride=1, dilation=1, groups=128)
+        self.sconv1 = ConvBlock(in_channels=128, out_channels=128, norm_keep_stats=norm_keep_stats, stride=1, dilation=1, groups=128)
         self.conv_low_res = nn.Conv2d(128, 128, kernel_size=1, stride=1, padding=0, bias=True)
 
         self.conv_high_res = nn.Conv2d(64, 128, kernel_size=1, stride=1, padding=0, bias=True)
@@ -256,10 +256,10 @@ class FeatureFusionModule(torch.nn.Module):
         return self.relu(x)
 
 class Classifier(torch.nn.Module):
-    def __init__(self, num_classes, bn_keep_stats):
+    def __init__(self, num_classes, norm_keep_stats):
         super().__init__()
-        self.sconv1 = ConvBlock(in_channels=128, out_channels=128, bn_keep_stats=bn_keep_stats, stride=1, dilation=1, groups=128)
-        self.sconv2 = ConvBlock(in_channels=128, out_channels=128, bn_keep_stats=bn_keep_stats, stride=1, dilation=1, groups=128)
+        self.sconv1 = ConvBlock(in_channels=128, out_channels=128, norm_keep_stats=norm_keep_stats, stride=1, dilation=1, groups=128)
+        self.sconv2 = ConvBlock(in_channels=128, out_channels=128, norm_keep_stats=norm_keep_stats, stride=1, dilation=1, groups=128)
         self.conv = nn.Conv2d(128, num_classes, kernel_size=1, stride=1, padding=0, bias=True)
 
     def forward(self, x):
@@ -268,11 +268,11 @@ class Classifier(torch.nn.Module):
         return self.conv(x)
 
 class ConvBlock(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, bn_keep_stats, kernel_size=3, stride=2, padding=1, dilation=1, groups=1):
+    def __init__(self, in_channels, out_channels, norm_keep_stats, kernel_size=3, stride=2, padding=1, dilation=1, groups=1):
         super().__init__()
         self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=padding,
                                dilation=dilation, groups=groups, bias=False)
-        self.bn = nn.BatchNorm2d(out_channels, track_running_stats=bn_keep_stats)
+        self.bn = nn.InstanceNorm2d(out_channels, track_running_stats=norm_keep_stats)
         self.relu = nn.ReLU()
 
     def forward(self, input):

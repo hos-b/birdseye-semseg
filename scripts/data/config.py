@@ -57,13 +57,15 @@ class TrainingConfig:
         self.world_size = int(conf['training']['world-size'])
         self.torch_seed = int(conf['training']['torch-seed'])
         self.distributed = conf['training']['distributed']
+        self.loss_function = conf['training']['loss']
+        self.weight_losses = conf['training']['weight-losses']
         # dataloader config
         self.loader_workers = int(conf['dataloader']['dataloder-workers'])
         self.pin_memory = bool(conf['dataloader']['pin-memory'])
         self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
         # network
         self.model_name = conf['network']['model-name']
-        self.batchnorm_keep_stats = conf['network']['batchnorm-keep-stats']
+        self.norm_keep_stats = conf['network']['norm-keep-stats']
         # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])
@@ -78,7 +80,6 @@ class TrainingConfig:
         self.num_classes = int(conf['hyperparameters']['num-classes'])
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = int(conf['hyperparameters']['epochs'])
-        self.loss_function = conf['hyperparameters']['loss']
         # validation parameters
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
         # evaluation parameters
