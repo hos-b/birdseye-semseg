@@ -144,6 +144,9 @@ def train(**kwargs):
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
         log_dict['epoch'] = ep + 1
+        if train_cfg.weight_losses:
+            log_dict['sseg loss weight'] = torch.exp(-sseg_loss_weight).item()
+            log_dict['mask loss weight'] = torch.exp(-mask_loss_weight).item()
         if log_enable:
             wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
@@ -164,12 +167,13 @@ def train(**kwargs):
         if train_cfg.strategy == 'every-x-epochs':
             if (ep + 1) % int(train_cfg.strategy_parameter) == 0:
                 increase_diff = True
-        elif train_cfg.strategy == 'metric':
+        elif train_cfg.strategy == 'metric': # metric = avg of important class IoUs + mask IoU
             metric = 0.0
             for key, val in segmentation_classes.items():
                 if val == 'Misc' or val == 'Water':
                     continue # these classes don't matter
                 metric += sseg_ious[key] / sample_count
+            metric = (metric + log_dict['mask iou']) / 6
             print(f'elevation metric = {metric.item()}')
             if metric >= train_cfg.strategy_parameter:
                 increase_diff = True

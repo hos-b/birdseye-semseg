@@ -174,7 +174,6 @@ if __name__ == "__main__":
                                 [0.0, 1.0, -y_mid],
                                 [0.0, 0.0,    1.0]]).float()
     tfrm = positive_tf @ tfrm @ negative_tf
-    # import pdb; pdb.set_trace()
     tfrm = tfrm[:2, :].unsqueeze(0)
     # tfrm = get_centered_img_transforms(tfrm, 1.0, 400, 400, 200, 200)
     transformed_img = kornia.warp_affine(img, tfrm, dsize=(400, 400), flags='bilinear')

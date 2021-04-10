@@ -26,7 +26,6 @@ PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 dset = MassHDF5(dataset='town-01', path=DATASET_DIR,
                 hdf5name=PKG_NAME, size=NEW_SIZE, classes=classes)
 loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_workers=1)
-import pdb; pdb.set_trace()
 # plot stuff
 columns = 6
 for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):

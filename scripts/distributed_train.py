@@ -103,7 +103,7 @@ def train(gpu, *args):
         total_train_s_loss = 0.0
         sample_count = 0
         # training
-        model.train()
+        ddp_model.train()
         for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             log_string(f'\repoch: {ep + 1}/{epochs}, '
@@ -123,7 +123,7 @@ def train(gpu, *args):
                                                     CENTER[0], CENTER[1])
             # agent count x fwd-bwd
             optimizer.zero_grad()
-            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+            sseg_preds, mask_preds = ddp_model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))
@@ -151,7 +151,7 @@ def train(gpu, *args):
         log_string(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
                    f'{(total_train_s_loss / sample_count)} segmentation')
         # validation ---------------------------------------------------------------------------
-        model.eval()
+        ddp_model.eval()
         visaulized = False
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
@@ -169,7 +169,7 @@ def train(gpu, *args):
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
-                sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+                sseg_preds, mask_preds = ddp_model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             sseg_ious += iou_per_class(sseg_preds, labels, masks).cuda(gpu)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
@@ -206,10 +206,11 @@ def train(gpu, *args):
             log_string(f'best model @ epoch {ep + 1}')
             last_metric = new_metric
             snapshot_tag = 'best'
-        torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
-                    f'/{snapshot_tag}_optimizer')
-        torch.save(model.state_dict(), train_cfg.snapshot_dir +
-                    f'/{snapshot_tag}_model.pth')
+        if rank == 0:
+            torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
+                        f'/{snapshot_tag}_optimizer')
+            torch.save(ddp_model.state_dict(), train_cfg.snapshot_dir +
+                        f'/{snapshot_tag}_model.pth')
         # update curriculum difficulty ---------------------------------------------------------
         if train_cfg.strategy == 'every-x-epochs':
             agent_pool.update_difficulty(ep + 1)

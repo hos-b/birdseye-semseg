@@ -58,7 +58,7 @@ class TrainingConfig:
         self.torch_seed = int(conf['training']['torch-seed'])
         self.distributed = conf['training']['distributed']
         self.loss_function = conf['training']['loss']
-        self.weight_losses = conf['training']['weight-losses']
+        self.weight_losses = bool(conf['training']['weight-losses'])
         # dataloader config
         self.loader_workers = int(conf['dataloader']['dataloder-workers'])
         self.pin_memory = bool(conf['dataloader']['pin-memory'])

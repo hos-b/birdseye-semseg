@@ -1,11 +1,8 @@
-[ ] better metric for eleveation
-[ ] increase batch size
-[X] instance norm
+[ ] add possibility for bigger batch size
 [ ] check gradient in 'closest' warping
 [ ] perturbations to pitch
 [ ] increase network capacity
-[X] consider mask in IoU calculation
-[ ] add resuming possibilty
+[ ] add resuming possibility
 
 retry now that shit works:
 [ ] different kinds of latent masking
