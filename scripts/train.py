@@ -170,6 +170,7 @@ def train(**kwargs):
                 if val == 'Misc' or val == 'Water':
                     continue # these classes don't matter
                 metric += sseg_ious[key] / sample_count
+            print(f'elevation metric = {metric.item()}')
             if metric >= train_cfg.strategy_parameter:
                 increase_diff = True
         if increase_diff:

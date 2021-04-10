@@ -32,7 +32,6 @@ def init_wandb(name: str, train_cfg: TrainingConfig):
         dir=train_cfg.log_dir,
         config={
             'model_name': train_cfg.model_name,
-            'batchnorm_stats': train_cfg.batchnorm_keep_stats,
             'segmentation_loss': train_cfg.loss_function,
             'epochs': train_cfg.epochs,
             'learning_rate': train_cfg.learning_rate,

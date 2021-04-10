@@ -4,7 +4,7 @@ dataset:
   dataset-name: 'town-01'
 
 logging:
-  name: 'debug'
+  name: 'sigmoid-metric-IN-CE-W'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './runs/{}/snapshots'
@@ -12,10 +12,10 @@ logging:
 training:
   device: 'cuda'
   torch-seed: 0
+  loss: 'cross-entropy' # 'focal'
+  weight-losses: true
   distributed: false
   world-size: 2
-  loss: 'cross-entropy' # 'focal'
-  weight-losses: false
 
 dataloader:
   pin-memory: false
@@ -23,12 +23,12 @@ dataloader:
   shuffle-data: true
 
 network:
-  model-name: 'mcnn'
+  model-name: 'mcnn4'
   norm-keep-stats: false # instance norm
 
 curriculum:
   initial-difficulty: 1
-  maximum-difficulty: 1
+  maximum-difficulty: 8
   maximum-agent-count: 8
   strategy: 'metric'
   strategy-parameter: 0.7
