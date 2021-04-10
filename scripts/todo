@@ -1,25 +1,12 @@
-[ ] find singular transform
-[X] use (weighted?) cross entropy
-[X] try with no difficulty elevation
 [ ] better metric for eleveation
 [ ] increase batch size
-[ ] better latent masking
-[ ] adapt distributed training script
-[ ] full step by step pipeline check
-[ ] try small net but detach for mask
-[ ] try just fitting semseg
-[ ] try just fitting semseg w/o feature warping
-[ ] batch norm?
+[ ] instance norm
+[ ] check gradient in 'closest' warping
+[ ] perturbations to pitch
+[ ] increase network capacity
+[ ] consider mask in IoU calculation
 
-what possibly made it worse:
-[X] changing tight sigmoid to sigmoid
-[ ] changing detached to attached -> probably not
-[X] weight losses -> ruins both sort of
-[X] MCNN4 + attached sigmoid masking -> performance degradation leaks to mask branch
-[X] feature warping -> even with identity transform, the warping was changing the features
-
-trying this round:
-training 1: small net just for semseg w/o feature warping
-training 2: small net just for semseg
-
+retry now that shit works:
+[ ] different kinds of latent masking
+[ ] weighted losses
 

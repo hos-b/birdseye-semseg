@@ -1,7 +1,6 @@
 import os
 import torch
 import torch.nn as nn
-import numpy as np
 from torch.optim import lr_scheduler
 from kornia.losses.focal import FocalLoss
 
@@ -10,16 +9,14 @@ import subprocess
 
 import matplotlib
 matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 
 from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig, TrainingConfig
-from data.color_map import our_semantics_to_cityscapes_rgb
 from data.color_map import __our_classes as segmentation_classes
 from data.dataset import get_datasets
 from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
-from data.utils import get_matplotlib_image, to_device
+from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
 from evaluate import plot_batch
