@@ -95,9 +95,9 @@ class MCNN4(torch.nn.Module):
         # B, 1, 60, 80
         x_mask = self.maskifier(x_mask)
         # ----------- upsampling ------------
-        # B, 7, 480, 640
+        # B, 7, 256, 205
         x_semantic = F.interpolate(x_semantic, self.output_size, mode='bilinear', align_corners=True)
-        # B, 1, 480, 640
+        # B, 1, 256, 205
         x_mask = torch.sigmoid(F.interpolate(x_mask, self.output_size, mode='bilinear', align_corners=True))
         return x_semantic, x_mask
 
