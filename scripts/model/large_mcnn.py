@@ -32,9 +32,9 @@ class LMCNN(nn.Module):
                                                                     num_blocks=(3, 3, 3),
                                                                     pool_sizes=(1, 2, 3, 6))
         self.mask_feature_fusion = FeatureFusionModule(highres_in_channels=64,
-                                                           lowres_in_channels=128,
-                                                           out_channels=128,
-                                                           scale_factor=4)
+                                                       lowres_in_channels=128,
+                                                       out_channels=128,
+                                                       scale_factor=4)
         self.maskifier = Classifer(128, num_classes)
 
     def forward(self, x, transforms, adjacency_matrix):
@@ -156,8 +156,8 @@ class PyramidPooling(nn.Module):
         super(PyramidPooling, self).__init__()
         stage_count = len(pool_sizes)
         assert in_channels % stage_count == 0, f'{in_channels} is not divisble by number of pooling stages {stage_count}'
-        inter_channels = in_channels / stage_count
-        self.stages = [self._make_stage(in_channels, inter_channels, size) for size in pool_sizes]
+        intermediate_channels = in_channels // stage_count
+        self.stages = [self._make_stage(in_channels, intermediate_channels, size) for size in pool_sizes]
         self.bottleneck = _ConvINReLU(in_channels * 2, out_channels, 1)
 
     def _make_stage(self, in_channels, out_channels, avgpool_size):
@@ -182,7 +182,7 @@ class LearningToDownsample(nn.Module):
 
     def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64):
         super(LearningToDownsample, self).__init__()
-        self.conv = _ConvINReLU(3, dw_channels1, 3, 2)
+        self.conv = _ConvINReLU(in_channels=3, out_channels=dw_channels1, kernel_size=3, stride=2)
         self.dsconv1 = _DSConv(dw_channels1, dw_channels2, 2)
         self.dsconv2 = _DSConv(dw_channels2, out_channels, 2)
 

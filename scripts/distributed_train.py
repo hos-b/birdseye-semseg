@@ -20,6 +20,7 @@ from data.utils import to_device
 from evaluate import plot_batch
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
+from model.large_mcnn import LMCNN
 
 def train(gpu, *args):
     geom_cfg: SemanticCloudConfig = args[0]
@@ -67,11 +68,14 @@ def train(gpu, *args):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
     if train_cfg.model_name == 'mcnn':
-        model = MCNN(3, train_cfg.num_classes, NEW_SIZE,
-                     geom_cfg, train_cfg.norm_keep_stats).cuda(gpu)
+        model = MCNN(train_cfg.num_classes, NEW_SIZE,
+                     geom_cfg).cuda(0)
     elif train_cfg.model_name == 'mcnn4':
-        model = MCNN4(3, train_cfg.num_classes, NEW_SIZE,
-                      geom_cfg, train_cfg.norm_keep_stats).cuda(gpu)
+        model = MCNN4(train_cfg.num_classes, NEW_SIZE,
+                      geom_cfg).cuda(0)
+    elif train_cfg.model_name == 'mcnnL':
+        model = LMCNN(train_cfg.num_classes, NEW_SIZE,
+                      geom_cfg).cuda(0)
     else:
         log_string(f'unknown network architecture {train_cfg.model_name}')
     log_string(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')

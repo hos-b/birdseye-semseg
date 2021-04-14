@@ -65,7 +65,6 @@ class TrainingConfig:
         self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
         # network
         self.model_name = conf['network']['model-name']
-        self.norm_keep_stats = conf['network']['norm-keep-stats']
         # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])

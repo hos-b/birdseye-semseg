@@ -19,6 +19,7 @@ from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
+from model.large_mcnn import LMCNN
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -233,11 +234,14 @@ def parse_and_execute():
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
     if train_cfg.model_name == 'mcnn':
-        model = MCNN(3, train_cfg.num_classes, new_size,
-                     geom_cfg, train_cfg.norm_keep_stats).cuda(0)
+        model = MCNN(train_cfg.num_classes, new_size,
+                     geom_cfg).cuda(0)
     elif train_cfg.model_name == 'mcnn4':
-        model = MCNN4(3, train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.norm_keep_stats).cuda(0)
+        model = MCNN4(train_cfg.num_classes, new_size,
+                      geom_cfg).cuda(0)
+    elif train_cfg.model_name == 'mcnnL':
+        model = LMCNN(train_cfg.num_classes, new_size,
+                      geom_cfg).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')

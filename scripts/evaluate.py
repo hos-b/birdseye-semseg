@@ -11,6 +11,7 @@ from data.dataset import get_datasets
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all, to_device
 from model.mcnn import MCNN, MCNN4
+from model.large_mcnn import LMCNN
 from agent.agent_pool import CurriculumPool
 
 def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
@@ -157,12 +158,15 @@ def main():
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
         exit()
-    if train_cfg.eval_model_name == 'mcnn':
-        model = MCNN(3, train_cfg.num_classes, new_size,
-                     geom_cfg, train_cfg.eval_batchnorm_keep_stats).cuda(0)
-    elif train_cfg.eval_model_name == 'mcnn4':
-        model = MCNN4(3, train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.eval_batchnorm_keep_stats).cuda(0)
+    if train_cfg.model_name == 'mcnn':
+        model = MCNN(train_cfg.num_classes, new_size,
+                     geom_cfg).cuda(0)
+    elif train_cfg.model_name == 'mcnn4':
+        model = MCNN4(train_cfg.num_classes, new_size,
+                      geom_cfg).cuda(0)
+    elif train_cfg.model_name == 'mcnnL':
+        model = LMCNN(train_cfg.num_classes, new_size,
+                      geom_cfg).cuda(0)
     else:
         print('unknown network architecture {train_cfg.eval_model_name}')
     model.load_state_dict(torch.load(snapshot_path))
