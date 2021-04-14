@@ -11,6 +11,7 @@ retry now that shit works:
 incorrect fast scnn implementation:
 * pyramid pooling uses the base channel size in mid layers
 	- should be (base channel size // number of stages)
+* using simple conv2d instead of ConvBNReLU in the pyramid
 
 * missing normalization in the bottleneck at the end of pyramid pooling
 * missing dropout in the classifier
