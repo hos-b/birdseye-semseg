@@ -1,12 +1,10 @@
 [ ] add possibility for bigger batch size
 [ ] perturbations to pitch
 [ ] increase network capacity
-[ ] add resuming possibility
 [ ] figure out how to scale up the seg network without the mask network
 
 retry now that shit works:
 [ ] different kinds of latent masking
-[ ] weighted losses
 
 incorrect fast scnn implementation:
 * pyramid pooling uses the base channel size in mid layers

@@ -1,0 +1,13 @@
+device: 'cuda'
+
+run: 'balkan'
+model-name: 'mcnnL'
+model-version: 'best' # || 'best'
+difficulty: 1
+
+dataset-split: 'test'
+random-samples: true
+count: 50
+plot-type: 'disk' # 'show' || 'image' for getting rgb
+plot-dir: './runs/{}/plots'
+plot-tag: 'nostats' # added to dir name

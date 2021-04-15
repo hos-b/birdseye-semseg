@@ -43,53 +43,63 @@ class TrainingConfig:
         yaml_file = open(file_path)
         conf = yaml.load(yaml_file, Loader=yaml.FullLoader)
         yaml_file.close()
-        # dataset config
-        self.dset_dir = conf['dataset']['dataset-dir']
-        self.dset_file = conf['dataset']['dataset-file']
-        self.dset_name = conf['dataset']['dataset-name']
         # logging config
-        self.training_name = conf['logging']['name']
-        self.log_dir = conf['logging']['log-dir']
-        self.log_every = conf['logging']['log-every']
-        self.snapshot_dir = conf['logging']['snapshot-dir']
+        self.training_name = str(conf['logging']['name'])
+        self.group = str(conf['logging']['group'])
+        self.log_dir = str(conf['logging']['log-dir'])
+        self.log_every = int(conf['logging']['log-every'])
+        self.snapshot_dir = str(conf['logging']['snapshot-dir'])
         # training config
-        self.device = conf['training']['device']
+        self.device = str(conf['training']['device'])
         self.world_size = int(conf['training']['world-size'])
         self.torch_seed = int(conf['training']['torch-seed'])
-        self.distributed = conf['training']['distributed']
-        self.loss_function = conf['training']['loss']
+        self.distributed = bool(conf['training']['distributed'])
+        self.loss_function = str(conf['training']['loss'])
         self.weight_losses = bool(conf['training']['weight-losses'])
-        # dataloader config
-        self.loader_workers = int(conf['dataloader']['dataloder-workers'])
-        self.pin_memory = bool(conf['dataloader']['pin-memory'])
-        self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
         # network
-        self.model_name = conf['network']['model-name']
+        self.model_name = str(conf['network']['model-name'])
+        # resume
+        self.resume_training = bool(conf['resume']['flag'])
+        self.resume_model_version = str(conf['resume']['model-version'])
         # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
-        self.strategy = conf['curriculum']['strategy']
+        self.strategy = str(conf['curriculum']['strategy'])
         self.strategy_parameter = conf['curriculum']['strategy-parameter']
         # hyperparameters
         self.drop_prob = float(conf['hyperparameters']['drop-prob'])
         self.output_h = int(conf['hyperparameters']['output-h'])
         self.output_w = int(conf['hyperparameters']['output-w'])
-        self.classes = conf['hyperparameters']['classes']
+        self.classes = str(conf['hyperparameters']['classes'])
         self.num_classes = int(conf['hyperparameters']['num-classes'])
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = int(conf['hyperparameters']['epochs'])
         # validation parameters
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
+        # dataloader config
+        self.loader_workers = int(conf['dataloader']['dataloder-workers'])
+        self.pin_memory = bool(conf['dataloader']['pin-memory'])
+        self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
+        # dataset config
+        self.dset_dir = str(conf['dataset']['dataset-dir'])
+        self.dset_file = str(conf['dataset']['dataset-file'])
+        self.dset_name = str(conf['dataset']['dataset-name'])
+
+class EvaluationConfig:
+    def __init__(self, file_path: str):
+        yaml_file = open(file_path)
+        conf = yaml.load(yaml_file, Loader=yaml.FullLoader)
+        yaml_file.close()
         # evaluation parameters
-        self.eval_dataset = conf['evaluation']['dataset']
-        self.eval_run = conf['evaluation']['run']
-        self.eval_model_version = conf['evaluation']['model-version']
-        self.eval_random_samples = conf['evaluation']['random-samples']
-        self.eval_plot = conf['evaluation']['plot']
-        self.eval_difficulty = conf['evaluation']['difficulty']
-        self.eval_plot_count = conf['evaluation']['count']
-        self.eval_plot_dir = conf['evaluation']['plot-dir']
-        self.eval_plot_tag = conf['evaluation']['plot-tag']
-        self.eval_model_name = conf['evaluation']['model-name']
-        self.eval_batchnorm_keep_stats = conf['evaluation']['batchnorm-keep-stats']
+        self.data_split = conf['dataset-split']
+        self.device = conf['device']
+        self.run = conf['run']
+        self.model_name = conf['model-name']
+        self.model_version = conf['model-version']
+        self.random_samples = conf['random-samples']
+        self.plot_type = conf['plot-type']
+        self.difficulty = conf['difficulty']
+        self.plot_count = conf['count']
+        self.plot_dir = conf['plot-dir']
+        self.plot_tag = conf['plot-tag']

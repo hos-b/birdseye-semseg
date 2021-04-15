@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.dataset import get_datasets
-from data.config import SemanticCloudConfig, TrainingConfig
+from data.config import EvaluationConfig, SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all, to_device
 from model.mcnn import MCNN, MCNN4
 from model.large_mcnn import LMCNN
@@ -89,19 +89,20 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
 
 def evaluate(**kwargs):
     train_cfg: TrainingConfig = kwargs.get('train_cfg')
+    eval_cfg: EvaluationConfig = kwargs.get('eval_cfg')
     model = kwargs.get('model')
     loader = kwargs.get('loader')
     device = kwargs.get('device')
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
     model.eval()
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
-    sample_plot_prob = 1.0 / train_cfg.eval_plot_count
+    sample_plot_prob = 1.0 / eval_cfg.plot_count
     probs = [1 - sample_plot_prob, sample_plot_prob] 
     # plot stuff
     columns = 6
     for idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(loader):
         # randomly skip samples (useful for large datasets)
-        if train_cfg.eval_random_samples and np.random.choice([True, False], 1, p=probs):
+        if eval_cfg.random_samples and np.random.choice([True, False], 1, p=probs):
             continue
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
@@ -116,90 +117,88 @@ def evaluate(**kwargs):
         # network output
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-        plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, train_cfg.eval_plot,
-                   f'{train_cfg.eval_plot_dir}/{train_cfg.eval_run}_batch{idx + 1}.png')
-
+        plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
+                   f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png')
         
-        train_cfg.eval_plot_count -= 1
-        if train_cfg.eval_plot_count == 0:
+        eval_cfg.plot_count -= 1
+        if eval_cfg.plot_count == 0:
             print('\ndone!')
             break
 
 def main():
     # configuration
     train_cfg = TrainingConfig('config/training.yml')
+    eval_cfg = EvaluationConfig('config/evaluation.yml')
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     new_size = (train_cfg.output_h, train_cfg.output_w)
     center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
     ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
     # torch device
-    device_str = train_cfg.device
-    if train_cfg.device == 'cuda':
+    device_str = eval_cfg.device
+    if eval_cfg.device == 'cuda':
         torch.cuda.set_device(0)
         device_str += f':{0}'
     device = torch.device(device_str)
     # seed to insure the same train/test split
     torch.manual_seed(train_cfg.torch_seed)
     # plot stuff 
-    train_cfg.eval_plot_dir = train_cfg.eval_plot_dir.format(train_cfg.eval_run)
-    train_cfg.eval_plot_dir += '_' + train_cfg.eval_plot_tag
-    if not os.path.exists(train_cfg.eval_plot_dir):
-        os.makedirs(train_cfg.eval_plot_dir)
-    if train_cfg.eval_plot == 'disk':
+    eval_cfg.plot_dir = eval_cfg.plot_dir.format(eval_cfg.run)
+    eval_cfg.plot_dir += '_' + eval_cfg.plot_tag
+    if not os.path.exists(eval_cfg.plot_dir):
+        os.makedirs(eval_cfg.plot_dir)
+    if eval_cfg.plot_type == 'disk':
         print('saving plots to disk')
         matplotlib.use('Agg')
-    elif train_cfg.eval_plot == 'show':
+    elif eval_cfg.plot_type == 'show':
         print('showing plots')
     else:
-        print("valid plot options are 'show' and 'disk'")
+        print("valid plot types are 'show' and 'disk'")
         exit()
     # network stuff
-    if train_cfg.eval_model_version != 'best' and train_cfg.eval_model_version != 'last':
-        print("valid model options are 'best' and 'last'")
+    if eval_cfg.model_version != 'best' and eval_cfg.model_version != 'last':
+        print("valid model version are 'best' and 'last'")
         exit()
-    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.eval_run)
-    snapshot_path = f'{train_cfg.eval_model_version}_model.pth'
+    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(eval_cfg.run)
+    snapshot_path = f'{eval_cfg.model_version}_model.pth'
     snapshot_path = train_cfg.snapshot_dir + '/' + snapshot_path
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
         exit()
-    if train_cfg.model_name == 'mcnn':
+    if eval_cfg.model_name == 'mcnn':
         model = MCNN(train_cfg.num_classes, new_size,
                      geom_cfg).cuda(0)
-    elif train_cfg.model_name == 'mcnn4':
+    elif eval_cfg.model_name == 'mcnn4':
         model = MCNN4(train_cfg.num_classes, new_size,
                       geom_cfg).cuda(0)
-    elif train_cfg.model_name == 'mcnnL':
+    elif eval_cfg.model_name == 'mcnnL':
         model = LMCNN(train_cfg.num_classes, new_size,
                       geom_cfg).cuda(0)
     else:
-        print('unknown network architecture {train_cfg.eval_model_name}')
+        print('unknown network architecture {eval_cfg.model_name}')
     model.load_state_dict(torch.load(snapshot_path))
-    agent_pool = CurriculumPool(train_cfg.eval_difficulty,
-                                train_cfg.eval_difficulty,
-                                train_cfg.max_agent_count, train_cfg.strategy,
-                                train_cfg.strategy_parameter, device)
+    agent_pool = CurriculumPool(eval_cfg.difficulty, eval_cfg.difficulty,
+                                train_cfg.max_agent_count, device)
     # dataloader stuff
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
                                        train_cfg.dset_file, (0.8, 0.2),
                                        new_size, train_cfg.classes)
-    if train_cfg.eval_dataset == 'train':
+    if eval_cfg.data_split == 'train':
         eval_set = train_set
-    elif train_cfg.eval_dataset == 'test':
+    elif eval_cfg.data_split == 'test':
         eval_set = test_set
     else:
-        print(f'uknown dataset split {train_cfg.eval_dataset}')
+        print(f'uknown dataset split {eval_cfg.data_split}')
         exit()
     eval_loader = torch.utils.data.DataLoader(eval_set, batch_size=1,
                                               shuffle=train_cfg.shuffle_data,
                                               pin_memory=train_cfg.pin_memory,
                                               num_workers=train_cfg.loader_workers)
-    print(f'evaluating run {train_cfg.eval_run} with {train_cfg.eval_model_version} '
-          f'snapshot of {train_cfg.eval_model_name}')
-    print(f'gathering at most {train_cfg.eval_plot_count} from the {train_cfg.eval_dataset} '
-          f'set randomly? {train_cfg.eval_random_samples}, w/ difficulty = {train_cfg.eval_difficulty}')
+    print(f'evaluating run {eval_cfg.run} with {eval_cfg.model_version} '
+          f'snapshot of {eval_cfg.model_name}')
+    print(f'gathering at most {eval_cfg.plot_count} from the {eval_cfg.data_split} '
+          f'set randomly? {eval_cfg.random_samples}, w/ difficulty = {eval_cfg.difficulty}')
     evaluate(train_cfg=train_cfg, model=model, agent_pool=agent_pool, loader=eval_loader,
-             geom_properties=(new_size, center, ppm), device=device)
+             eval_cfg=eval_cfg, geom_properties=(new_size, center, ppm), device=device)
 
 if __name__ == '__main__':
     main()
