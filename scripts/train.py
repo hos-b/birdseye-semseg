@@ -65,7 +65,7 @@ def train(**kwargs):
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
-            # agent count x fwd-bwd
+            # fwd-bwd
             optimizer.zero_grad()
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
@@ -89,6 +89,8 @@ def train(**kwargs):
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
+            break
+            # end of batch
 
         # log train epoch loss
         if log_enable:
@@ -119,7 +121,7 @@ def train(**kwargs):
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            sseg_ious += iou_per_class(sseg_preds, labels, masks).cuda(0)
+            sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks).cuda(0)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
@@ -127,7 +129,7 @@ def train(**kwargs):
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
             if not visaulized and log_enable:
-                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, 'image')
+                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, 'image')
                 wandb.log({
                     'results': wandb.Image(img, caption='full batch predictions'),
                     'epoch': ep + 1

@@ -15,18 +15,17 @@ from model.large_mcnn import LMCNN
 from agent.agent_pool import CurriculumPool
 
 def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
-               mask_preds: torch.Tensor, agent_pool: CurriculumPool, plot_dest: str, 
-               filename = 'test.png'):
+               mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
+               plot_dest: str, filename = 'test.png'):
     agent_count = rgbs.shape[0]
-    columns = 6
+    columns = 7
     fig = plt.figure(figsize=(22, agent_count * 4))
     for i in range(agent_count):
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
-        gt_mask = agent_pool.combined_masks[i].cpu()
+        single_gt_mask = gt_masks[i].cpu()
+        combined_gt_mask = agent_pool.combined_masks[i].cpu()
         ss_gt_img = our_semantics_to_cityscapes_rgb(labels[i].cpu())
-        ss_gt_img[gt_mask == 0] = 0
-
         # create subplot and append to ax
         ax = []
 
@@ -38,29 +37,35 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         # basic mask
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 2))
         ax[-1].set_title(f"target mask {i}")
-        plt.imshow(gt_mask)
+        plt.imshow(single_gt_mask)
 
         # predicted mask
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 3))
         ax[-1].set_title(f"predicted mask {i}")
         plt.imshow(mask_preds[i].squeeze().cpu())
 
-        # masked semantic BEV image
+        # omniscient semantic BEV image
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 4))
+        ax[-1].set_title(f"omniscient BEV {i}")
+        plt.imshow(ss_gt_img)
+
+        # target semantic BEV image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5))
         ax[-1].set_title(f"target BEV {i}")
+        ss_gt_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_gt_img)
 
         # predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6))
         ax[-1].set_title(f"predicted BEV {i}")
         ss_pred = torch.max(sseg_preds[i], dim=0)[1]
         ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
         plt.imshow(ss_pred_img)
 
         # masked predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 7))
         ax[-1].set_title(f"masked prediction {i}")
-        ss_pred_img[gt_mask == 0] = 0
+        ss_pred_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_pred_img)
     
     if plot_dest == 'disk':
@@ -111,7 +116,7 @@ def evaluate(**kwargs):
         # network output
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-        plot_batch(rgbs, labels, sseg_preds, mask_preds, agent_pool, train_cfg.eval_plot,
+        plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, train_cfg.eval_plot,
                    f'{train_cfg.eval_plot_dir}/{train_cfg.eval_run}_batch{idx + 1}.png')
 
         
