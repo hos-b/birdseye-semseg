@@ -89,7 +89,6 @@ def train(**kwargs):
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
-            break
             # end of batch
 
         # log train epoch loss
