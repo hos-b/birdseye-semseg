@@ -1,10 +1,6 @@
-dataset:
-  dataset-dir: '/export/home/bahadorm/mass-data'
-  dataset-file: 'dataset_10k.hdf5'
-  dataset-name: 'town-01'
-
 logging:
-  name: 'debug'
+  name: 'balkan'
+  group: 'zzno'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './runs/{}/snapshots'
@@ -17,13 +13,12 @@ training:
   distributed: false
   world-size: 2
 
-dataloader:
-  pin-memory: false
-  dataloder-workers: 1
-  shuffle-data: true
-
 network:
   model-name: 'mcnnL'
+
+resume:
+  flag: true
+  model-version: 'best'
 
 curriculum:
   initial-difficulty: 1
@@ -31,7 +26,6 @@ curriculum:
   maximum-agent-count: 8
   strategy: 'metric'
   strategy-parameter: 0.65
-
 
 hyperparameters:
   learning-rate: 5e-3
@@ -47,15 +41,12 @@ validation:
   # threshold for counting the mask pixel as detected
   mask-det-threshold: 0.6
 
-evaluation:
-  dataset: 'test'
-  run: 'newviz-FOC'
-  model-name: 'mcnn'
-  batchnorm-keep-stats: true
-  model-version: 'last' # || 'best'
-  random-samples: true
-  count: 50
-  plot: 'disk' # 'show' || 'image' for getting rgb
-  plot-dir: './runs/{}/plots'
-  plot-tag: 'nostats' # added to dir name
-  difficulty: 1
+dataloader:
+  pin-memory: false
+  dataloder-workers: 1
+  shuffle-data: true
+
+dataset:
+  dataset-dir: '/export/home/aiscar4/mass-data'
+  dataset-file: 'dataset_10k.hdf5'
+  dataset-name: 'town-01'

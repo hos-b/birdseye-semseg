@@ -27,8 +27,9 @@ def init_wandb(name: str, train_cfg: TrainingConfig):
     wandb.init(
         project='birdseye-semseg',
         entity='ais-birdseye',
-        group='initial models',
+        group=train_cfg.group,
         name=name,
+        resume=train_cfg.resume_training,
         dir=train_cfg.log_dir,
         config={
             'model_name': train_cfg.model_name,
