@@ -30,7 +30,7 @@ class CurriculumPool:
         self.agent_count = masks.shape[0]
         # also no calculations necessary for difficulty = 1
         if self.difficulty ==  1:
-            self.combined_masks = masks
+            self.combined_masks = masks.clone()
             self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool, device=self.device)
             return
         # no calculations necessary for max possible difficulty (!= max_difficulty)
@@ -41,9 +41,10 @@ class CurriculumPool:
         # for other cases, need to do some stuff
         self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
         # identifying the masks
+        new_masks = masks.clone()
         for i in range(ids.shape[1]):
-            masks[i] *= 1 << ids[0, i, 0].item() # the id tensors are fucked but squeeze() makes it worse
-        self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w,
+            new_masks[i] *= 1 << ids[0, i, 0].item() # the id tensors are fucked but squeeze() makes it worse
+        self.combined_masks = get_all_aggregate_masks(new_masks, transforms, pixels_per_meter, h, w,
                                                       center_x, center_y, 'nearest').long()
         # using the unique values of the mask to find agent view overlaps
         for i in range(self.agent_count):
