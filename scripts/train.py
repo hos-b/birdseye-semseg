@@ -1,3 +1,4 @@
+from logging import log
 import os
 import torch
 import torch.nn as nn
@@ -155,8 +156,6 @@ def train(**kwargs):
         if train_cfg.weight_losses:
             log_dict['sseg loss weight'] = torch.exp(-sseg_loss_weight).item()
             log_dict['mask loss weight'] = torch.exp(-mask_loss_weight).item()
-        if log_enable:
-            wandb.log(log_dict)
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
@@ -184,6 +183,9 @@ def train(**kwargs):
             agent_pool.difficulty = min(agent_pool.difficulty + 1,
                                         agent_pool.maximum_difficulty)
             print(f'\n==========>> difficulty increased to {agent_pool.difficulty} <<==========')
+        log_dict['difficulty'] = agent_pool.difficulty
+        if log_enable:
+            wandb.log(log_dict)
 
     if log_enable:
         wandb.finish()
