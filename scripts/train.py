@@ -91,8 +91,6 @@ def train(**kwargs):
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
             # end of batch
-            if batch_idx == 10:
-                break
 
         # log train epoch loss
         if log_enable:
@@ -138,8 +136,6 @@ def train(**kwargs):
                 })
                 visaulized = True
             # end of batch
-            if batch_idx == 10:
-                break
 
         # more wandb logging -------------------------------------------------------------------
         elevation_metric = 0.0
