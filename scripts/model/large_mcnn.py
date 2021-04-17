@@ -2,12 +2,13 @@
 # based on  https://github.com/Tramac/Fast-SCNN-pytorch #
 #########################################################
 
+from kornia.geometry import warp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import kornia
 from data.config import SemanticCloudConfig
-from data.mask_warp import get_single_relative_img_transform
+from data.mask_warp import get_single_relative_img_transform, get_all_relative_img_transforms
 class LMCNN(nn.Module):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig):
         super(LMCNN, self).__init__()
@@ -39,6 +40,12 @@ class LMCNN(nn.Module):
                                                        scale_factor=4)
         self.maskifier = Classifer(128, 1)
 
+        # set aggregation parameters
+        self.cf_h, self.cf_w = 60, 80
+        self.ppm = 3.2
+        self.center_x = 48
+        self.center_y = 40
+
     def forward(self, x, transforms, adjacency_matrix):
         # B, 3, 480, 640: input size
         # B, 64, 60, 80
@@ -67,21 +74,24 @@ class LMCNN(nn.Module):
         x_mask = torch.sigmoid(F.interpolate(x_mask, self.output_size, mode='bilinear', align_corners=True))
         return x_semantic, x_mask
 
-    def aggregate_features(self, x, transforms, adjacency_matrix):
-        # calculating constants
+    def aggregate_features(self, x, transforms, adjacency_matrix, flags='bilinear'):
         agent_count = transforms.shape[0]
-        cf_h, cf_w = 60, 80 # x.shape[2], x.shape[3]
-        ppm = 3.2 # ((cf_h / self.sem_cfg.cloud_x_span) + (cf_w / self.sem_cfg.cloud_y_span)) / 2.0
-        center_x = 48 # int((self.sem_cfg.cloud_max_x / self.sem_cfg.cloud_x_span) * cf_h)
-        center_y = 40 # int((self.sem_cfg.cloud_max_y / self.sem_cfg.cloud_y_span) * cf_w)
         # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='nearest')
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+                                                             self.center_x, self.center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w), flags=flags)
+            # counting agent influence on a pixel level
+            pixel_weight = warped_features.clone().detach()
+            pixel_weight[pixel_weight > 0] = 1
+            pixel_weight = torch.count_nonzero(pixel_weight, dim=0)
+            # [128, 60, 80], avoiding division by zero
+            pixel_weight = torch.clamp(pixel_weight, min=1.0)
+            # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
-            aggregated_features[i, ...] = warped_features.sum(dim=0) / adjacency_matrix[i].sum()
+            aggregated_features[i] = warped_features.sum(dim=0) / pixel_weight
         return aggregated_features
     
     def parameter_count(self):
