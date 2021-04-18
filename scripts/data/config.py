@@ -61,6 +61,8 @@ class TrainingConfig:
         # resume
         self.resume_training = bool(conf['resume']['flag'])
         self.resume_model_version = str(conf['resume']['model-version'])
+        self.resume_starting_epoch = int(conf['resume']['starting-epoch'])
+        self.resume_difficulty = int(conf['resume']['difficulty'])
         # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])

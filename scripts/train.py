@@ -43,7 +43,9 @@ def train(**kwargs):
     train_loader = kwargs.get('train_loader')
     test_loader = kwargs.get('test_loader')
     epochs = train_cfg.epochs
-    for ep in range(epochs):
+    # starting epoch
+    start_ep = kwargs.get('start_ep')
+    for ep in range(start_ep, epochs):
         total_train_m_loss = 0.0
         total_train_s_loss = 0.0
         sample_count = 0
@@ -195,7 +197,6 @@ def parse_and_execute():
     # parsing config file
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     train_cfg = TrainingConfig('config/training.yml')
-    debug = train_cfg.training_name == 'debug'
     if train_cfg.distributed:
         print('change training.distributed to false in the configs')
         exit()
@@ -222,22 +223,10 @@ def parse_and_execute():
                                               shuffle=train_cfg.shuffle_data,
                                               pin_memory=train_cfg.pin_memory,
                                               num_workers=train_cfg.loader_workers)
-    # snapshots --------------------------------------------------------------------------------
+    # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
-    if train_cfg.resume_training:
-        snapshot_path = train_cfg.snapshot_dir + \
-            f'/{train_cfg.resume_model_version}_model.pth'
-        optimizer_path = train_cfg.snapshot_dir + \
-            f'/{train_cfg.resume_model_version}_optimizer'
-        if not os.path.exists(snapshot_path):
-            print(f'{snapshot_path} does not exist')
-            exit()
-        if not os.path.exists(optimizer_path):
-            print(f'{optimizer_path} does not exist')
-            exit()
-    else:
-        if not os.path.exists(train_cfg.snapshot_dir):
-            os.makedirs(train_cfg.snapshot_dir)
+    if not os.path.exists(train_cfg.snapshot_dir):
+        os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
     if train_cfg.model_name == 'mcnn':
         model = MCNN(train_cfg.num_classes, new_size,
@@ -252,7 +241,8 @@ def parse_and_execute():
         print('unknown network architecture {train_cfg.model_name}')
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
-    lr_lambda = lambda epoch: pow((1 - ((epoch - 1) / train_cfg.epochs)), 0.9)
+    start_ep = train_cfg.resume_starting_epoch if train_cfg.resume_training else 0
+    lr_lambda = lambda epoch: pow((1 - (((epoch + start_ep) - 1) / train_cfg.epochs)), 0.9)
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
     if train_cfg.weight_losses:
         mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
@@ -264,9 +254,23 @@ def parse_and_execute():
                                 train_cfg.max_agent_count, device)
     # loading the network parameters/optimizer state -------------------------------------------
     if train_cfg.resume_training:
+        snapshot_path = train_cfg.snapshot_dir + \
+            f'/{train_cfg.resume_model_version}_model.pth'
+        optimizer_path = train_cfg.snapshot_dir + \
+            f'/{train_cfg.resume_model_version}_optimizer'
+        if not os.path.exists(snapshot_path):
+            print(f'{snapshot_path} does not exist')
+            exit()
+        if not os.path.exists(optimizer_path):
+            print(f'{optimizer_path} does not exist')
+            exit()
+        start_ep = train_cfg.resume_starting_epoch
         model.load_state_dict(torch.load(snapshot_path))
         optimizer.load_state_dict(torch.load(optimizer_path))
-        print(f'resuming {train_cfg.training_name} using {train_cfg.resume_model_version} model')
+        agent_pool.difficulty = train_cfg.resume_difficulty
+        print(f'resuming {train_cfg.training_name} '
+              f'using {train_cfg.resume_model_version} model '
+              f'at epoch {start_ep + 1}')
     # logging ----------------------------------------------------------------------------------
     name = train_cfg.training_name + '-'
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
@@ -292,7 +296,7 @@ def parse_and_execute():
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, test_loader=test_loader,
-          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight)
+          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep)
 
 if __name__ == '__main__':
     parse_and_execute()
