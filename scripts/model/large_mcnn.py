@@ -85,7 +85,7 @@ class LMCNN(nn.Module):
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w), flags=flags)
             # counting agent influence on a pixel level
             pixel_weight = warped_features.clone().detach()
-            pixel_weight[pixel_weight > 0] = 1
+            pixel_weight[pixel_weight != 0] = 1
             pixel_weight = torch.count_nonzero(pixel_weight, dim=0)
             # [128, 60, 80], avoiding division by zero
             pixel_weight = torch.clamp(pixel_weight, min=1.0)
