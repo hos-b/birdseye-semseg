@@ -58,6 +58,7 @@ class TrainingConfig:
         self.weight_losses = bool(conf['training']['weight-losses'])
         # network
         self.model_name = str(conf['network']['model-name'])
+        self.aggregation_type = str(conf['network']['aggregation-type'])
         # resume
         self.resume_training = bool(conf['resume']['flag'])
         self.resume_model_version = str(conf['resume']['model-version'])

@@ -20,7 +20,7 @@ from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN
+from model.large_mcnn import LMCNN, LWMCNN
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -211,6 +211,9 @@ def parse_and_execute():
     new_size = (train_cfg.output_h, train_cfg.output_w)
     center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
     ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
+    print(f'new size: {new_size}')
+    print(f'center: {center}')
+    print(f'ppm: {ppm}')
     # dataset ----------------------------------------------------------------------------------
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
                                        train_cfg.dset_file, (0.8, 0.2),
@@ -228,17 +231,23 @@ def parse_and_execute():
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
+    assert train_cfg.aggregation_type == 'bilinear' or train_cfg.aggregation_type == 'nearest', \
+                                        f'unknown aggregation type {train_cfg.aggregation_type}'
     if train_cfg.model_name == 'mcnn':
         model = MCNN(train_cfg.num_classes, new_size,
-                     geom_cfg).cuda(0)
+                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnn4':
         model = MCNN4(train_cfg.num_classes, new_size,
-                      geom_cfg).cuda(0)
+                      geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnL':
         model = LMCNN(train_cfg.num_classes, new_size,
-                      geom_cfg).cuda(0)
+                      geom_cfg, train_cfg.aggregation_type).cuda(0)
+    elif train_cfg.model_name == 'mcnnLW':
+        model = LWMCNN(train_cfg.num_classes, new_size,
+                      geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
+        exit()
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     start_ep = train_cfg.resume_starting_epoch if train_cfg.resume_training else 0
