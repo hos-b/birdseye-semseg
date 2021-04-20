@@ -9,8 +9,9 @@ import torch.nn.functional as F
 import kornia
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform, get_all_relative_img_transforms
+
 class LMCNN(nn.Module):
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(LMCNN, self).__init__()
         self.output_size = output_size
         self.sem_cfg = sem_cfg
@@ -39,12 +40,12 @@ class LMCNN(nn.Module):
                                                        out_channels=128,
                                                        scale_factor=4)
         self.maskifier = Classifer(128, 1)
-
         # set aggregation parameters
+        self.aggregation_type = aggr_type
         self.cf_h, self.cf_w = 60, 80
-        self.ppm = 3.2
-        self.center_x = 48
-        self.center_y = 40
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w) # 3.2
+        self.center_x = self.sem_cfg.center_x(self.cf_w) # 40
+        self.center_y = self.sem_cfg.center_y(self.cf_h) # 48
 
     def forward(self, x, transforms, adjacency_matrix):
         # B, 3, 480, 640: input size
@@ -62,7 +63,8 @@ class LMCNN(nn.Module):
         x_mask = self.mask_feature_fusion(shared, x_mask)
         # --latent masking into aggregation--
         # B, 128, 60, 80
-        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic, transforms, adjacency_matrix)
+        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
+                                             transforms, adjacency_matrix)
         # B, 7, 60, 80
         x_semantic = self.classifier(x_semantic)
         # B, 1, 60, 80
@@ -74,20 +76,20 @@ class LMCNN(nn.Module):
         x_mask = torch.sigmoid(F.interpolate(x_mask, self.output_size, mode='bilinear', align_corners=True))
         return x_semantic, x_mask
 
-    def aggregate_features(self, x, transforms, adjacency_matrix, flags='bilinear'):
+    def aggregate_features(self, x, transforms, adjacency_matrix):
         agent_count = transforms.shape[0]
-        # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
             relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
                                                              self.center_x, self.center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w), flags=flags)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
+                                                 flags=self.aggregation_type)
             # counting agent influence on a pixel level
             pixel_weight = warped_features.clone().detach()
             pixel_weight[pixel_weight != 0] = 1
             pixel_weight = torch.count_nonzero(pixel_weight, dim=0)
-            # [128, 60, 80], avoiding division by zero
+            # avoiding division by zero
             pixel_weight = torch.clamp(pixel_weight, min=1.0)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
@@ -100,9 +102,20 @@ class LMCNN(nn.Module):
         """
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
+class LWMCNN(LMCNN):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super(LWMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
+        # set aggregation parameters
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
+        self.learning_to_downsample = LearningToDownsampleL(dw_channels1=32,
+                                                            dw_channels2=48,
+                                                            out_channels=64)
+
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
-
     def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64):
         super(LearningToDownsample, self).__init__()
         self.conv = _ConvINReLU(in_channels=3, out_channels=dw_channels1, kernel_size=3, stride=2)
@@ -114,6 +127,21 @@ class LearningToDownsample(nn.Module):
         x = self.dsconv1(x)
         x = self.dsconv2(x)
         return x
+
+class LearningToDownsampleL(nn.Module):
+    """Learning to downsample module"""
+    def __init__(self, dw_channels1=32, dw_channels2=48, out_channels=64):
+        super(LearningToDownsampleL, self).__init__()
+        self.conv = _ConvINReLU(in_channels=3, out_channels=dw_channels1, kernel_size=(4, 3),stride=3)
+        self.dsconv1 = _DSConv(dw_channels1, dw_channels2, 1, kernel_size=(3, 2))
+        self.dsconv2 = _DSConv(dw_channels2, out_channels, 2, kernel_size=(3, 2))
+
+    def forward(self, x):
+        x = self.conv(x)
+        x = self.dsconv1(x)
+        x = self.dsconv2(x)
+        return x
+
 
 class GlobalFeatureExtractor(nn.Module):
     """Global feature extractor module"""
@@ -245,10 +273,10 @@ class _ConvINReLU(nn.Module):
 
 class _DSConv(nn.Module):
     """Depthwise Separable Convolutions"""
-    def __init__(self, dw_channels, out_channels, stride=1):
+    def __init__(self, dw_channels, out_channels, stride=1, kernel_size=3):
         super(_DSConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(dw_channels, dw_channels, 3, stride, 1, groups=dw_channels, bias=False),
+            nn.Conv2d(dw_channels, dw_channels, kernel_size, stride, 1, groups=dw_channels, bias=False),
             nn.InstanceNorm2d(dw_channels),
             nn.ReLU(True),
             nn.Conv2d(dw_channels, out_channels, 1, bias=False),
