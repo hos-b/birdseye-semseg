@@ -6,7 +6,7 @@ from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
 
 class MCNN(torch.nn.Module):
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type):
         super().__init__()
         self.learning_to_downsample = LearningToDownsample(3)
         self.global_feature_extractor = GlobalFeatureExtractor()
@@ -15,6 +15,12 @@ class MCNN(torch.nn.Module):
         self.mask_prediction = Classifier(1)
         self.output_size = output_size
         self.sem_cfg = sem_cfg
+        # aggregation parameters
+        self.aggregation_type = aggr_type
+        self.cf_h, self.cf_w = 60, 80
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w) # 3.2
+        self.center_x = self.sem_cfg.center_x(self.cf_w) # 40
+        self.center_y = self.sem_cfg.center_y(self.cf_h) # 48
 
     def forward(self, x, transforms, adjacency_matrix):
         # B, 3, 480, 640: input size
@@ -39,16 +45,13 @@ class MCNN(torch.nn.Module):
     def aggregate_features(self, x, transforms, adjacency_matrix):
         # calculating constants
         agent_count = transforms.shape[0]
-        cf_h, cf_w = 60, 80 # x.shape[2], x.shape[3]
-        ppm = 3.2 # ((cf_h / self.sem_cfg.cloud_x_span) + (cf_w / self.sem_cfg.cloud_y_span)) / 2.0
-        center_x = 48 # int((self.sem_cfg.cloud_max_x / self.sem_cfg.cloud_x_span) * cf_h)
-        center_y = 40 # int((self.sem_cfg.cloud_max_y / self.sem_cfg.cloud_y_span) * cf_w)
-        # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='nearest')
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+                                                             self.center_x, self.center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
+                                                 flags=self.aggregation_type)
             warped_features[outside_fov] = 0
             aggregated_features[i, ...] = warped_features.sum(dim=0) / adjacency_matrix[i].sum()
         return aggregated_features
@@ -60,7 +63,7 @@ class MCNN(torch.nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 class MCNN4(torch.nn.Module):
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super().__init__()
         self.learning_to_downsample = LearningToDownsample(3)
         self.semantic_global_feature_extractor = GlobalFeatureExtractor()
@@ -71,6 +74,12 @@ class MCNN4(torch.nn.Module):
         self.maskifier = Classifier(1)
         self.output_size = output_size
         self.sem_cfg = sem_cfg
+        # aggregation parameters
+        self.aggregation_type = aggr_type
+        self.cf_h, self.cf_w = 60, 80
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w) # 3.2
+        self.center_x = self.sem_cfg.center_x(self.cf_w) # 40
+        self.center_y = self.sem_cfg.center_y(self.cf_h) # 48
 
     def forward(self, x, transforms, adjacency_matrix):
         # B, 3, 480, 640: input size
@@ -104,16 +113,14 @@ class MCNN4(torch.nn.Module):
     def aggregate_features(self, x, transforms, adjacency_matrix):
         # calculating constants
         agent_count = transforms.shape[0]
-        cf_h, cf_w = 60, 80 # x.shape[2], x.shape[3]
-        ppm = 3.2 # ((cf_h / self.sem_cfg.cloud_x_span) + (cf_w / self.sem_cfg.cloud_y_span)) / 2.0
-        center_x = 48 # int((self.sem_cfg.cloud_max_x / self.sem_cfg.cloud_x_span) * cf_h)
-        center_y = 40 # int((self.sem_cfg.cloud_max_y / self.sem_cfg.cloud_y_span) * cf_w)
         # aggregating [A, 128, 238, 318]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w, center_x, center_y).to(transforms.device)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w), flags='nearest')
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+                                                             self.center_x, self.center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
+                                                 flags=self.aggregation_type)
             warped_features[outside_fov] = 0
             aggregated_features[i, ...] = warped_features.sum(dim=0) / adjacency_matrix[i].sum()
         return aggregated_features
