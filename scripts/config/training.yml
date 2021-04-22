@@ -1,5 +1,5 @@
 logging:
-  name: 'debug'
+  name: 'bigger-bill-67'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -14,8 +14,9 @@ training:
   world-size: 2
 
 network:
-  model-name: 'mcnnL'
+  model-name: 'mcnnLW'
   aggregation-type: 'bilinear' # or 'nearest'
+  aggregation-activation-limit: 1e-6
 
 resume:
   flag: false
@@ -50,6 +51,6 @@ dataloader:
   shuffle-data: true
 
 dataset:
-  dataset-dir: '/export/home/aiscar4/mass-data'
+  dataset-dir: '/export/home/bahadorm/mass-data'
   dataset-file: 'dataset_10k.hdf5'
   dataset-name: 'town-01'
