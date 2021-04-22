@@ -242,11 +242,13 @@ def parse_and_execute():
     elif train_cfg.model_name == 'mcnnL':
         model = LMCNN(train_cfg.num_classes, new_size,
                       geom_cfg, train_cfg.aggregation_type,
-                      train_cfg.aggregation_activation_limit).cuda(0)
+                      train_cfg.aggregation_activation_limit,
+                      train_cfg.average_aggregation).cuda(0)
     elif train_cfg.model_name == 'mcnnLW':
         model = LWMCNN(train_cfg.num_classes, new_size,
                        geom_cfg, train_cfg.aggregation_type,
-                       train_cfg.aggregation_activation_limit).cuda(0)
+                       train_cfg.aggregation_activation_limit,
+                       train_cfg.average_aggregation).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()

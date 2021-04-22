@@ -12,7 +12,8 @@ from data.mask_warp import get_single_relative_img_transform, get_all_relative_i
 
 class LMCNN(nn.Module):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig,
-                 aggr_type: str, aggregation_activation_limit: float):
+                 aggr_type: str, aggregation_activation_limit: float,
+                 avg_aggregation: bool):
         super(LMCNN, self).__init__()
         self.output_size = output_size
         self.sem_cfg = sem_cfg
@@ -43,6 +44,7 @@ class LMCNN(nn.Module):
         self.maskifier = Classifer(128, 1)
         # set aggregation parameters
         self.aggregation_type = aggr_type
+        self.avg_aggregation = avg_aggregation
         self.cf_h, self.cf_w = 60, 80
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w) # 3.2
         self.center_x = self.sem_cfg.center_x(self.cf_w) # 40
@@ -87,16 +89,19 @@ class LMCNN(nn.Module):
                                                              self.center_x, self.center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
                                                  flags=self.aggregation_type)
-            # counting agent influence on a pixel level
-            pixel_weight = torch.abs(warped_features.clone().detach())
-            pixel_weight[pixel_weight < self.aggr_activation_limit] = 0
-            pixel_weight[pixel_weight != 0] = 1
-            pixel_weight = torch.count_nonzero(pixel_weight, dim=0)
-            # avoiding division by zero
-            pixel_weight = torch.clamp(pixel_weight, min=1.0)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
-            aggregated_features[i] = warped_features.sum(dim=0) / pixel_weight
+            aggregated_features[i] = warped_features.sum(dim=0)
+            # counting agent influence on a pixel level
+            if self.avg_aggregation:
+                pixel_weight = warped_features.clone().detach()
+                pixel_weight[pixel_weight != 0] = 1
+                pixel_weight = torch.count_nonzero(pixel_weight, dim=0)
+                # avoiding division by zero
+                pixel_weight = torch.clamp(pixel_weight, min=1.0)
+                aggregated_features[i] = warped_features.sum(dim=0) / pixel_weight
+            else:
+                aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
 
     def parameter_count(self):
@@ -107,9 +112,10 @@ class LMCNN(nn.Module):
 
 class LWMCNN(LMCNN):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig,
-                 aggr_type: str, aggregation_activation_limit: float):
+                 aggr_type: str, aggregation_activation_limit: float,
+                 avg_aggregation):
         super(LWMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type,
-                                     aggregation_activation_limit)
+                                     aggregation_activation_limit, avg_aggregation)
         # set aggregation parameters
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)

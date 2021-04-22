@@ -60,6 +60,7 @@ class TrainingConfig:
         self.model_name = str(conf['network']['model-name'])
         self.aggregation_type = str(conf['network']['aggregation-type'])
         self.aggregation_activation_limit = float(conf['network']['aggregation-activation-limit'])
+        self.average_aggregation = bool(conf['network']['average-aggregation'])
         # resume
         self.resume_training = bool(conf['resume']['flag'])
         self.resume_model_version = str(conf['resume']['model-version'])

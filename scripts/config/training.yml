@@ -17,6 +17,7 @@ network:
   model-name: 'mcnnLW'
   aggregation-type: 'bilinear' # or 'nearest'
   aggregation-activation-limit: 1e-6
+  average-aggregation: true
 
 resume:
   flag: false
