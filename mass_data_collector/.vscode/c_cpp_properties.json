@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Linux",
+            "includePath": [
+                "${default}",
+                "${workspaceFolder}/include",
+                "/opt/ros/melodic/include",
+                "/usr/local/HDF_Group/HDF5/1.12.0/include",
+                "/usr/local/include/eigen3",
+                "/usr/local/include/pcl-1.10",
+                "/export/ad-lab/simulation/carla-stock/Examples/CppClient/libcarla-install/include",
+                "/export/ad-lab/simulation/carla-stock/Examples/CppClient/libcarla-install/include/system"
+            ],
+            "defines": [],
+            "compilerPath": "/usr/bin/g++",
+            "cStandard": "c11",
+            "cppStandard": "c++14",
+            "intelliSenseMode": "linux-gcc-x64"
+        }
+    ],
+    "version": 4
+}
