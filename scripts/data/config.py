@@ -97,14 +97,20 @@ class EvaluationConfig:
         conf = yaml.load(yaml_file, Loader=yaml.FullLoader)
         yaml_file.close()
         # evaluation parameters
-        self.data_split = conf['dataset-split']
-        self.device = conf['device']
-        self.run = conf['run']
-        self.model_name = conf['model-name']
-        self.model_version = conf['model-version']
-        self.random_samples = conf['random-samples']
-        self.plot_type = conf['plot-type']
-        self.difficulty = conf['difficulty']
-        self.plot_count = conf['count']
-        self.plot_dir = conf['plot-dir']
-        self.plot_tag = conf['plot-tag']
+        self.device = str(conf['device'])
+        self.run = str(conf['run'])
+
+        self.model_name = str(conf['model']['model-name'])
+        self.model_version = str(conf['model']['model-version'])
+        self.aggregation_type = str(conf['model']['aggregation-type'])
+        self.aggregation_activation_limit = float(conf['model']['aggregation-activation-limit'])
+        self.average_aggregation = bool(conf['model']['average-aggregation'])
+
+        self.plot_count = int(conf['plot']['count'])
+        self.plot_type = str(conf['plot']['plot-type'])
+        self.plot_dir = str(conf['plot']['plot-dir'])
+        self.plot_tag = str(conf['plot']['plot-tag'])
+
+        self.random_samples = bool(conf['dataset']['random-samples'])
+        self.difficulty = int(conf['dataset']['difficulty'])
+        self.data_split = str(conf['dataset']['dataset-split'])

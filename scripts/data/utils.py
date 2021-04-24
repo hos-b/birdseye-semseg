@@ -70,3 +70,26 @@ def save_seg_prediction(seg, path='mask.png'):
     _, ss_pred = torch.max(seg, dim=0)
     ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
     cv2.imwrite(path, cv2.cvtColor(ss_pred_img, cv2.COLOR_RGB2BGR))
+
+# dicts for plotting batchesbased on agent count
+newline_dict = {
+    1: '',
+    2: '',
+    3: '',
+    4: '',
+    5: '\n',
+    6: '\n\n',
+    7: '\n',
+    8: '\n'
+}
+
+font_dict = {
+    1: 17,
+    2: 25,
+    3: 30,
+    4: 32,
+    5: 37,
+    6: 40,
+    7: 45,
+    8: 45
+}

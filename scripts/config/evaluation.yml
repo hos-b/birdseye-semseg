@@ -1,13 +1,20 @@
 device: 'cuda'
+run: 'bigbi-67-ce'
 
-run: 'balkan'
-model-name: 'mcnnL'
-model-version: 'best' # || 'best'
-difficulty: 1
+model:
+  model-name: 'mcnnL'
+  model-version: 'best' # || 'best'
+  aggregation-type: 'bilinear' # or 'nearest'
+  average-aggregation: false
+  aggregation-activation-limit: 1e-6
 
-dataset-split: 'test'
-random-samples: true
-count: 50
-plot-type: 'disk' # 'show' || 'image' for getting rgb
-plot-dir: './runs/{}/plots'
-plot-tag: 'nostats' # added to dir name
+plot:
+  count: 10
+  plot-type: 'disk' # 'show' || 'image' for getting rgb
+  plot-dir: './runs/{}/plots'
+  plot-tag: 'nostats' # added to dir name
+
+dataset:
+  difficulty: 1
+  random-samples: false
+  dataset-split: 'test'

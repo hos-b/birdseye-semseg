@@ -6,20 +6,24 @@ import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 
+from agent.agent_pool import CurriculumPool
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.dataset import get_datasets
 from data.config import EvaluationConfig, SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all, to_device
+from data.utils import font_dict, newline_dict
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN
-from agent.agent_pool import CurriculumPool
+from model.large_mcnn import LMCNN, LWMCNN
+
 
 def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
                mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
-               plot_dest: str, filename = 'test.png'):
+               plot_dest: str, filename = 'test.png', title=''):
     agent_count = rgbs.shape[0]
     columns = 7
-    fig = plt.figure(figsize=(22, agent_count * 4))
+    fig = plt.figure(figsize=(30, agent_count * 4))
+    fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
+    # plt.axis('off')
     for i in range(agent_count):
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
@@ -30,40 +34,40 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         ax = []
 
         # front RGB image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
         ax[-1].set_title(f"rgb {i}")
         plt.imshow(rgb.cpu())
 
         # basic mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
         ax[-1].set_title(f"target mask {i}")
         plt.imshow(single_gt_mask)
 
         # predicted mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
         ax[-1].set_title(f"predicted mask {i}")
         plt.imshow(mask_preds[i].squeeze().cpu())
 
         # omniscient semantic BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
         ax[-1].set_title(f"omniscient BEV {i}")
         plt.imshow(ss_gt_img)
 
         # target semantic BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
         ax[-1].set_title(f"target BEV {i}")
         ss_gt_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_gt_img)
 
         # predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
         ax[-1].set_title(f"predicted BEV {i}")
         ss_pred = torch.max(sseg_preds[i], dim=0)[1]
         ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
         plt.imshow(ss_pred_img)
 
         # masked predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 7))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 7, xticks=[], yticks=[]))
         ax[-1].set_title(f"masked prediction {i}")
         ss_pred_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_pred_img)
@@ -100,7 +104,7 @@ def evaluate(**kwargs):
     probs = [1 - sample_plot_prob, sample_plot_prob] 
     # plot stuff
     columns = 6
-    for idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(loader):
+    for idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(loader):
         # randomly skip samples (useful for large datasets)
         if eval_cfg.random_samples and np.random.choice([True, False], 1, p=probs):
             continue
@@ -118,7 +122,8 @@ def evaluate(**kwargs):
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
         plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
-                   f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png')
+                   f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png', 
+                   f'Batch #{batch_no.item()}')
         
         eval_cfg.plot_count -= 1
         if eval_cfg.plot_count == 0:
@@ -166,15 +171,23 @@ def main():
         exit()
     if eval_cfg.model_name == 'mcnn':
         model = MCNN(train_cfg.num_classes, new_size,
-                     geom_cfg).cuda(0)
+                     geom_cfg, eval_cfg.aggregation_type).cuda(0)
     elif eval_cfg.model_name == 'mcnn4':
         model = MCNN4(train_cfg.num_classes, new_size,
-                      geom_cfg).cuda(0)
+                      geom_cfg, eval_cfg.aggregation_type).cuda(0)
     elif eval_cfg.model_name == 'mcnnL':
         model = LMCNN(train_cfg.num_classes, new_size,
-                      geom_cfg).cuda(0)
+                      geom_cfg, eval_cfg.aggregation_type,
+                      eval_cfg.aggregation_activation_limit,
+                      eval_cfg.average_aggregation).cuda(0)
+    elif eval_cfg.model_name == 'mcnnLW':
+        model = LWMCNN(train_cfg.num_classes, new_size,
+                       geom_cfg, eval_cfg.aggregation_type,
+                       eval_cfg.aggregation_activation_limit,
+                       eval_cfg.average_aggregation).cuda(0)
     else:
         print('unknown network architecture {eval_cfg.model_name}')
+        exit()
     model.load_state_dict(torch.load(snapshot_path))
     agent_pool = CurriculumPool(eval_cfg.difficulty, eval_cfg.difficulty,
                                 train_cfg.max_agent_count, device)

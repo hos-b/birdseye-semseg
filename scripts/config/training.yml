@@ -1,5 +1,5 @@
 logging:
-  name: 'bigger-bill-67'
+  name: 'noavg-basic-67'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -17,7 +17,7 @@ network:
   model-name: 'mcnnLW'
   aggregation-type: 'bilinear' # or 'nearest'
   aggregation-activation-limit: 1e-6
-  average-aggregation: true
+  average-aggregation: false
 
 resume:
   flag: false
