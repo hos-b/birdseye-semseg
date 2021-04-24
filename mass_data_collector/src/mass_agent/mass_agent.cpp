@@ -300,8 +300,8 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
 		return datapoint;
 	}
-	// filling the datapoint
 #endif
+	// filling the datapoint
 	datapoint.agent_id = agent_batch_index;
 	// omp for does not improve performance, may even degrade
 	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {

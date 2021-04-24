@@ -7,8 +7,8 @@
 
 #include <Eigen/Dense>
 #include <nanoflann.hpp>
-#include <pcl/point_cloud.h>
 #include <opencv2/opencv.hpp>
+#include <pcl/point_cloud.h>
 
 #include "geometry/camera_geomtry.h"
 
@@ -32,18 +32,18 @@ public:
 		unsigned int knn_count;
 		unsigned int kd_max_leaf;
 	};
-	SemanticCloud(SemanticCloud::Settings settings);
+	explicit SemanticCloud(SemanticCloud::Settings settings);
 	~SemanticCloud();
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							   cv::Mat semantic,
 							   cv::Mat depth);
-	void AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							   		cv::Mat semantic,
-							   		cv::Mat depth);
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							   cv::Mat semantic,
 							   cv::Mat depth,
 							   Eigen::Matrix4d& transform);
+	void AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   		   cv::Mat semantic,
+							   		   cv::Mat depth);
 	std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(double vehicle_width, double vehicle_length) const;
 	cv::Mat GetFOVMask() const;
 	void BuildKDTree();
@@ -66,6 +66,11 @@ public:
 	}
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
+
+	SemanticCloud(const SemanticCloud&) = delete;
+	const SemanticCloud& operator=(const SemanticCloud&) = delete;
+	SemanticCloud(SemanticCloud&&) = delete;
+	const SemanticCloud& operator=(SemanticCloud&&) = delete;
 
 private:
 	size_t GetMajorityVote(const std::vector<size_t>& knn_indices,

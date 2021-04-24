@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # required for stuff and things ---------------------------------------------
 find_package(Threads REQUIRED)
 find_package(OpenCV 4 REQUIRED)
-find_package (Eigen3 3 REQUIRED)
+find_package(Eigen3 3 REQUIRED)
 find_package(PCL 1.3 REQUIRED COMPONENTS common io)
 find_package(nanoflann)
 find_package(OpenMP REQUIRED)

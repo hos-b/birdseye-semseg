@@ -1,27 +1,27 @@
 #ifndef __AISCAR_RL_AGENT__
 #define __AISCAR_RL_AGENT__
 
-#include <string>
 #include <memory>
+#include <string>
 #include <thread>
 
 #include "carla/client/Walker.h"
 #include "carla/client/Waypoint.h"
 #include "carla/geom/Location.h"
-#include "mass_agent/sensors.h"
 #include "geometry/semantic_cloud.h"
+#include "mass_agent/sensors.h"
 
 // Eigen stuff
 #include <Eigen/Dense>
 
 // OpenCV stuff
-#include <opencv2/opencv.hpp>
 #include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
 
 // CARLA stuff
 #include <carla/client/Map.h>
-#include <carla/client/World.h>
 #include <carla/client/TimeoutException.h>
+#include <carla/client/World.h>
 #include <carla/geom/Transform.h>
 
 // HDF5 stuff
