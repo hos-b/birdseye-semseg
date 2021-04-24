@@ -51,7 +51,7 @@ def train(**kwargs):
         sample_count = 0
         # training
         model.train()
-        for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(train_loader):
+        for batch_idx, (ids, rgbs, labels, masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             print(f'\repoch: {ep + 1}/{epochs}, '
                   f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
@@ -111,7 +111,7 @@ def train(**kwargs):
         sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(0)
         mask_ious = 0.0
         sample_count = 0
-        for batch_idx, (ids, rgbs, labels, masks, car_transforms) in enumerate(test_loader):
+        for batch_idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(test_loader):
             print(f'\repoch: {ep + 1}/{epochs}, '
                   f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             sample_count += rgbs.shape[1]
@@ -131,7 +131,8 @@ def train(**kwargs):
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
             if not visaulized and log_enable:
-                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, 'image')
+                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool,
+                                 'image', title=f'Epoch {ep + 1}, Batch #{batch_no.item()}')
                 wandb.log({
                     'results': wandb.Image(img, caption='full batch predictions'),
                     'epoch': ep + 1
