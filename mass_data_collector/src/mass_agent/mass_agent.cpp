@@ -267,7 +267,7 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
-	geom::SemanticCloud mask_cloud(sc_settings());
+	geom::SemanticCloud<geom::cloud_backend::KD_TREE> mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
 #ifndef __RELEASE
 	if (!succ) {
@@ -279,7 +279,7 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask();
 	// ---------------------------------------- creating target cloud ----------------------------------------
-	geom::SemanticCloud target_cloud(sc_settings());
+	geom::SemanticCloud<geom::cloud_backend::KD_TREE> target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 #ifndef __RELEASE
@@ -549,7 +549,7 @@ void MassAgent::AssertSize(size_t size) {
 
 /* create a single cloud using all cameras of all agents */
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
-	geom::SemanticCloud target_cloud({1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128});
+	geom::SemanticCloud<geom::cloud_backend::KD_TREE> target_cloud({1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128});
 	for (size_t i = 0; i < size; ++i) {
 		agents[i].CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
@@ -572,8 +572,8 @@ void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::
 }
 
 /* returns the cloud geometry settings */
-geom::SemanticCloud::Settings& MassAgent::sc_settings() {
-	static geom::SemanticCloud::Settings semantic_cloud_settings;
+geom::SemanticCloud<geom::cloud_backend::KD_TREE>::Settings& MassAgent::sc_settings() {
+	static geom::SemanticCloud<geom::cloud_backend::KD_TREE>::Settings semantic_cloud_settings;
 	static std::once_flag flag;
 	std::call_once(flag, [&]() {
 		std::string yaml_path = ros::package::getPath("mass_data_collector") +

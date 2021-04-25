@@ -17,28 +17,34 @@ class SurfaceMap
 {
 public:
     struct Settings {
+		float pixel_h;
+		float pixel_w;
         float max_point_x;
-		float min_point_x;
 		float max_point_y;
-		float min_point_y;
 		unsigned int image_rows;
 		unsigned int image_cols;
     };
-    explicit SurfaceMap(SurfaceMap::Settings& settings, size_t points_per_pixel) {
+    explicit SurfaceMap(SurfaceMap::Settings& settings) {
         cfg_ = settings;
         // pixel width & height
-        pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y;) / static_cast<double>(cfg_.image_cols);
-	    pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x;) / static_cast<double>(cfg_.image_rows);
-        size_t grid_size = cfg_.image_rows * cfg_.image_cols;
+        grid_size_ = cfg_.image_rows * cfg_.image_cols;
+        grid_.reserve(grid_size_ + 1);
+        // TODO: check capacity
+        #pragma omp parallel for
         for (size_t i = 0; i < grid_size_; ++i) {
             grid_.emplace_back(std::vector<PointType>());
-            grid_.back().reserve(points_per_pixel);
+        }
+    }
+    void Reserve(size_t new_size) {
+        #pragma omp parallel for
+        for (size_t i = 0; i < grid_size_; ++i) {
+            grid_[i].reserve(grid_[i].size() + new_size);
         }
     }
     /* add a point to the surface map */
     void AddPoint(PointType pt) {
-        float grid_x = (cfg_.max_point_y - pt.y) / pixel_w_;
-        float grid_y = (cfg_.max_point_x - pt.x) / pixel_h_;
+        float grid_x = (cfg_.max_point_y - pt.y) / cfg_.pixel_w;
+        float grid_y = (cfg_.max_point_x - pt.x) / cfg_.pixel_h;
         if (grid_x < 0 || grid_y < 0 || grid_x > cfg_.image_cols || grid_y > cfg_.image_rows) {
             return;
         }
@@ -61,6 +67,7 @@ public:
 
 private:
     Settings cfg_;
+    size_t grid_size_;
     std::vector<std::vector<PointType>> grid_;
 };
 
