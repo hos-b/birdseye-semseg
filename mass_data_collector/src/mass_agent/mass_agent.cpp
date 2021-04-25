@@ -549,7 +549,8 @@ void MassAgent::AssertSize(size_t size) {
 
 /* create a single cloud using all cameras of all agents */
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
-	geom::SemanticCloud<geom::cloud_backend::KD_TREE> target_cloud({1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128});
+	geom::base_members::Settings semantic_conf{1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128};
+	geom::SemanticCloud<geom::cloud_backend::KD_TREE> target_cloud(semantic_conf);
 	for (size_t i = 0; i < size; ++i) {
 		agents[i].CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
@@ -572,8 +573,8 @@ void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::
 }
 
 /* returns the cloud geometry settings */
-geom::SemanticCloud<geom::cloud_backend::KD_TREE>::Settings& MassAgent::sc_settings() {
-	static geom::SemanticCloud<geom::cloud_backend::KD_TREE>::Settings semantic_cloud_settings;
+geom::base_members::Settings& MassAgent::sc_settings() {
+	static geom::base_members::Settings semantic_cloud_settings;
 	static std::once_flag flag;
 	std::call_once(flag, [&]() {
 		std::string yaml_path = ros::package::getPath("mass_data_collector") +

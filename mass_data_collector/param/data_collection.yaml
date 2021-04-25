@@ -1,5 +1,5 @@
 dataset:
-  path: '/home/hosein/data/dataset.hdf5'
+  path: '/home/mass/data/test.hdf5'
   name: 'town-01'
 
 collection:

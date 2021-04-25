@@ -13,9 +13,12 @@
 
 namespace geom
 {
+/* virtual base destructor of abstract class */
+base_members::~base_members() {}
+
 /* constructor */
 template<>
-SemanticCloud<cloud_backend::KD_TREE>::SemanticCloud(SemanticCloud::Settings settings) {
+SemanticCloud<cloud_backend::KD_TREE>::SemanticCloud(geom::base_members::Settings& settings) {
 	cfg_ = settings;
 	kd_tree_ = nullptr;
 	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
@@ -142,10 +145,8 @@ void SemanticCloud<cloud_backend::KD_TREE>::
 }
 
 /* simple kd-tree look up. only use whe the cloud is  */
-template<>
-template<>
-std::pair<std::vector<size_t>, std::vector<double>> SemanticCloud<cloud_backend::KD_TREE>::
-		FindClosestPoints<>(double knn_x, double knn_y, size_t num_results) const {
+std::pair<std::vector<size_t>, std::vector<double>> cloud_base<cloud_backend::KD_TREE>::
+		FindClosestPoints(double knn_x, double knn_y, size_t num_results) const {
 	double query[2] = {knn_x, knn_y};
 	std::vector<size_t> knn_ret_index(num_results);
 	std::vector<double> knn_sqrd_dist(num_results);
@@ -157,11 +158,8 @@ std::pair<std::vector<size_t>, std::vector<double>> SemanticCloud<cloud_backend:
 }
 
 /* gets the majority vote for label based on the results of a knn search */
-template<>
-template<>
-size_t SemanticCloud<cloud_backend::KD_TREE>::
-		GetMajorityVote<>(const std::vector<size_t>& knn_indices,
-						  const std::vector<double>& distances) const {
+size_t cloud_base<cloud_backend::KD_TREE>::GetMajorityVote(const std::vector<size_t>& knn_indices,
+					    								   const std::vector<double>& distances) const {
 	// map from semantic id to count
 	std::unordered_map<unsigned int, double> map(knn_indices.size());
 	std::vector<unsigned int> classes;
@@ -191,10 +189,8 @@ size_t SemanticCloud<cloud_backend::KD_TREE>::
 }
 
 /* returns the orthographic bird's eye view image */
-template<>
-template<>
-std::tuple<cv::Mat, cv::Mat> SemanticCloud<cloud_backend::KD_TREE>::
-		GetSemanticBEV<>(double vehicle_width, double vehicle_length) const {
+std::tuple<cv::Mat, cv::Mat> cloud_base<cloud_backend::KD_TREE>::
+		GetSemanticBEV(double vehicle_width, double vehicle_length) const {
 	// ego roi
 	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
 	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
@@ -232,8 +228,7 @@ std::tuple<cv::Mat, cv::Mat> SemanticCloud<cloud_backend::KD_TREE>::
 
 /* returns the BEV mask visible from the camera. this method assumes the kd tree
    is populated only with points captured with the front camera */
-template<>
-cv::Mat SemanticCloud<cloud_backend::KD_TREE>::GetFOVMask() const {
+cv::Mat cloud_base<cloud_backend::KD_TREE>::GetFOVMask() const {
 	cv::Mat bev_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < bev_mask.rows; ++i) {
@@ -254,18 +249,14 @@ cv::Mat SemanticCloud<cloud_backend::KD_TREE>::GetFOVMask() const {
 /* removes overlapping or invisible points for the target cloud. initializes kd tree.
    filters unwanted labels (declared in config::filtered_semantics)
 */
-template<>
-template<>
-void SemanticCloud<cloud_backend::KD_TREE>::BuildKDTree<>() {
+void cloud_base<cloud_backend::KD_TREE>::BuildKDTree() {
 	// building kd-tree
 	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(cfg_.kd_max_leaf));
 	kd_tree_->buildIndex();
 }
 
 /* saves the color coded point cloud */
-template<>
-template<>
-void SemanticCloud<cloud_backend::KD_TREE>::SaveCloud<>(const std::string& path) const {
+void cloud_base<cloud_backend::KD_TREE>::SaveCloud(const std::string& path) const {
 	if (target_cloud_.empty()) {
 		std::cout << "empty cloud, not saving." << std::endl;
 		return;
@@ -293,10 +284,8 @@ void SemanticCloud<cloud_backend::KD_TREE>::SaveCloud<>(const std::string& path)
 
 
 /* returns the visible points in the cloud that are visible in the given camera geometry */
-template<>
-template<>
-void SemanticCloud<cloud_backend::KD_TREE>::
-	SaveMaskedCloud<>(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
+void cloud_base<cloud_backend::KD_TREE>::
+	SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 					const std::string& path, double pixel_limit) const {
 	pcl::PointCloud<pcl::PointXYZRGB> visible_cloud;
 	visible_cloud.points.resize(target_cloud_.points.size());
@@ -326,9 +315,8 @@ void SemanticCloud<cloud_backend::KD_TREE>::
 
 /* constructor */
 template<>
-SemanticCloud<cloud_backend::SURFACE_MAP>::SemanticCloud(SemanticCloud::Settings settings) {
+SemanticCloud<cloud_backend::SURFACE_MAP>::SemanticCloud(geom::base_members::Settings& settings) {
 	cfg_ = settings;
-	kd_tree_ = nullptr;
 	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
 	pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x) / static_cast<double>(cfg_.image_rows);
 	SurfaceMap<pcl::PointXYZL>::Settings smap_settings{pixel_h_, pixel_w_,
@@ -438,8 +426,7 @@ void SemanticCloud<cloud_backend::SURFACE_MAP>::
 
 /* returns the BEV mask visible from the camera. this method assumes the kd tree
    is populated only with points captured with the front camera */
-template<>
-cv::Mat SemanticCloud<cloud_backend::SURFACE_MAP>::GetFOVMask() const {
+cv::Mat cloud_base<cloud_backend::SURFACE_MAP>::GetFOVMask() const {
 	cv::Mat bev_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < bev_mask.rows; ++i) {
@@ -472,11 +459,9 @@ cv::Mat SemanticCloud<B>::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 
 /* ------- Deprecated functions ------------------------------------------------------------ */
 /* returns the boundaries of the car (calculated from filtered point cloud) */
-template<>
-template<>
 [[deprecated("deprecated function")]]
 std::tuple<double, double, double, double>
-		SemanticCloud<cloud_backend::KD_TREE>::GetVehicleBoundary<>() const {
+		cloud_base<cloud_backend::KD_TREE>::GetVehicleBoundary() const {
 	double front = 0.0;
 	double back = 0.0;
 	double left = 0.0;
@@ -530,10 +515,8 @@ std::tuple<double, double, double, double>
 }
 
 /* debug function that returns the x,y boundaries of the cloud */
-template <>
-template <>
 std::tuple<double, double, double, double>
-		SemanticCloud<cloud_backend::KD_TREE>::GetBoundaries<>() const {
+		cloud_base<cloud_backend::KD_TREE>::GetBoundaries() const {
 	float minx = 0, miny = 0, maxx = 0, maxy = 0;
 	for (const auto& point : target_cloud_.points) {
 		if (point.x < minx) {
