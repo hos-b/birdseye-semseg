@@ -12,16 +12,6 @@ camera-front:
   fov: 90
   gamma: 2.2
   blade_count: 5
-  # AIS Map:
-  # shutter_speed: 60.0
-  # iso: 1200.0
-  # fstop: 1.4
-  # min_fstop: 1.2
-  # exposure_mode: "manual"
-  # exposure_compensation: 3.0
-  # exposure_min_bright: 0.1
-  # exposure_max_bright: 2.0
-  # original carla:
   shutter_speed: 200.0
   iso: 100.0
   fstop: 8.0
@@ -86,16 +76,6 @@ camera-mask:
   fov: 90
   gamma: 2.2
   blade_count: 5
-  # AIS Map:
-  # shutter_speed: 60.0
-  # iso: 1200.0
-  # fstop: 1.4
-  # min_fstop: 1.2
-  # exposure_mode: "manual"
-  # exposure_compensation: 3.0
-  # exposure_min_bright: 0.1
-  # exposure_max_bright: 2.0
-  # original carla:
   shutter_speed: 200.0
   iso: 100.0
   fstop: 8.0
