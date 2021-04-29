@@ -16,20 +16,25 @@
 namespace geom 
 {
 
-/* using classes instead of enum to work with std::enable_if */
-namespace cloud_backend 
-{
-	class KD_TREE {};
-	class SURFACE_MAP {};
-}
+/* enum for choosing the backend point cloud container of SemanticCloud */
+enum class CloudBackend  {
+	KD_TREE,
+	SURFACE_MAP,
+	DOUBLE_SURFACE_MAP
+};
+/* enum for aggregation strategy in surface map backends */
 enum class AggregationStrategy {
     HIGHEST_Z,
     MAJORITY,
 	WEIGHTED_MAJORITY,
-	HEURISTIC_1,
-	HEURISTIC_2
 };
-
+/* enum for choosing the destination container in double surface map backend */
+enum class DestinationMap {
+	MASK,
+	SEMANTIC
+};
+/* ----------- cloud_base & base_members abstract class  ---------------------------------- */
+/* base members inherited by all cloud backends */
 class base_members {
 public:
 	struct Settings {
@@ -44,27 +49,35 @@ public:
 		unsigned int knn_count;
 		unsigned int kd_max_leaf;
 	};
-	// abstract class
+	// virtual destructor to make the class abstract
 	virtual ~base_members() = 0;
 protected:
 	Settings cfg_;
 	float pixel_w_;
 	float pixel_h_;
 };
-
-
-template <typename T>
-class cloud_base : public base_members {};
-
+/* cloud_base class */
+template <CloudBackend B>
+class cloud_base : protected base_members {};
+/* ----------- cloud_base kd tree specialization  ----------------------------------------- */
 template <>
-class cloud_base<cloud_backend::KD_TREE> : public base_members {
+class cloud_base<CloudBackend::KD_TREE> : protected base_members {
 public:
 	using KDTree2D = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor
 															<double, cloud_base>,
 															cloud_base,
 															2>;
-	// enabled only for KD_TREE backend
-	std::tuple<cv::Mat, cv::Mat> GetSemanticBEV(double vehicle_width, double vehicle_length) const;
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   cv::Mat semantic,
+							   cv::Mat depth);
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   cv::Mat semantic,
+							   cv::Mat depth,
+							   Eigen::Matrix4d& transform);
+	void AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   		   cv::Mat semantic,
+							   		   cv::Mat depth);
+	std::tuple<cv::Mat, cv::Mat> GetBEVData(double vehicle_width, double vehicle_length) const;
 	cv::Mat GetFOVMask() const;
 	size_t GetMajorityVote(const std::vector<size_t>& knn_indices,
 						   const std::vector<double>& distances) const;
@@ -93,31 +106,44 @@ protected:
 	pcl::PointCloud<pcl::PointXYZL> target_cloud_;
 	std::unique_ptr<KDTree2D> kd_tree_;
 };
+
+/* ----------- cloud_base surface map specialization  ------------------------------------- */
 template <>
-class cloud_base<cloud_backend::SURFACE_MAP> : public base_members {
-	cv::Mat GetFOVMask() const;
+class cloud_base<CloudBackend::SURFACE_MAP> : protected base_members {
+public:
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   cv::Mat semantic,
+							   cv::Mat depth);
+	cv::Mat GetFOVMask(size_t min_point_count) const;
+	template <AggregationStrategy S>
+	std::tuple<cv::Mat, cv::Mat> GetBEVData(double vehicle_width, double vehicle_length) const;
+
 protected:
-	std::unique_ptr<SurfaceMap<pcl::PointXYZL>> surface_map_;
+	std::unique_ptr<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>> surface_map_;
 };
-
-
-template <typename T>
-class SemanticCloud : public cloud_base<T>
+/* ----------- cloud_base double surface map specialization  ------------------------------ */
+template <>
+class cloud_base<CloudBackend::DOUBLE_SURFACE_MAP> : protected base_members {
+public:
+	template <DestinationMap M>
+	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							   cv::Mat semantic,
+							   cv::Mat depth);
+	template <AggregationStrategy S>
+	std::tuple<cv::Mat, cv::Mat> GetBEVData(double vehicle_width,
+											double vehicle_length,
+											size_t min_point_count) const;
+protected:
+	std::unique_ptr<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>> mask_surface_map_;
+	std::unique_ptr<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>> semantic_surface_map_;
+};
+/* ----------- templated semantic cloud class  -------------------------------------------- */
+template <CloudBackend B>
+class SemanticCloud : public cloud_base<B>
 {
 public:
 	explicit SemanticCloud(geom::base_members::Settings& settings);
 	~SemanticCloud();
-	// enabled for both specializations
-	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							   cv::Mat semantic,
-							   cv::Mat depth);
-	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							   cv::Mat semantic,
-							   cv::Mat depth,
-							   Eigen::Matrix4d& transform);
-	void AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							   		   cv::Mat semantic,
-							   		   cv::Mat depth);
 	
 	static cv::Mat ConvertToCityScapesPallete(cv::Mat semantic_ids);
 

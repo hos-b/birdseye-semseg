@@ -55,6 +55,7 @@ public:
 	void PauseSensorCallbacks();
 	void ResumeSensorCallbacks();
 
+	template<geom::CloudBackend B>
 	MASSDataType GenerateDataPoint(unsigned int agent_batch_index);
 	// transform related
 	inline double carla_x() const;
