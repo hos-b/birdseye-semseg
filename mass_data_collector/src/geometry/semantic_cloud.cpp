@@ -16,9 +16,11 @@ namespace geom
 /* virtual base destructor of abstract class */
 base_members::~base_members() {}
 
+/* ------- KD-Tree template specialization ----------------------------------------------------- */
+
 /* constructor */
 template<>
-SemanticCloud<cloud_backend::KD_TREE>::SemanticCloud(geom::base_members::Settings& settings) {
+SemanticCloud<CloudBackend::KD_TREE>::SemanticCloud(geom::base_members::Settings& settings) {
 	cfg_ = settings;
 	kd_tree_ = nullptr;
 	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
@@ -29,7 +31,7 @@ SemanticCloud<cloud_backend::KD_TREE>::SemanticCloud(geom::base_members::Setting
 
 /* destructor: cleans containers */
 template<>
-SemanticCloud<cloud_backend::KD_TREE>::~SemanticCloud() {
+SemanticCloud<CloudBackend::KD_TREE>::~SemanticCloud() {
 	if (kd_tree_) {
 		kd_tree_.reset();
 		kd_tree_ = nullptr;
@@ -38,8 +40,7 @@ SemanticCloud<cloud_backend::KD_TREE>::~SemanticCloud() {
 }
 
 /* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud  */
-template<>
-void SemanticCloud<cloud_backend::KD_TREE>::
+void cloud_base<CloudBackend::KD_TREE>::
 		AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							  cv::Mat semantic,
 							  cv::Mat depth) {
@@ -54,7 +55,8 @@ void SemanticCloud<cloud_backend::KD_TREE>::
 			if (config::fileterd_semantics.at(label)) {
 				continue;
 			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j),
+																	  depth.at<float>(i, j));
 			// triggers a lot
 			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
 				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
@@ -74,8 +76,7 @@ void SemanticCloud<cloud_backend::KD_TREE>::
 /* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud.
    the points are filtered so that they don't overlap and only the point with the highest z counts. necessary
    for FoV mask calculation */
-template<>
-void SemanticCloud<cloud_backend::KD_TREE>::
+void cloud_base<CloudBackend::KD_TREE>::
 		AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 									  cv::Mat semantic,
 									  cv::Mat depth) {
@@ -120,8 +121,7 @@ void SemanticCloud<cloud_backend::KD_TREE>::
 }
 
 /* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
-template<>
-void SemanticCloud<cloud_backend::KD_TREE>::
+void cloud_base<CloudBackend::KD_TREE>::
 		AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							  cv::Mat semantic,
 							  cv::Mat depth,
@@ -145,7 +145,7 @@ void SemanticCloud<cloud_backend::KD_TREE>::
 }
 
 /* simple kd-tree look up. only use whe the cloud is  */
-std::pair<std::vector<size_t>, std::vector<double>> cloud_base<cloud_backend::KD_TREE>::
+std::pair<std::vector<size_t>, std::vector<double>> cloud_base<CloudBackend::KD_TREE>::
 		FindClosestPoints(double knn_x, double knn_y, size_t num_results) const {
 	double query[2] = {knn_x, knn_y};
 	std::vector<size_t> knn_ret_index(num_results);
@@ -158,7 +158,7 @@ std::pair<std::vector<size_t>, std::vector<double>> cloud_base<cloud_backend::KD
 }
 
 /* gets the majority vote for label based on the results of a knn search */
-size_t cloud_base<cloud_backend::KD_TREE>::GetMajorityVote(const std::vector<size_t>& knn_indices,
+size_t cloud_base<CloudBackend::KD_TREE>::GetMajorityVote(const std::vector<size_t>& knn_indices,
 					    								   const std::vector<double>& distances) const {
 	// map from semantic id to count
 	std::unordered_map<unsigned int, double> map(knn_indices.size());
@@ -189,8 +189,8 @@ size_t cloud_base<cloud_backend::KD_TREE>::GetMajorityVote(const std::vector<siz
 }
 
 /* returns the orthographic bird's eye view image */
-std::tuple<cv::Mat, cv::Mat> cloud_base<cloud_backend::KD_TREE>::
-		GetSemanticBEV(double vehicle_width, double vehicle_length) const {
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::KD_TREE>::
+		GetBEVData(double vehicle_width, double vehicle_length) const {
 	// ego roi
 	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
 	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
@@ -228,7 +228,7 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<cloud_backend::KD_TREE>::
 
 /* returns the BEV mask visible from the camera. this method assumes the kd tree
    is populated only with points captured with the front camera */
-cv::Mat cloud_base<cloud_backend::KD_TREE>::GetFOVMask() const {
+cv::Mat cloud_base<CloudBackend::KD_TREE>::GetFOVMask() const {
 	cv::Mat bev_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < bev_mask.rows; ++i) {
@@ -249,14 +249,14 @@ cv::Mat cloud_base<cloud_backend::KD_TREE>::GetFOVMask() const {
 /* removes overlapping or invisible points for the target cloud. initializes kd tree.
    filters unwanted labels (declared in config::filtered_semantics)
 */
-void cloud_base<cloud_backend::KD_TREE>::BuildKDTree() {
+void cloud_base<CloudBackend::KD_TREE>::BuildKDTree() {
 	// building kd-tree
 	kd_tree_ = std::make_unique<KDTree2D>(2, *this, nanoflann::KDTreeSingleIndexAdaptorParams(cfg_.kd_max_leaf));
 	kd_tree_->buildIndex();
 }
 
 /* saves the color coded point cloud */
-void cloud_base<cloud_backend::KD_TREE>::SaveCloud(const std::string& path) const {
+void cloud_base<CloudBackend::KD_TREE>::SaveCloud(const std::string& path) const {
 	if (target_cloud_.empty()) {
 		std::cout << "empty cloud, not saving." << std::endl;
 		return;
@@ -284,7 +284,7 @@ void cloud_base<cloud_backend::KD_TREE>::SaveCloud(const std::string& path) cons
 
 
 /* returns the visible points in the cloud that are visible in the given camera geometry */
-void cloud_base<cloud_backend::KD_TREE>::
+void cloud_base<CloudBackend::KD_TREE>::
 	SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
 					const std::string& path, double pixel_limit) const {
 	pcl::PointCloud<pcl::PointXYZRGB> visible_cloud;
@@ -292,12 +292,12 @@ void cloud_base<cloud_backend::KD_TREE>::
 	size_t size = 0;
 	cv::Scalar color;
 	#pragma omp parallel for
-	for (size_t i = 0; i < target_cloud_.points.size(); ++i) {
-		if (rgb_geometry->IsInView(target_cloud_.points[i], pixel_limit)) {
-			visible_cloud.points[size].x = target_cloud_.points[i].x;
-			visible_cloud.points[size].y = target_cloud_.points[i].y;
-			visible_cloud.points[size].z = target_cloud_.points[i].z;
-			color = config::carla_to_cityscapes_palette_map.at(target_cloud_.points[i].label);
+	for (auto it = target_cloud_.points.begin(); it != target_cloud_.points.end(); it += 1) {
+		if (rgb_geometry->IsInView(*it, pixel_limit)) {
+			visible_cloud.points[size].x = it->x;
+			visible_cloud.points[size].y = it->y;
+			visible_cloud.points[size].z = it->z;
+			color = config::carla_to_cityscapes_palette_map.at(it->label);
 			visible_cloud.points[size].b = color[0];
 			visible_cloud.points[size].g = color[1];
 			visible_cloud.points[size].r = color[2];
@@ -315,29 +315,27 @@ void cloud_base<cloud_backend::KD_TREE>::
 
 /* constructor */
 template<>
-SemanticCloud<cloud_backend::SURFACE_MAP>::SemanticCloud(geom::base_members::Settings& settings) {
+SemanticCloud<CloudBackend::SURFACE_MAP>::SemanticCloud(geom::base_members::Settings& settings) {
 	cfg_ = settings;
 	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
 	pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x) / static_cast<double>(cfg_.image_rows);
-	SurfaceMap<pcl::PointXYZL>::Settings smap_settings{pixel_h_, pixel_w_,
-											 		   cfg_.max_point_x, cfg_.max_point_y,
-											 		   cfg_.image_rows, cfg_.image_cols};
-	surface_map_ = std::make_unique<SurfaceMap<pcl::PointXYZL>>(smap_settings);
+	SurfaceMapSettings smap_settings{pixel_h_, pixel_w_,
+									 cfg_.max_point_x, cfg_.max_point_y,
+									 cfg_.image_rows , cfg_.image_cols};
+	surface_map_ = std::make_unique<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>>(smap_settings);
 }
 
 /* destructor: cleans containers */
 template<>
-SemanticCloud<cloud_backend::SURFACE_MAP>::~SemanticCloud() {
-	surface_map_->~SurfaceMap();
+SemanticCloud<CloudBackend::SURFACE_MAP>::~SemanticCloud() {
+	surface_map_.reset();
 }
 
-/* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud  */
-template<>
-void SemanticCloud<cloud_backend::SURFACE_MAP>::
+/* converts a semantic|depth image into 3D points [in egocar transform] and adds them to the point cloud  */
+void cloud_base<CloudBackend::SURFACE_MAP>::
 		AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
 							  cv::Mat semantic,
 							  cv::Mat depth) {
-	surface_map_->Reserve(semantic.rows * semantic.cols);
 	// resizing + omp critical|atomic is definitely worse
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic.rows; ++i) {
@@ -347,50 +345,23 @@ void SemanticCloud<cloud_backend::SURFACE_MAP>::
 			if (config::fileterd_semantics.at(label)) {
 				continue;
 			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			Eigen::Vector3d pixel_3d_loc =
+				geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
 			pcl::PointXYZL point;
 			point.label = label;
 			point.x = pixel_3d_loc.x();
 			point.y = pixel_3d_loc.y();
 			point.z = pixel_3d_loc.z();
-			surface_map_->AddPoint(point);		
-		}
-	}
-}
-
-/* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
-template<>
-void SemanticCloud<cloud_backend::SURFACE_MAP>::
-		AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							  cv::Mat semantic,
-							  cv::Mat depth,
-							  Eigen::Matrix4d& transform) {
-	surface_map_->Reserve(semantic.rows * semantic.cols);
-	# pragma omp parallel for collapse(2)
-	for (int i = 0; i < semantic.rows; ++i) {
-		for (int j = 0; j < semantic.cols; ++j) {
-			auto label = semantic.at<uchar>(i, j);
-			// filter if it belongs to a traffic light or pole
-			if (config::fileterd_semantics.at(label)) {
-				continue;
-			}
-			Eigen::Vector3d pixel_3d_glob = 
-				geometry->ReprojectToGlobal(Eigen::Vector2d(i, j),
-											transform,
-											depth.at<float>(i, j));
-			pcl::PointXYZL point;
-			point.label = label;
-			point.x = pixel_3d_glob.x();
-			point.y = pixel_3d_glob.y();
-			point.z = pixel_3d_glob.z();
+			// #pragma omp critical
 			surface_map_->AddPoint(point);
 		}
 	}
 }
 
-/* returns the orthographic bird's eye view image */
-/* std::tuple<cv::Mat, cv::Mat> SemanticCloud<CloudBackend::SURFACE_MAP>::
-		GetSemanticBEV(double vehicle_width, double vehicle_length) const {
+/* returns the orthographic bird's eye view image using highest z strategy */
+template<>
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::SURFACE_MAP>::
+		GetBEVData<AggregationStrategy::HIGHEST_Z>(double vehicle_width, double vehicle_length) const {
 	// ego roi
 	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
 	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
@@ -405,45 +376,366 @@ void SemanticCloud<cloud_backend::SURFACE_MAP>::
 	cv::Mat vehicle_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	#pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic_bev.rows; ++i) {
-		// uchar* semantic_row = semantic_bev.ptr<uchar>(i);
-		// uchar* mask_row = vehicle_mask.ptr<uchar>(i);
 		for (int j = 0; j < semantic_bev.cols; ++j) {
 			auto& points = surface_map_->GetGridPoints(j, i);
-			// ------------------------ majority voting for semantic id ------------------------
-			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, cfg_.knn_count);
-			auto mv_winner = target_cloud_.points[GetMajorityVote(knn_ret_index, knn_sqrd_dist)];
-			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(mv_winner.label);
-			// if the point belongs to the car itself
-			if (mv_winner.label == config::kCARLAVehiclesSemanticID &&
-				ego_vehicle_rect.contains(cv::Point(j, i))) {
-				vehicle_mask.at<uchar>(i, j) = 255;
+			// skip if bin is empty, shouldn't happen
+			if (points.size() == 0) {
 				continue;
+			}
+			pcl::PointXYZL strat_winner = points.front();
+			for (auto it = points.begin(); it != points.end(); it += 1) {
+				if (it->z > strat_winner.z) {
+					strat_winner = *it;
+				}
+			}
+			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(strat_winner.label);
+			// if the point belongs to the car itself
+			if (strat_winner.label == config::kCARLAVehiclesSemanticID &&
+					ego_vehicle_rect.contains(cv::Point(j, i))) {
+				vehicle_mask.at<uchar>(i, j) = 255;
 			}
 		}
 	}
 	return std::make_tuple(semantic_bev, vehicle_mask);
-} */
+}
+
+/* returns the orthographic bird's eye view image using majority voting strategy */
+template<>
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::SURFACE_MAP>::
+		GetBEVData<AggregationStrategy::MAJORITY>(double vehicle_width, double vehicle_length) const {
+	// ego roi
+	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
+	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
+	cv::Point mid(ego_col_px, ego_row_px);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
+	cv::Rect2d ego_vehicle_rect(topleft, botright);
+	// the output images
+	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	cv::Mat vehicle_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	#pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic_bev.rows; ++i) {
+		for (int j = 0; j < semantic_bev.cols; ++j) {
+			auto& points = surface_map_->GetGridPoints(j, i);
+			// skip if bin is empty
+			if (points.size() == 0) {
+				// TODO: figure out not skipping
+				continue;
+			}
+			// 22 classes in total
+			std::vector<size_t> class_counts(22, 0);
+			uint8_t winner_class = 0;
+			size_t winner_count = 0;
+			for (auto& point : points) {
+				auto& cls_count = class_counts[point.label];
+				cls_count += 1;
+				if (cls_count > winner_count) {
+					winner_count = cls_count;
+					winner_class = static_cast<uint8_t>(point.label);
+				}
+			}
+			semantic_bev.at<uchar>(i, j) = winner_class;
+			// if the point belongs to the car itself
+			if (winner_class == config::kCARLAVehiclesSemanticID &&
+					ego_vehicle_rect.contains(cv::Point(j, i))) {
+				vehicle_mask.at<uchar>(i, j) = 255;
+			}
+		}
+	}
+	return std::make_tuple(semantic_bev, vehicle_mask);
+}
+
+/* returns the orthographic bird's eye view image using weighted majority voting strategy */
+template<>
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::SURFACE_MAP>::
+		GetBEVData<AggregationStrategy::WEIGHTED_MAJORITY>(double vehicle_width, double vehicle_length) const {
+	// ego roi
+	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
+	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
+	cv::Point mid(ego_col_px, ego_row_px);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
+	cv::Rect2d ego_vehicle_rect(topleft, botright);
+	// the output images
+	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	cv::Mat vehicle_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	#pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic_bev.rows; ++i) {
+		for (int j = 0; j < semantic_bev.cols; ++j) {
+			auto& points = surface_map_->GetGridPoints(j, i);
+			// skip if bin is empty
+			if (points.size() == 0) {
+				continue;
+			}
+			std::vector<double> class_weights(22, 0.0);
+			size_t winner_class = 0;
+			double winner_weight = 0;
+			for (auto& point : points) {
+				auto label = point.label;
+				auto& cls_weight = class_weights[label];
+				cls_weight += config::semantic_weight.at(label) + point.z * 100.0;
+				if (cls_weight > winner_weight) {
+					winner_weight = cls_weight;
+					winner_class = label;
+				}
+			}
+			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(winner_class);
+			// if the point belongs to the car itself
+			if (winner_class == config::kCARLAVehiclesSemanticID &&
+					ego_vehicle_rect.contains(cv::Point(j, i))) {
+				vehicle_mask.at<uchar>(i, j) = 255;
+			}
+		}
+	}
+	return std::make_tuple(semantic_bev, vehicle_mask);
+}
 
 /* returns the BEV mask visible from the camera. this method assumes the kd tree
    is populated only with points captured with the front camera */
-cv::Mat cloud_base<cloud_backend::SURFACE_MAP>::GetFOVMask() const {
+cv::Mat cloud_base<CloudBackend::SURFACE_MAP>::GetFOVMask(size_t min_point_count) const {
 	cv::Mat bev_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < bev_mask.rows; ++i) {
-		// uchar* mask_row = bev_mask.ptr<uchar>(i);
 		for (int j = 0; j < bev_mask.cols; ++j) {
-			// get the center of the square that is to be mapped to a pixel
-			// if the point is close enough
-			
+			if (surface_map_->GetGridPoints(j, i).size() >= min_point_count) {
+				bev_mask.at<uchar>(i, j) = 255;
+			}
 		}
 	}
 	return bev_mask;
 }
 
-/* ------ Shared definitions --------------------------------------------------------------- */
+/* ------- DoubleSurfaceMap template specialization -------------------------------------------- */
+/* constructor */
+template<>
+SemanticCloud<CloudBackend::DOUBLE_SURFACE_MAP>::SemanticCloud(geom::base_members::Settings& settings) {
+	cfg_ = settings;
+	pixel_w_ = (cfg_.max_point_y - cfg_.min_point_y) / static_cast<double>(cfg_.image_cols);
+	pixel_h_ = (cfg_.max_point_x - cfg_.min_point_x) / static_cast<double>(cfg_.image_rows);
+	SurfaceMapSettings smap_settings{pixel_h_, pixel_w_,
+									 cfg_.max_point_x, cfg_.max_point_y,
+									 cfg_.image_rows , cfg_.image_cols};
+	mask_surface_map_ =
+		std::make_unique<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>>(smap_settings);
+	semantic_surface_map_ =
+		std::make_unique<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>>(smap_settings);
+}
+
+/* destructor: cleans containers */
+template<>
+SemanticCloud<CloudBackend::DOUBLE_SURFACE_MAP>::~SemanticCloud() {
+	semantic_surface_map_.reset();
+	mask_surface_map_.reset();
+}
+
+/* converts a semantic|depth image into 3D points [in egocar transform] and adds them to the point cloud  */
+template <>
+void cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
+		AddSemanticDepthImage<DestinationMap::MASK>(std::shared_ptr<geom::CameraGeometry> geometry,
+							  						cv::Mat semantic,
+							  						cv::Mat depth) {
+	size_t avg_size_increase = static_cast<double>(semantic.rows * semantic.cols) /
+							(cfg_.image_cols * cfg_.image_rows);
+	// resizing + omp critical|atomic is definitely worse
+	# pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic.rows; ++i) {
+		for (int j = 0; j < semantic.cols; ++j) {
+			auto label = semantic.at<uchar>(i, j);
+			// filter if it belongs to a traffic light or pole
+			if (config::fileterd_semantics.at(label)) {
+				continue;
+			}
+			Eigen::Vector3d pixel_3d_loc =
+				geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			pcl::PointXYZL point;
+			point.label = label;
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			mask_surface_map_->AddPoint(point);
+		}
+	}
+}
+
+/* converts a semantic|depth image into 3D points [in egocar transform] and adds them to the point cloud  */
+template <>
+void cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
+		AddSemanticDepthImage<DestinationMap::SEMANTIC>(std::shared_ptr<geom::CameraGeometry> geometry,
+							  							cv::Mat semantic,
+							  							cv::Mat depth) {
+	size_t avg_size_increase = static_cast<double>(semantic.rows * semantic.cols) /
+							(cfg_.image_cols * cfg_.image_rows);
+	// resizing + omp critical|atomic is definitely worse
+	# pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic.rows; ++i) {
+		for (int j = 0; j < semantic.cols; ++j) {
+			auto label = semantic.at<uchar>(i, j);
+			// filter if it belongs to a traffic light or pole
+			if (config::fileterd_semantics.at(label)) {
+				continue;
+			}
+			Eigen::Vector3d pixel_3d_loc =
+				geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			pcl::PointXYZL point;
+			point.label = label;
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			semantic_surface_map_->AddPoint(point);
+		}
+	}
+}
+
+/* returns the orthographic bird's eye view image using highest z strategy */
+template<>
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
+		GetBEVData<AggregationStrategy::HIGHEST_Z>(double vehicle_width,
+												   double vehicle_length,
+												   size_t min_point_count) const {
+	// ego roi
+	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
+	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
+	cv::Point mid(ego_col_px, ego_row_px);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
+	cv::Rect2d ego_vehicle_rect(topleft, botright);
+	// the output images
+	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	cv::Mat mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	#pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic_bev.rows; ++i) {
+		for (int j = 0; j < semantic_bev.cols; ++j) {
+			// semantic point container
+			auto& semantic_points = semantic_surface_map_->GetGridPoints(j, i);
+			pcl::PointXYZL strat_winner = semantic_points.front();
+			for (auto it = semantic_points.begin(); it != semantic_points.end(); it += 1) {
+				if (it->z > strat_winner.z) {
+					strat_winner = *it;
+				}
+			}
+			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(strat_winner.label);
+			// if the point belongs to the car itself
+			if (strat_winner.label == config::kCARLAVehiclesSemanticID &&
+					ego_vehicle_rect.contains(cv::Point(j, i))) {
+				mask.at<uchar>(i, j) = 255;
+			}
+			// fill out the rest of the mask using the other container
+			if (mask_surface_map_->GetGridPoints(j, i).size() >= min_point_count) {
+				mask.at<uchar>(i, j) = 255;
+			}
+		}
+	}
+	return std::make_tuple(semantic_bev, mask);
+}
+
+/* returns the orthographic bird's eye view image using majority voting strategy */
+template<>
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
+		GetBEVData<AggregationStrategy::MAJORITY>(double vehicle_width,
+												  double vehicle_length,
+												  size_t min_point_count) const {
+	// ego roi
+	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
+	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
+	cv::Point mid(ego_col_px, ego_row_px);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
+	cv::Rect2d ego_vehicle_rect(topleft, botright);
+	// the output images
+	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	cv::Mat mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	#pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic_bev.rows; ++i) {
+		for (int j = 0; j < semantic_bev.cols; ++j) {
+			auto& semantic_points = semantic_surface_map_->GetGridPoints(j, i);
+			// 22 classes in total
+			std::vector<size_t> class_counts(22, 0);
+			uint8_t winner_class = 0;
+			size_t winner_count = 0;
+			for (auto& point : semantic_points) {
+				auto& cls_count = class_counts[point.label];
+				cls_count += 1;
+				if (cls_count > winner_count) {
+					winner_count = cls_count;
+					winner_class = static_cast<uint8_t>(point.label);
+				}
+			}
+			semantic_bev.at<uchar>(i, j) = winner_class;
+			// if the point belongs to the car itself
+			if (winner_class == config::kCARLAVehiclesSemanticID &&
+					ego_vehicle_rect.contains(cv::Point(j, i))) {
+				mask.at<uchar>(i, j) = 255;
+			}
+			// fill out the rest of the mask using the other container
+			if (mask_surface_map_->GetGridPoints(j, i).size() >= min_point_count) {
+				mask.at<uchar>(i, j) = 255;
+			}
+		}
+	}
+	return std::make_tuple(semantic_bev, mask);
+}
+
+/* returns the orthographic bird's eye view image using weighted majority voting strategy */
+template<>
+std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
+		GetBEVData<AggregationStrategy::WEIGHTED_MAJORITY>(double vehicle_width,
+														   double vehicle_length,
+														   size_t min_point_count) const {
+	// ego roi
+	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
+	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
+	cv::Point mid(ego_col_px, ego_row_px);
+	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
+	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
+	cv::Rect2d ego_vehicle_rect(topleft, botright);
+	// the output images
+	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	cv::Mat mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
+	#pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic_bev.rows; ++i) {
+		for (int j = 0; j < semantic_bev.cols; ++j) {
+			auto& semantic_points = semantic_surface_map_->GetGridPoints(j, i);
+			std::vector<double> class_weights(22, 0.0);
+			size_t winner_class = 0;
+			double winner_weight = 0;
+			for (auto& point : semantic_points) {
+				auto label = point.label;
+				auto& cls_weight = class_weights[label];
+				cls_weight += config::semantic_weight.at(label) + point.z * 100.0;
+				if (cls_weight > winner_weight) {
+					winner_weight = cls_weight;
+					winner_class = label;
+				}
+			}
+			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(winner_class);
+			// if the point belongs to the car itself
+			if (winner_class == config::kCARLAVehiclesSemanticID &&
+					ego_vehicle_rect.contains(cv::Point(j, i))) {
+				mask.at<uchar>(i, j) = 255;
+			}
+			// fill out the rest of the mask using the other container
+			if (mask_surface_map_->GetGridPoints(j, i).size() >= min_point_count) {
+				mask.at<uchar>(i, j) = 255;
+			}
+		}
+	}
+	return std::make_tuple(semantic_bev, mask);
+}
+
+/* --------- Shared definitions ---------------------------------------------------------------- */
 
 /* converts the smenatic mat to an RGB image */
-template <typename B>
+template <CloudBackend B>
 cv::Mat SemanticCloud<B>::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 	cv::Mat rgb_mat(semantic_ids.rows, semantic_ids.cols, CV_8UC3);
 	#pragma omp parallel for
@@ -457,11 +749,11 @@ cv::Mat SemanticCloud<B>::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 	return rgb_mat;
 }
 
-/* ------- Deprecated functions ------------------------------------------------------------ */
+/* ------- Deprecated functions ---------------------------------------------------------------- */
 /* returns the boundaries of the car (calculated from filtered point cloud) */
 [[deprecated("deprecated function")]]
 std::tuple<double, double, double, double>
-		cloud_base<cloud_backend::KD_TREE>::GetVehicleBoundary() const {
+		cloud_base<CloudBackend::KD_TREE>::GetVehicleBoundary() const {
 	double front = 0.0;
 	double back = 0.0;
 	double left = 0.0;
@@ -516,7 +808,7 @@ std::tuple<double, double, double, double>
 
 /* debug function that returns the x,y boundaries of the cloud */
 std::tuple<double, double, double, double>
-		cloud_base<cloud_backend::KD_TREE>::GetBoundaries() const {
+		cloud_base<CloudBackend::KD_TREE>::GetBoundaries() const {
 	float minx = 0, miny = 0, maxx = 0, maxy = 0;
 	for (const auto& point : target_cloud_.points) {
 		if (point.x < minx) {

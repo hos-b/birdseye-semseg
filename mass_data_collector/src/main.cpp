@@ -137,7 +137,8 @@ int main(int argc, char **argv)
 		size_t agent_batch_index = 0;
 		for (unsigned int i = 0; i < batch_size; ++i) {
 			agents_done += 1;
-			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint,
+			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint
+										<geom::CloudBackend::KD_TREE>,
 									&agents[shuffled[i]], agent_batch_index++);
 		}
 		state = 's'; // saving

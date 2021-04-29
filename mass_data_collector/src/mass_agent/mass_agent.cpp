@@ -263,11 +263,13 @@ void MassAgent::DestroyAgent() {
 }
 
 /* checks the buffers and creates a single data point from all the sensors */
-MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
+template <>
+MASSDataType MassAgent::GenerateDataPoint
+		<geom::CloudBackend::KD_TREE>(unsigned int agent_batch_index) {
 	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
-	geom::SemanticCloud<geom::cloud_backend::KD_TREE> mask_cloud(sc_settings());
+	geom::SemanticCloud<geom::CloudBackend::KD_TREE> mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
 #ifndef __RELEASE
 	if (!succ) {
@@ -279,7 +281,7 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask();
 	// ---------------------------------------- creating target cloud ----------------------------------------
-	geom::SemanticCloud<geom::cloud_backend::KD_TREE> target_cloud(sc_settings());
+	geom::SemanticCloud<geom::CloudBackend::KD_TREE> target_cloud(sc_settings());
 	for (auto& semantic_depth_cam : semantic_pc_cams_) {
 		auto[success, semantic, depth] = semantic_depth_cam->pop();
 #ifndef __RELEASE
@@ -292,7 +294,7 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
 	}
 	target_cloud.BuildKDTree();
-	auto[semantic_bev, vehicle_mask] = target_cloud.GetSemanticBEV(vehicle_width_, vehicle_length_);
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetBEVData(vehicle_width_, vehicle_length_);
 	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 #ifndef __RELEASE
@@ -319,6 +321,125 @@ MASSDataType MassAgent::GenerateDataPoint(unsigned int agent_batch_index) {
 	return datapoint;
 }
 
+/* checks the buffers and creates a single data point from all the sensors */
+template<>
+MASSDataType MassAgent::GenerateDataPoint
+		<geom::CloudBackend::SURFACE_MAP>(unsigned int agent_batch_index) {
+	CaptureOnce();
+	MASSDataType datapoint{};
+	// ----------------------------------------- creating mask cloud -----------------------------------------
+	geom::SemanticCloud<geom::CloudBackend::SURFACE_MAP> mask_cloud(sc_settings());
+	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
+#ifndef __RELEASE
+	if (!succ) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+		return datapoint;
+	}
+#endif
+	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
+	cv::Mat fov_mask = mask_cloud.GetFOVMask(1);
+	// std::cout << "max mask size: " << mask_cloud.find_max_container_size() << std::endl;
+	// ---------------------------------------- creating target cloud ----------------------------------------
+	geom::SemanticCloud<geom::CloudBackend::SURFACE_MAP> target_cloud(sc_settings());
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+#ifndef __RELEASE
+		if (!success) {
+			std::cout << "ERROR: agent " + std::to_string(id_)
+					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+			return datapoint;
+		}
+#endif
+		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+	}
+	// std::cout << "max semantic size: " << target_cloud.find_max_container_size() << std::endl;
+	auto[semantic_bev, vehicle_mask] =
+		target_cloud.GetBEVData<geom::AggregationStrategy::HIGHEST_Z>(vehicle_width_, vehicle_length_);
+	// ------------------------------------------ getting rgb image ------------------------------------------
+	auto[success, rgb_image] = front_rgb_->pop();
+#ifndef __RELEASE
+	if (!success) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
+		return datapoint;
+	}
+#endif
+	// filling the datapoint
+	datapoint.agent_id = agent_batch_index;
+	// omp for does not improve performance, may even degrade
+	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
+		datapoint.front_rgb[i] = rgb_image.data[i];
+	}
+	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
+		datapoint.top_semseg[i] = semantic_bev.data[i];
+	}
+	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
+		datapoint.top_mask[i] = fov_mask.data[i] | vehicle_mask.data[i];
+	}
+	for (size_t i = 0; i < statics::transform_length; ++i) {
+		datapoint.transform[i] = transform_.data()[i];
+	}
+	return datapoint;
+}
+
+/* checks the buffers and creates a single data point from all the sensors */
+template<>
+MASSDataType MassAgent::GenerateDataPoint
+		<geom::CloudBackend::DOUBLE_SURFACE_MAP>(unsigned int agent_batch_index) {
+	CaptureOnce();
+	MASSDataType datapoint{};
+	// ----------------------------------------- creating mask cloud -----------------------------------------
+	geom::SemanticCloud<geom::CloudBackend::DOUBLE_SURFACE_MAP> mixed_cloud(sc_settings());
+	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
+#ifndef __RELEASE
+	if (!succ) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s front pc cam is unresponsive" << std::endl;
+		return datapoint;
+	}
+#endif
+	mixed_cloud.AddSemanticDepthImage<geom::DestinationMap::MASK>
+		(front_mask_pc_->geometry(), front_semantic, front_depth);
+	// ---------------------------------------- creating target cloud ----------------------------------------
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+#ifndef __RELEASE
+		if (!success) {
+			std::cout << "ERROR: agent " + std::to_string(id_)
+					  + "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
+			return datapoint;
+		}
+#endif
+		mixed_cloud.AddSemanticDepthImage<geom::DestinationMap::SEMANTIC>
+			(semantic_depth_cam->geometry(), semantic, depth);
+	}
+	// TODO: change this into a parameter
+	auto[semantic_bev, mask] =
+		mixed_cloud.GetBEVData<geom::AggregationStrategy::HIGHEST_Z>(vehicle_width_, vehicle_length_, 5);
+	// ------------------------------------------ getting rgb image ------------------------------------------
+	auto[success, rgb_image] = front_rgb_->pop();
+#ifndef __RELEASE
+	if (!success) {
+		std::cout << "ERROR: agent " + std::to_string(id_) + "'s rgb cam is unresponsive" << std::endl;
+		return datapoint;
+	}
+#endif
+	// filling the datapoint
+	datapoint.agent_id = agent_batch_index;
+	// omp for does not improve performance, may even degrade
+	for (size_t i = 0; i < statics::front_rgb_byte_count; ++i) {
+		datapoint.front_rgb[i] = rgb_image.data[i];
+	}
+	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
+		datapoint.top_semseg[i] = semantic_bev.data[i];
+	}
+	for (size_t i = 0; i < statics::top_semseg_byte_count; ++i) {
+		datapoint.top_mask[i] = mask.data[i];
+	}
+	for (size_t i = 0; i < statics::transform_length; ++i) {
+		datapoint.transform[i] = transform_.data()[i];
+	}
+	return datapoint;
+}
+
 /* moves the agent underground next to the ninja turtles */
 void MassAgent::HideAgent() {
 	carla::geom::Transform tf = vehicle_->GetTransform();
@@ -335,6 +456,7 @@ void MassAgent::HideAgent() {
 		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
 	} while(true);
 }
+
 /* stops the callback on all sensors */
 void MassAgent::PauseSensorCallbacks() {
 	front_rgb_->PauseCallback();
@@ -343,6 +465,7 @@ void MassAgent::PauseSensorCallbacks() {
 		semantic_cam->PauseCallback();
 	}
 }
+
 /* resumes the callback on all sensors */
 void MassAgent::ResumeSensorCallbacks() {
 	front_rgb_->ResumeCallback();
@@ -550,7 +673,7 @@ void MassAgent::AssertSize(size_t size) {
 /* create a single cloud using all cameras of all agents */
 void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
 	geom::base_members::Settings semantic_conf{1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128};
-	geom::SemanticCloud<geom::cloud_backend::KD_TREE> target_cloud(semantic_conf);
+	geom::SemanticCloud<geom::CloudBackend::KD_TREE> target_cloud(semantic_conf);
 	for (size_t i = 0; i < size; ++i) {
 		agents[i].CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
