@@ -86,7 +86,7 @@ namespace config
         /* kCARLATerrainSemanticID : */         false
     };
     const double semantic_weight[23] {
-        static_cast<double>(filtered_semantics[kCARLAUnlabeledSemanticID]) + 0.0,
+        static_cast<double>(filtered_semantics[kCARLAUnlabeledSemanticID]) * 0.0,
         static_cast<double>(filtered_semantics[kCARLABuildingSemanticID]) * 2.0,
         static_cast<double>(filtered_semantics[kCARLAFenceSemanticID]) * 0.0, // TODO: allow ?
         static_cast<double>(filtered_semantics[kCARLAOtherSemanticID]) * 1.0,

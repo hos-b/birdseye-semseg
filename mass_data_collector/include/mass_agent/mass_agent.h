@@ -5,9 +5,6 @@
 #include <string>
 #include <thread>
 
-#include "carla/client/Walker.h"
-#include "carla/client/Waypoint.h"
-#include "carla/geom/Location.h"
 #include "geometry/semantic_cloud.h"
 #include "mass_agent/sensors.h"
 
@@ -20,9 +17,11 @@
 
 // CARLA stuff
 #include <carla/client/Map.h>
-#include <carla/client/TimeoutException.h>
-#include <carla/client/World.h>
+#include <carla/geom/Location.h>
 #include <carla/geom/Transform.h>
+#include <carla/client/World.h>
+#include <carla/client/Waypoint.h>
+#include <carla/client/TimeoutException.h>
 
 // HDF5 stuff
 #include "hdf5_api/hdf5_dataset.h"

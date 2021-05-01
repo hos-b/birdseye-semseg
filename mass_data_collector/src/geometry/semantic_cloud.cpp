@@ -487,6 +487,11 @@ void cloud_base<CloudBackend::MIXED>::
 			}
 			Eigen::Vector3d pixel_3d_loc =
 				geometry->ReprojectToLocal(Eigen::Vector2d(i, j), depth.at<float>(i, j));
+			// triggers a lot
+			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
+				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
+				continue;
+			}
 			pcl::PointXYZL point;
 			point.label = label;
 			point.x = pixel_3d_loc.x();
@@ -499,6 +504,7 @@ void cloud_base<CloudBackend::MIXED>::
 			}
 		}
 	}
+	mask_cloud_.points.resize(index);
 	BuildKDTree();
 }
 
@@ -540,7 +546,10 @@ void cloud_base<CloudBackend::MIXED>::
 			point.x = pixel_3d_loc.x();
 			point.y = pixel_3d_loc.y();
 			point.z = pixel_3d_loc.z();
+			#pragma omp critical
+			{
 			semantic_surface_map_->AddPoint(point);
+			}
 		}
 	}
 }

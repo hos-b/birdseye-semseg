@@ -1,11 +1,6 @@
 #include "mass_agent/mass_agent.h"
 
-#include <carla/Memory.h>
-#include <carla/client/Map.h>
-#include <carla/client/Waypoint.h>
-#include <carla/geom/Transform.h>
 #include <carla/client/Junction.h>
-#include <carla/geom/Location.h>
 #include <carla/road/Lane.h>
 
 #include "hdf5_api/hdf5_dataset.h"
@@ -411,9 +406,8 @@ MASSDataType MassAgent::GenerateDataPoint
 		mixed_cloud.AddSemanticDepthImage<geom::DestinationMap::SEMANTIC>
 			(semantic_depth_cam->geometry(), semantic, depth);
 	}
-	// TODO: change this into a parameter
 	auto[semantic_bev, mask] =
-		mixed_cloud.GetBEVData<geom::AggregationStrategy::HIGHEST_Z>(vehicle_width_, vehicle_length_);
+		mixed_cloud.GetBEVData<geom::AggregationStrategy::WEIGHTED_MAJORITY>(vehicle_width_, vehicle_length_);
 	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 #ifndef __RELEASE
