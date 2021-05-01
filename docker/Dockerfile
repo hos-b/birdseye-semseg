@@ -25,7 +25,7 @@ RUN apt-key adv --keyserver 'hkp://keyserver.ubuntu.com:80' --recv-key C1CF6E31E
 RUN apt-get update
 RUN apt-get -y install ros-noetic-desktop-full
 RUN apt-get -y install python3-rosdep python3-rosinstall python3-rosinstall-generator python3-wstool build-essential
-RUN apt-get -y install python3-catkin-tools python3-osrf-pycommon
+RUN apt-get -y install python3-catkin-tools python3-osrf-pycommon ros-noetic-joy
 RUN rosdep init
 
 # making directories
