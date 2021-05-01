@@ -277,7 +277,7 @@ MASSDataType MassAgent::GenerateDataPoint
 		return datapoint;
 	}
 #endif
-	mask_cloud.AddFilteredSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
+	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
 	mask_cloud.BuildKDTree();
 	cv::Mat fov_mask = mask_cloud.GetFOVMask();
 	// ---------------------------------------- creating target cloud ----------------------------------------
@@ -384,11 +384,11 @@ MASSDataType MassAgent::GenerateDataPoint
 /* checks the buffers and creates a single data point from all the sensors */
 template<>
 MASSDataType MassAgent::GenerateDataPoint
-		<geom::CloudBackend::DOUBLE_SURFACE_MAP>(unsigned int agent_batch_index) {
+		<geom::CloudBackend::MIXED>(unsigned int agent_batch_index) {
 	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
-	geom::SemanticCloud<geom::CloudBackend::DOUBLE_SURFACE_MAP> mixed_cloud(sc_settings());
+	geom::SemanticCloud<geom::CloudBackend::MIXED> mixed_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
 #ifndef __RELEASE
 	if (!succ) {
@@ -413,7 +413,7 @@ MASSDataType MassAgent::GenerateDataPoint
 	}
 	// TODO: change this into a parameter
 	auto[semantic_bev, mask] =
-		mixed_cloud.GetBEVData<geom::AggregationStrategy::HIGHEST_Z>(vehicle_width_, vehicle_length_, 5);
+		mixed_cloud.GetBEVData<geom::AggregationStrategy::HIGHEST_Z>(vehicle_width_, vehicle_length_);
 	// ------------------------------------------ getting rgb image ------------------------------------------
 	auto[success, rgb_image] = front_rgb_->pop();
 #ifndef __RELEASE

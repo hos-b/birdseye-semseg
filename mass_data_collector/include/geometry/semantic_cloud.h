@@ -20,7 +20,7 @@ namespace geom
 enum class CloudBackend  {
 	KD_TREE,
 	SURFACE_MAP,
-	DOUBLE_SURFACE_MAP
+	MIXED
 };
 /* enum for aggregation strategy in surface map backends */
 enum class AggregationStrategy {
@@ -120,7 +120,11 @@ protected:
 };
 /* ----------- cloud_base double surface map specialization  ------------------------------ */
 template <>
-class cloud_base<CloudBackend::DOUBLE_SURFACE_MAP> : protected base_members {
+class cloud_base<CloudBackend::MIXED> : protected base_members {
+	using KDTree2D = nanoflann::KDTreeSingleIndexAdaptor<nanoflann::L2_Simple_Adaptor
+															<double, cloud_base>,
+															cloud_base,
+															2>;
 public:
 	template <DestinationMap M>
 	void AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
@@ -128,10 +132,22 @@ public:
 							   cv::Mat depth);
 	template <AggregationStrategy S>
 	std::tuple<cv::Mat, cv::Mat> GetBEVData(double vehicle_width,
-											double vehicle_length,
-											size_t min_point_count) const;
+											double vehicle_length) const;
+	uint8_t GetMaskKDValue(size_t row, size_t col, size_t num_results) const;
+	void BuildKDTree();
+	// mandatory kd-tree stuff
+	inline size_t kdtree_get_point_count() const { return mask_cloud_.points.size(); }
+	inline float kdtree_get_pt(const size_t idx, const size_t dim) const {
+		if (dim == 0) {
+			return mask_cloud_.points[idx].x;
+		}
+		return mask_cloud_.points[idx].y;
+	}
+	template<class BBox>
+	bool kdtree_get_bbox(BBox& /* bb */) const { return false; }
 protected:
-	std::unique_ptr<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>> mask_surface_map_;
+	pcl::PointCloud<pcl::PointXYZL> mask_cloud_;
+	std::unique_ptr<KDTree2D> mask_kd_tree_;
 	std::unique_ptr<SurfaceMap<pcl::PointXYZL, OverflowBehavior::IGNORE, 200>> semantic_surface_map_;
 };
 /* ----------- templated semantic cloud class  -------------------------------------------- */
