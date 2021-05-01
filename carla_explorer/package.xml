@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>carla_explorer</name>
+  <version>1.0.0</version>
+  <description>package for exploring CARLA's towns</description>
+  <maintainer email="mh.bhdrn@gmail.com">hosein</maintainer>
+
+  <license>BSD</license>
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <depend>sensor_msgs</depend>
+  <depend>roscpp</depend>
+  <depend>roslib</depend>
+
+</package>
