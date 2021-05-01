@@ -28,7 +28,7 @@ dset = MassHDF5(dataset='town-01', path=DATASET_DIR,
 loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_workers=1)
 # plot stuff
 columns = 6
-for idx, (_, rgbs, semsegs, masks, car_transforms) in enumerate(loader):
+for idx, (_, rgbs, semsegs, masks, car_transforms, _) in enumerate(loader):
     # randomly skip samples (useful for large datasets)
     if random_samples and bool(random.randint(0, 1)):
         continue

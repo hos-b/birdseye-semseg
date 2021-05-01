@@ -73,6 +73,7 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         plt.imshow(ss_pred_img)
     
     if plot_dest == 'disk':
+        matplotlib.use('Agg')
         fig.canvas.draw()
         width, height = fig.get_size_inches() * fig.get_dpi()
         width, height = int(width), int(height)
@@ -81,6 +82,7 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         plt.close(fig)
         cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
     elif plot_dest == 'image':
+        matplotlib.use('Agg')
         fig.canvas.draw()
         width, height = fig.get_size_inches() * fig.get_dpi()
         width, height = int(width), int(height)
@@ -153,7 +155,6 @@ def main():
         os.makedirs(eval_cfg.plot_dir)
     if eval_cfg.plot_type == 'disk':
         print('saving plots to disk')
-        matplotlib.use('Agg')
     elif eval_cfg.plot_type == 'show':
         print('showing plots')
     else:

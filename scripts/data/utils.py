@@ -3,7 +3,6 @@ import torch
 from data.color_map import our_semantics_to_cityscapes_rgb
 import numpy as np
 import matplotlib
-matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 
 def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
