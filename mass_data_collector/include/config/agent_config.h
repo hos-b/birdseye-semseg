@@ -35,24 +35,10 @@ namespace config
 	extern const unsigned int kCARLATerrainSemanticID; // Grass, ground-level vegetation, soil or sand. These areas are not meant to be driven on. This label includes a possibly delimiting curb.
 	extern const unsigned int kCARLASemanticClassCount;
 
-	// our semantic IDs
-	extern const unsigned int kMassUnlabeledSemanticID;
-	extern const unsigned int kMassBuildingSemanticID;
-	extern const unsigned int kMassStaticSemanticID;
-	extern const unsigned int kMassDynamicSemanticID;
-	extern const unsigned int kMassRoadLineSemanticID;
-	extern const unsigned int kMassRoadSemanticID;
-	extern const unsigned int kMassSideWalkSemanticID;
-	extern const unsigned int kMassVehiclesSemanticID;
-	extern const unsigned int kMassOtherSemanticID;
-	extern const unsigned int kMassSkySemanticID;
-	extern const unsigned int kMassTerrainSemanticID;
-
-	// hash maps for semantic ids
-	extern const std::unordered_map<unsigned int, unsigned int> semantic_conversion_map;
-	extern const std::unordered_map<unsigned int, cv::Vec3b> carla_to_cityscapes_palette_map;
-	extern const std::unordered_map<unsigned int, bool> fileterd_semantics;
-	extern const std::unordered_map<unsigned int, double> semantic_weight;
+	// arrays to replace hash maps for semantic ids
+	extern const cv::Vec3b carla_to_cityscapes_palette[23];
+	extern const bool filtered_semantics[23];
+	extern const double semantic_weight[23];
 
 	// hash maps for restricted areas on map
 	extern const std::unordered_map<int, bool> town0_restricted_roads;
