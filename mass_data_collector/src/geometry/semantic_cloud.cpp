@@ -4,11 +4,6 @@
 
 #include <cmath>
 #include <tuple>
-#include <opencv2/core/hal/interface.h>
-#include <opencv2/core/matx.hpp>
-#include <opencv2/core/types.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/imgproc.hpp>
 #include <pcl/io/pcd_io.h>
 
 namespace geom

@@ -3,22 +3,17 @@
 #include <carla/client/Junction.h>
 #include <carla/road/Lane.h>
 
-#include "hdf5_api/hdf5_dataset.h"
-#include "mass_agent/sensors.h"
 #include "config/agent_config.h"
 #include "config/geom_config.h"
 
 #include <cassert>
 #include <cstdlib>
-#include <opencv2/core.hpp>
 
 #include <ros/ros.h>
 #include <Eigen/Dense>
 #include <ros/package.h>
 #include <pcl/io/pcd_io.h>
 #include <yaml-cpp/yaml.h>
-#include <opencv2/imgproc.hpp>
-#include <opencv2/imgcodecs.hpp>
 
 using namespace std::chrono_literals;
 
