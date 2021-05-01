@@ -74,9 +74,6 @@ public:
 							   cv::Mat semantic,
 							   cv::Mat depth,
 							   Eigen::Matrix4d& transform);
-	void AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							   		   cv::Mat semantic,
-							   		   cv::Mat depth);
 	std::tuple<cv::Mat, cv::Mat> GetBEVData(double vehicle_width, double vehicle_length) const;
 	cv::Mat GetFOVMask() const;
 	size_t GetMajorityVote(const std::vector<size_t>& knn_indices,

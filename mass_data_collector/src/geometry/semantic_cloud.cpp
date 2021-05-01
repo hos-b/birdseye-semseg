@@ -47,7 +47,7 @@ void cloud_base<CloudBackend::KD_TREE>::
 	size_t old_size = target_cloud_.points.size();
 	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
 	// resizing + omp critical|atomic is definitely worse
-	# pragma omp parallel for collapse(2)
+	// # pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic.rows; ++i) {
 		for (int j = 0; j < semantic.cols; ++j) {
 			auto label = semantic.at<uchar>(i, j);
@@ -63,78 +63,12 @@ void cloud_base<CloudBackend::KD_TREE>::
 				continue;
 			}
 			pcl::PointXYZL point;
+			
+			if (label >= config::kCARLASemanticClassCount) {
+				std::cout << "0-minor pre-failure!" << std::endl;
+				continue;
+			}
 			point.label = label;
-			point.x = pixel_3d_loc.x();
-			point.y = pixel_3d_loc.y();
-			point.z = pixel_3d_loc.z();
-			target_cloud_.points.emplace_back(point);
-		}
-	}
-	target_cloud_.width = target_cloud_.points.size();
-}
-
-/* converts a semantic|depth image into 3D points [in the car transform] and adds them to the point cloud.
-   the points are filtered so that they don't overlap and only the point with the highest z counts. necessary
-   for FoV mask calculation */
-void cloud_base<CloudBackend::KD_TREE>::
-		AddFilteredSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-									  cv::Mat semantic,
-									  cv::Mat depth) {
-	auto xy_hash = [](const std::pair<double, double>& pair) -> size_t {
-		return std::hash<double>()(pair.first * 1e4) ^ std::hash<double>()(pair.second);
-	};
-	std::unordered_map<std::pair<double, double>, double, decltype(xy_hash)> xy_map(150000, xy_hash);
-	size_t old_size = target_cloud_.points.size();
-	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
-	// omp + any mutex type degrades perf
-	for (int i = 0; i < semantic.rows; ++i) {
-		uchar* pixel_label = semantic.ptr<uchar>(i);
-		float* pixel_depth = depth.ptr<float>(i);
-		for (int j = 0; j < semantic.cols; ++j) {
-			auto label = pixel_label[j];
-			// filter if it belongs to a traffic light or pole
-			if (config::fileterd_semantics.at(label)) {
-				continue;
-			}
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToLocal(Eigen::Vector2d(i, j), pixel_depth[j]);
-			// triggers a lot
-			if (pixel_3d_loc.y() < cfg_.min_point_y || pixel_3d_loc.y() > cfg_.max_point_y ||
-				pixel_3d_loc.x() < cfg_.min_point_x || pixel_3d_loc.x() > cfg_.max_point_x) {
-				continue;
-			}
-			// skip if repetitive or lower height, surprisingly this never triggers
-			auto xy_pair = std::make_pair(pixel_3d_loc.x(), pixel_3d_loc.y());
-			auto it = xy_map.find(xy_pair);
-			if (it != xy_map.end() && it->second > pixel_3d_loc.z()) {
-				continue;
-			}
-			xy_map[xy_pair] = pixel_3d_loc.z();
-			pcl::PointXYZL point;
-			point.label = label;
-			point.x = pixel_3d_loc.x();
-			point.y = pixel_3d_loc.y();
-			point.z = pixel_3d_loc.z();
-			target_cloud_.points.emplace_back(point);
-		}
-	}
-	target_cloud_.width = target_cloud_.points.size();
-}
-
-/* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
-void cloud_base<CloudBackend::KD_TREE>::
-		AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-							  cv::Mat semantic,
-							  cv::Mat depth,
-							  Eigen::Matrix4d& transform) {
-	size_t old_size = target_cloud_.points.size();
-	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
-	for (int i = 0; i < semantic.rows; ++i) {
-		uchar* pixel_label = semantic.ptr<uchar>(i);
-		float* pixel_depth = depth.ptr<float>(i);
-		for (int j = 0; j < semantic.cols; ++j) {
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]);
-			pcl::PointXYZL point;
-			point.label = pixel_label[j];
 			point.x = pixel_3d_loc.x();
 			point.y = pixel_3d_loc.y();
 			point.z = pixel_3d_loc.z();
@@ -161,31 +95,22 @@ std::pair<std::vector<size_t>, std::vector<double>> cloud_base<CloudBackend::KD_
 size_t cloud_base<CloudBackend::KD_TREE>::GetMajorityVote(const std::vector<size_t>& knn_indices,
 					    								   const std::vector<double>& distances) const {
 	// map from semantic id to count
-	std::unordered_map<unsigned int, double> map(knn_indices.size());
-	std::vector<unsigned int> classes;
+	std::vector<double> class_weights(config::kCARLASemanticClassCount, 0.0);
 	double max_weight = 0;
-	size_t winner_index = 0;
+	size_t winner_semantic_id = 0;
 	for (uint32_t i = 0; i < knn_indices.size(); ++i) {
-		auto point = target_cloud_.points[knn_indices[i]];
-		unsigned int semantic_id = point.label;
-		auto it = map.find(semantic_id);
-		double additive_weight = config::semantic_weight.at(semantic_id) +
-								 (1.0 / std::sqrt(distances[i])) + point.z * 100.0;
-		if (it != map.end()) {
-			map[semantic_id] = it->second + additive_weight;
-			if (it->second + additive_weight > max_weight) {
-				max_weight = it->second + additive_weight;
-				winner_index = knn_indices[i];
-			}
-		} else {
-			map[semantic_id] = additive_weight;
-			if (max_weight == 0) {
-				max_weight = additive_weight;
-				winner_index = knn_indices[i];
-			}
+		auto& current_point = target_cloud_.points[knn_indices[i]];
+		unsigned int semantic_id = current_point.label;
+		// TODO: probably failure in concurrent adding of points
+		auto& class_weight = class_weights[semantic_id];
+		class_weight += config::semantic_weight.at(semantic_id) + current_point.z * 100.0 +
+						(1.0 / std::sqrt(distances[i]));
+		if (class_weight > max_weight) {
+			max_weight = class_weight;
+			winner_semantic_id = semantic_id;
 		}
 	}
-	return winner_index;
+	return winner_semantic_id;
 }
 
 /* returns the orthographic bird's eye view image */
@@ -195,28 +120,25 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::KD_TREE>::
 	auto ego_row_px = (cfg_.max_point_x / (cfg_.max_point_x - cfg_.min_point_x)) * cfg_.image_rows;
 	auto ego_col_px = (cfg_.max_point_y / (cfg_.max_point_y - cfg_.min_point_y)) * cfg_.image_cols;
 	cv::Point mid(ego_col_px, ego_row_px);
-	cv::Point topleft(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
-					  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding);
-	cv::Point botright(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
-					   mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding);
-	cv::Rect2d vhc_rect(topleft, botright);
+	cv::Rect2d vhc_rect(cv::Point(mid.x - (vehicle_width / (2 * pixel_w_)) - cfg_.vehicle_mask_padding,
+					  			  mid.y - (vehicle_length / (2 * pixel_h_)) - cfg_.vehicle_mask_padding),
+						cv::Point(mid.x + (vehicle_width / (2 * pixel_w_)) + cfg_.vehicle_mask_padding,
+					   			  mid.y + (vehicle_length / (2 * pixel_h_)) + cfg_.vehicle_mask_padding));
 	// the output images
 	cv::Mat semantic_bev(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	cv::Mat vehicle_mask = cv::Mat::zeros(cfg_.image_rows, cfg_.image_cols, CV_8UC1);
 	#pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic_bev.rows; ++i) {
-		// uchar* semantic_row = semantic_bev.ptr<uchar>(i);
-		// uchar* mask_row = vehicle_mask.ptr<uchar>(i);
 		for (int j = 0; j < semantic_bev.cols; ++j) {
 			// get the center of the square that is to be mapped to a pixel
 			double knn_x = cfg_.max_point_x - i * pixel_h_ + 0.5 * pixel_h_;
 			double knn_y = cfg_.max_point_y - j * pixel_w_ + 0.5 * pixel_w_;
 			// ------------------------ majority voting for semantic id ------------------------
 			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, cfg_.knn_count);
-			auto mv_winner = target_cloud_.points[GetMajorityVote(knn_ret_index, knn_sqrd_dist)];
-			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(mv_winner.label);
+			auto mv_label = GetMajorityVote(knn_ret_index, knn_sqrd_dist);
+			semantic_bev.at<uchar>(i, j) = static_cast<uchar>(mv_label);
 			// if the point belongs to the car itself
-			if (mv_winner.label == config::kCARLAVehiclesSemanticID &&
+			if (mv_label == config::kCARLAVehiclesSemanticID &&
 				vhc_rect.contains(cv::Point(j, i))) {
 				vehicle_mask.at<uchar>(i, j) = 255;
 				continue;
@@ -424,8 +346,7 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::SURFACE_MAP>::
 				// TODO: figure out not skipping
 				continue;
 			}
-			// 22 classes in total
-			std::vector<size_t> class_counts(22, 0);
+			std::vector<size_t> class_counts(config::kCARLASemanticClassCount, 0);
 			uint8_t winner_class = 0;
 			size_t winner_count = 0;
 			for (auto& point : points) {
@@ -471,7 +392,7 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::SURFACE_MAP>::
 			if (points.size() == 0) {
 				continue;
 			}
-			std::vector<double> class_weights(22, 0.0);
+			std::vector<double> class_weights(config::kCARLASemanticClassCount, 0.0);
 			size_t winner_class = 0;
 			double winner_weight = 0;
 			for (auto& point : points) {
@@ -538,8 +459,6 @@ void cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
 		AddSemanticDepthImage<DestinationMap::MASK>(std::shared_ptr<geom::CameraGeometry> geometry,
 							  						cv::Mat semantic,
 							  						cv::Mat depth) {
-	size_t avg_size_increase = static_cast<double>(semantic.rows * semantic.cols) /
-							(cfg_.image_cols * cfg_.image_rows);
 	// resizing + omp critical|atomic is definitely worse
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic.rows; ++i) {
@@ -567,8 +486,6 @@ void cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
 		AddSemanticDepthImage<DestinationMap::SEMANTIC>(std::shared_ptr<geom::CameraGeometry> geometry,
 							  							cv::Mat semantic,
 							  							cv::Mat depth) {
-	size_t avg_size_increase = static_cast<double>(semantic.rows * semantic.cols) /
-							(cfg_.image_cols * cfg_.image_rows);
 	// resizing + omp critical|atomic is definitely worse
 	# pragma omp parallel for collapse(2)
 	for (int i = 0; i < semantic.rows; ++i) {
@@ -656,8 +573,7 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
 	for (int i = 0; i < semantic_bev.rows; ++i) {
 		for (int j = 0; j < semantic_bev.cols; ++j) {
 			auto& semantic_points = semantic_surface_map_->GetGridPoints(j, i);
-			// 22 classes in total
-			std::vector<size_t> class_counts(22, 0);
+			std::vector<size_t> class_counts(config::kCARLASemanticClassCount, 0);
 			uint8_t winner_class = 0;
 			size_t winner_count = 0;
 			for (auto& point : semantic_points) {
@@ -705,7 +621,7 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::DOUBLE_SURFACE_MAP>::
 	for (int i = 0; i < semantic_bev.rows; ++i) {
 		for (int j = 0; j < semantic_bev.cols; ++j) {
 			auto& semantic_points = semantic_surface_map_->GetGridPoints(j, i);
-			std::vector<double> class_weights(22, 0.0);
+			std::vector<double> class_weights(config::kCARLASemanticClassCount, 0.0);
 			size_t winner_class = 0;
 			double winner_weight = 0;
 			for (auto& point : semantic_points) {
@@ -823,6 +739,31 @@ std::tuple<double, double, double, double>
 		}
 	}
 	return std::make_tuple(minx, maxx, miny, maxy);
+}
+
+/* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
+void cloud_base<CloudBackend::KD_TREE>::
+		AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+							  cv::Mat semantic,
+							  cv::Mat depth,
+							  Eigen::Matrix4d& transform) {
+	size_t old_size = target_cloud_.points.size();
+	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
+	// # pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic.rows; ++i) {
+		uchar* pixel_label = semantic.ptr<uchar>(i);
+		float* pixel_depth = depth.ptr<float>(i);
+		for (int j = 0; j < semantic.cols; ++j) {
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]);
+			pcl::PointXYZL point;
+			point.label = pixel_label[j];
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			target_cloud_.points.emplace_back(point);
+		}
+	}
+	target_cloud_.width = target_cloud_.points.size();
 }
 
 } // namespace geom
