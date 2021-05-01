@@ -33,6 +33,7 @@ namespace config
 	extern const unsigned int kCARLADynamicSemanticID; // Elements whose position is susceptible to change over time. E.g. Movable trash bins, buggies, bags, wheelchairs, animals, etc.
 	extern const unsigned int kCARLAWaterSemanticID; // Horizontal water surfaces. E.g. Lakes, sea, rivers.
 	extern const unsigned int kCARLATerrainSemanticID; // Grass, ground-level vegetation, soil or sand. These areas are not meant to be driven on. This label includes a possibly delimiting curb.
+	extern const unsigned int kCARLASemanticClassCount;
 
 	// our semantic IDs
 	extern const unsigned int kMassUnlabeledSemanticID;

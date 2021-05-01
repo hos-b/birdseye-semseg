@@ -32,6 +32,7 @@ namespace config
     constexpr unsigned int kCARLADynamicSemanticID = 20;
     constexpr unsigned int kCARLAWaterSemanticID = 21;
     constexpr unsigned int kCARLATerrainSemanticID = 22;
+    constexpr unsigned int kCARLASemanticClassCount = 23;
 
     // our filtered IDs
     constexpr unsigned int kMassUnlabeledSemanticID = 0;
