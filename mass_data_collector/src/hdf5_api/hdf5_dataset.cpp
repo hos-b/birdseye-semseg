@@ -61,12 +61,22 @@ HDF5Dataset::HDF5Dataset(const std::string& path, const std::string& dset_name, 
     _mspace = H5::DataSpace (statics::dataset_rank, _count);
 }
 /* adds an attribute to the dataset */
-void HDF5Dataset::AddU32Attribute(unsigned int* attr_data, size_t attr_size, const std::string& attr_name) {
+void HDF5Dataset::AddU32Attribute(uint32_t* attr_data, size_t attr_size, const std::string& attr_name) {
     // creating the attribute
     hsize_t attr_dims[] = {attr_size};
     H5::DataSpace attr_dataspace(1, attr_dims);
     H5::Attribute attribute = dataset_.createAttribute(attr_name, H5::PredType::STD_I32BE, attr_dataspace);
     attribute.write(H5::PredType::NATIVE_UINT32, attr_data);
+}
+/* reads an attribute from the dataset */
+void HDF5Dataset::ReadU32Attribute(const std::string& attr_name, uint32_t *buffer) {
+    H5::Attribute attribute = dataset_.openAttribute(attr_name);
+    attribute.read(H5::PredType::NATIVE_UINT32, buffer);
+}
+/* update an attribute in the dataset */
+void HDF5Dataset::UpdateU32Attribute(const std::string& attr_name, uint32_t *buffer) {
+    H5::Attribute attribute = dataset_.openAttribute(attr_name);
+    attribute.write(H5::PredType::NATIVE_UINT32, buffer);
 }
 /* initializes the compound datatype used to write to the dataset */
 void HDF5Dataset::InitializeCompoundType() {

@@ -54,7 +54,9 @@ public:
     ~HDF5Dataset() = default;
 
     void AppendElement(const MASSDataType* mass_data);
-    void AddU32Attribute(unsigned int* attr_data, size_t attr_size, const std::string& attr_name);
+    void AddU32Attribute(uint32_t* attr_data, size_t attr_size, const std::string& attr_name);
+    void ReadU32Attribute(const std::string& attr_name, uint32_t* buffer);
+    void UpdateU32Attribute(const std::string& attr_name, uint32_t* buffer);
     MASSDataType ReadElement(size_t index) const;
     std::pair<hsize_t, hsize_t> GetCurrentSize() const;
     void Close();
