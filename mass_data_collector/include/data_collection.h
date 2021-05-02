@@ -11,13 +11,17 @@ struct CollectionConfig
 {
     std::string dataset_path;
     std::string dataset_name;
+    bool append;
+    int town_number;
     unsigned int minimum_cars;
     unsigned int maximum_cars;
-    unsigned int max_batch_count;
+    unsigned int round_batch_count;
+    unsigned int total_batch_count;
     unsigned int batch_delay_ms;
     unsigned int hdf5_chunk_size;
     unsigned long random_seed;
     float deadlock_multiplier;
+
     static const CollectionConfig& GetConfig() {
         static CollectionConfig conf;
         static std::once_flag once;
@@ -29,9 +33,13 @@ struct CollectionConfig
 		    YAML::Node collection = base["collection"];
 		    conf.dataset_path = dataset["path"].as<std::string>();
             conf.dataset_name = dataset["name"].as<std::string>();
+            conf.append = dataset["append"].as<bool>();
+            conf.town_number = dataset["town"].as<int>();
+
             conf.minimum_cars = collection["minimum_cars"].as<unsigned int>();
             conf.maximum_cars = collection["maximum_cars"].as<unsigned int>();
-            conf.max_batch_count = collection["max_batch_count"].as<unsigned int>();
+            conf.round_batch_count = collection["round_batch_count"].as<unsigned int>();
+            conf.total_batch_count = collection["total_batch_count"].as<unsigned int>();
             conf.batch_delay_ms = collection["batch_delay_ms"].as<unsigned int>();
             conf.hdf5_chunk_size = collection["hdf5_chunk_size"].as<unsigned int>();
             conf.random_seed = collection["random_seed"].as<unsigned long>();

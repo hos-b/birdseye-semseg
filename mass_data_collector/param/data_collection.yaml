@@ -1,15 +1,18 @@
 dataset:
   path: '/home/mass/data/test.hdf5'
   name: 'town-01'
+  town: 4 # 1-5
+  append: true
 
 collection:
+  random_seed: 515
   minimum_cars: 3
   maximum_cars: 3
-  random_seed: 515
-  max_batch_count: 10
+  round_batch_count: 5 # number of datapoints in the next run
+  total_batch_count: 10 # total number of datapoints
   hdf5_chunk_size: 5
-  # mandatory delay after each batch because moving cars in carla is not a blocking call
-  # 100 for slow PC, 10 for fast
+  # mandatory delay after each batch because moving cars in carla is not
+  # a blocking call unless in sync mode. 100 for slow PC, 10 for fast
   batch_delay_ms: 150
   # avg. batch time x multiplier = deadlock
   deadlock_multiplier: 5.0
