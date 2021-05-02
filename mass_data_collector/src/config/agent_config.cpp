@@ -110,19 +110,55 @@ namespace config
         static_cast<double>(filtered_semantics[kCARLAWaterSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLATerrainSemanticID]) * 1.0
     };
-    // perfect for town_0
-    const std::unordered_map<int, bool> town0_restricted_roads ({
+    // town1 roads to avoid
+    const std::unordered_map<int, bool> town1_restricted_roads ({
+    });
+    // town2 roads to avoid
+    const std::unordered_map<int, bool> town2_restricted_roads ({
+    });
+    // town3 roads to avoid
+    const std::unordered_map<int, bool> town3_restricted_roads ({
+        {65, true},  // tunnel
+        {526, true}, // junction after the tunnel
+        {510, true}, // junction lane leading to tunnel
         {499, true}, // junction lane leading to tunnel
         {551, true}, // junction lane leading to tunnel
-        {510, true}, // junction lane leading to tunnel
+        {533, true}, // junction lane leading to tunnel
         {519, true}, // junction lane leading to tunnel
         {1166, true},// junction lane leading to tunnel
-        {526, true}, // junction after the tunnel
         {1165, true},// junction after the tunnel
         {1158, true},// junction after the tunnel
         {1156, true},// junction after the tunnel
-        {65, true},  // tunnel
-        {58, true},  // gas station
-    });
 
+        {58, true},  // gas station
+        {1020, true},  // before gas station
+        {1933, true},  // after gas station
+    });
+    // town4 roads to avoid
+    const std::unordered_map<int, bool> town4_restricted_roads ({
+        {47, true}, // overpass
+
+        {880, true}, // gas station
+        {886, true}, // gas station
+        {477, true}, // gas station
+        {467, true}, // gas station
+        {468, true}, // gas station
+
+    });
+    // town5 roads to avoid
+    const std::unordered_map<int, bool> town5_restricted_roads ({
+        {39, true}, // overhanging building
+
+        {3, true}, // leading to underpass
+        {9, true}, // leading to underpass
+        {10, true}, // underpass
+        {11, true}, // underpass
+        {24, true}, // underpass
+        {1931, true}, // underpass junction
+        {1940, true}, // underpass junction
+        {1946, true}, // underpass junction
+        {1957, true}, // underpass junction
+        {1985, true}, // underpass junction
+        {1986, true}, // underpass junction
+    });
 } // namespace config

@@ -83,11 +83,11 @@ int main(int argc, char** argv)
     // connect & change town
     auto spectator = InitCARLA("/Game/Carla/Maps/Town02");
     /*  Towns
-        /Game/Carla/Maps/Town01
-        /Game/Carla/Maps/Town02
-        /Game/Carla/Maps/Town03
-        /Game/Carla/Maps/Town04
-        /Game/Carla/Maps/Town05
+        /Game/Carla/Maps/Town01 small, no exceptions
+        /Game/Carla/Maps/Town02 small, no exceptions
+        /Game/Carla/Maps/Town03 default
+        /Game/Carla/Maps/Town04 large but mostly highway
+        /Game/Carla/Maps/Town05 medium. has underpass
         /Game/Carla/Maps/Town01_Opt
         /Game/Carla/Maps/Town02_Opt
         /Game/Carla/Maps/Town03_Opt
