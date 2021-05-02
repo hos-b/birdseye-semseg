@@ -63,7 +63,7 @@ namespace config
     constexpr bool filtered_semantics[] {
         /* kCARLAUnlabeledSemanticID : */       true,  // <-- hopefully empty
         /* kCARLABuildingSemanticID : */        false,
-        /* kCARLAFenceSemanticID : */           true,  // <-- who needs fences TODO: false? 
+        /* kCARLAFenceSemanticID : */           true,  // <-- who needs fences? probably very thin 
         /* kCARLAOtherSemanticID : */           false,
         /* kCARLAPedestrianSemanticID : */      false,
         /* kCARLAPoleSemanticID : */            true,  // <-- over-hanging structure + kinda irrelevant
@@ -77,7 +77,7 @@ namespace config
         /* kCARLASkySemanticID : */             true,  // <-- won't happen anyway but meh
         /* kCARLAGroundSemanticID : */          false,
         /* kCARLABridgeSemanticID : */          false,
-        /* kCARLARailTrackSemanticID : */       true,  // TODO: true ?
+        /* kCARLARailTrackSemanticID : */       true,  // <-- helps data collection in town3
         /* kCARLAGuardRailSemanticID : */       true,  // <-- not important for top-down
         /* kCARLATrafficLightSemanticID : */    true,  // <-- over-hanging structure
         /* kCARLAStaticSemanticID : */          false,
@@ -159,6 +159,21 @@ namespace config
         {1946, true}, // underpass junction
         {1957, true}, // underpass junction
         {1985, true}, // underpass junction
-        {1986, true}, // underpass junction
+        {1986, true}  // underpass junction
+    });
+    const std::unordered_map<int, bool>* restricted_roads[] = {
+        nullptr,
+        &town1_restricted_roads,
+        &town2_restricted_roads,
+        &town3_restricted_roads,
+        &town4_restricted_roads,
+        &town5_restricted_roads
+    };
+    const std::unordered_map<int, std::string> town_map_strings ({
+        {1, "/Game/Carla/Maps/Town01"},
+        {2, "/Game/Carla/Maps/Town02"},
+        {3, "/Game/Carla/Maps/Town03"},
+        {4, "/Game/Carla/Maps/Town04"},
+        {5, "/Game/Carla/Maps/Town05"}
     });
 } // namespace config

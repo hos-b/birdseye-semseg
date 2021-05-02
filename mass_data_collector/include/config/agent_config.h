@@ -41,11 +41,9 @@ namespace config
 	extern const double semantic_weight[23];
 
 	// hash maps for restricted areas on map
-	extern const std::unordered_map<int, bool> town1_restricted_roads;
-	extern const std::unordered_map<int, bool> town2_restricted_roads;
-	extern const std::unordered_map<int, bool> town3_restricted_roads;
-	extern const std::unordered_map<int, bool> town4_restricted_roads;
-	extern const std::unordered_map<int, bool> town5_restricted_roads;
+	extern const std::unordered_map<int, bool>* restricted_roads[6];
+	extern const std::unordered_map<int, std::string> town_map_strings;
+
 } // namespace config
 
 #endif
