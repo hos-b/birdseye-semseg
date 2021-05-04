@@ -53,7 +53,7 @@ vehicle.lincoln.mkz2017:
   back: 2.40475
   left: 0.927776
   right: 0.898797
-  camera-shift: 0.0
+  camera-shift: 0.1
 vehicle.mercedes-benz.coupe:
   front: 2.50548
   back: 2.46365
@@ -71,7 +71,7 @@ vehicle.mustang.mustang:
   back: 2.2945
   left: 0.908862
   right: 0.880147
-  camera-shift: 0.0
+  camera-shift: 0.1
 # weird on l & r
 vehicle.nissan.micra:
   front: 1.79581
