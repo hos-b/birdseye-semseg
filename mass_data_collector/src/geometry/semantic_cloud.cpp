@@ -99,7 +99,7 @@ size_t cloud_base<CloudBackend::KD_TREE>::GetMajorityVote(const std::vector<size
 		auto& current_point = target_cloud_.points[knn_indices[i]];
 		unsigned int semantic_id = current_point.label;
 		auto& class_weight = class_weights[semantic_id];
-		class_weight += config::semantic_weight[semantic_id] + current_point.z * 100.0 +
+		class_weight += config::semantic_weight[semantic_id] + current_point.z +
 						(1.0 / std::sqrt(distances[i]));
 		if (class_weight > max_weight) {
 			max_weight = class_weight;
@@ -155,7 +155,7 @@ cv::Mat cloud_base<CloudBackend::KD_TREE>::GetFOVMask() const {
 			// get the center of the square that is to be mapped to a pixel
 			double knn_x = cfg_.max_point_x - (i + 0.5) * pixel_h_;
 			double knn_y = cfg_.max_point_y - (j + 0.5) * pixel_w_;
-			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, cfg_.knn_count);
+			auto [knn_ret_index, knn_sqrd_dist] = FindClosestPoints(knn_x, knn_y, 1);
 			// if the point is close enough
 			bev_mask.at<uchar>(i, j) = static_cast<unsigned char>
 				(knn_sqrd_dist[0] <= cfg_.stitching_threshold) * 255;

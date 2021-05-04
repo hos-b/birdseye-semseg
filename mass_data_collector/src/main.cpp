@@ -355,7 +355,7 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::vector<agent::MassAg
 	for (size_t i = 1; i < col_conf.town_batch_counts.size(); ++i) {
 		if (batch == col_conf.town_batch_counts[i - 1]) {
 			std::string town_string = config::town_map_strings.at(col_conf.towns[i]);
-			std::cout << "switching to " << town_string << std::endl;
+			std::cout << "\nswitching to " << town_string << std::endl;
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				delete agents[i];
 			}
