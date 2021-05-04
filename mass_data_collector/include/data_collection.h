@@ -14,6 +14,7 @@ struct CollectionConfig
     bool append;
     std::vector<size_t> towns;
     std::vector<size_t> town_batch_counts;
+    std::vector<size_t> cumulative_batch_counts;
     unsigned int minimum_cars;
     unsigned int maximum_cars;
     unsigned int total_batch_count;
@@ -52,6 +53,7 @@ struct CollectionConfig
                     if (batch_count.IsScalar()) {
                         conf.town_batch_counts.emplace_back(batch_count.as<size_t>());
                         conf.total_batch_count += conf.town_batch_counts.back();
+                        conf.cumulative_batch_counts.emplace_back(conf.total_batch_count);
                     }
                 }
             }

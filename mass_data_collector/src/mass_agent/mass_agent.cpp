@@ -21,8 +21,18 @@ using namespace std::chrono_literals;
 
 namespace agent {
 
+/* templated random choice code from CARLA example */
+#define EXPECT_TRUE(pred) if (!(pred)) { throw std::runtime_error(#pred); }
+
+template <typename RangeT, typename RNG>
+static auto &RandomChoice(const RangeT &range, RNG &&generator) {
+  EXPECT_TRUE(range.size() > 0u);
+  std::uniform_int_distribution<size_t> dist{0u, range.size() - 1u};
+  return range[dist(std::forward<RNG>(generator))];
+}
+
 /* constructor */
-MassAgent::MassAgent() {
+MassAgent::MassAgent(std::mt19937& random_generator) {
 	// initialize some stuff & things
 	transform_.setIdentity();
 	id_ = agents().size();
@@ -41,6 +51,13 @@ MassAgent::MassAgent() {
 			vehicles = blueprint_library->Filter("vehicle.seat.leon");
 		}
 		carla::client::ActorBlueprint blueprint = (*vehicles)[0];
+		// randomize the blueprint color
+		if (blueprint.ContainsAttribute("color")) {
+			auto &attribute = blueprint.GetAttribute("color");
+			blueprint.SetAttribute(
+				"color",
+				RandomChoice(attribute.GetRecommendedValues(), random_generator));
+		}
 		auto initial_pos = spawn_points[id_];
 		Eigen::Matrix3d rot;
 		rot = Eigen::AngleAxisd(-initial_pos.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
@@ -633,7 +650,7 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	std::call_once(flag, [&]() {
 		try {
 			carla_client = std::make_unique<cc::Client>("127.0.0.1", 2000);
-			carla_client->SetTimeout(2s);
+			carla_client->SetTimeout(5s);
 			std::cout << "client version: " << carla_client->GetClientVersion() << "\t"
 					  << "server version: " << carla_client->GetServerVersion() << std::endl;
 		} catch (carla::client::TimeoutException& e) {

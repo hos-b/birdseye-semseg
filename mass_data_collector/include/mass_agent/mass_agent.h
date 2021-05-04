@@ -4,6 +4,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <random>
 
 #include "geometry/semantic_cloud.h"
 #include "mass_agent/sensors.h"
@@ -36,7 +37,7 @@ class MassAgent
 {
 public:
 	~MassAgent();
-	explicit MassAgent();
+	explicit MassAgent(std::mt19937& random_generator);
 	MassAgent(const MassAgent&) = delete;
 	const MassAgent& operator=(const MassAgent&) = delete;
 	MassAgent(MassAgent&&) = delete;

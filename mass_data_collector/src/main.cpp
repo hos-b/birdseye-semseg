@@ -2,7 +2,6 @@
 #include <chrono>
 #include <csignal>
 #include <future>
-#include <random>
 #include <algorithm>
 
 #include <ros/ros.h>
@@ -18,7 +17,7 @@ using namespace std::chrono_literals;
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
-void SwitchTown(size_t, size_t, std::vector<agent::MassAgent*>&, std::unordered_map<int, bool>&);
+void SwitchTown(size_t, size_t, std::vector<agent::MassAgent*>&, std::unordered_map<int, bool>&, std::mt19937&);
 std::string SecondsToString(uint32);
 
 
@@ -87,9 +86,14 @@ int main(int argc, char **argv)
 		time_thread = new std::thread(WatchdogThreadCallback, &batch_count,  config.total_batch_count, &state,
 									  &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
 	}
+	// random distribution & shuffling necessities --------------------------------------------------------------
+	std::mt19937 random_gen(config.random_seed);
+    std::uniform_int_distribution<> distrib(config.minimum_cars, config.maximum_cars);
+	std::vector<unsigned int> shuffled(number_of_agents);
+    std::iota(shuffled.begin(), shuffled.end(), 0);
 	// debugging ------------------------------------------------------------------------------------------------
 	if (debug_mode) {
-		SwitchTown(0, number_of_agents, agents, restricted_roads);
+		SwitchTown(0, number_of_agents, agents, restricted_roads, random_gen);
 		std::vector<unsigned int> indices(number_of_agents);
     	std::iota(indices.begin(), indices.end(), 0);
 		std::cout << "creating uniform pointcloud" << std::endl;
@@ -101,18 +105,13 @@ int main(int argc, char **argv)
 		agent::MassAgent::DebugMultiAgentCloud(agents, config.dataset_path + ".pcl");
 		ros::shutdown();
 	}
-	// random distribution & shuffling necessities --------------------------------------------------------------
-	std::mt19937 random_gen(config.random_seed);
-    std::uniform_int_distribution<> distrib(config.minimum_cars, config.maximum_cars);
-	std::vector<unsigned int> shuffled(number_of_agents);
-    std::iota(shuffled.begin(), shuffled.end(), 0);
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
 		if (batch_count == config.total_batch_count) {
 			break;
 		}
 		state = 'i';
-		SwitchTown(batch_count, number_of_agents, agents, restricted_roads);
+		SwitchTown(batch_count, number_of_agents, agents, restricted_roads, random_gen);
 		// timing
 		auto batch_start_t = std::chrono::high_resolution_clock::now();
 		// randoming the batch size and shuffling the agents
@@ -333,36 +332,42 @@ void AssertConfiguration() {
 
 /* switch town based on the batch number */
 void SwitchTown(size_t batch, size_t number_of_agents, std::vector<agent::MassAgent*>& agents,
-				std::unordered_map<int, bool>& restricted_roads) {
+				std::unordered_map<int, bool>& restricted_roads, std::mt19937& random_gen) {
 	auto& col_conf = CollectionConfig::GetConfig();
 	if (batch == col_conf.total_batch_count) {
 		throw std::runtime_error("should not be reaching this line");
 	}
 	if (batch == 0) {
-		std::string town_string = config::town_map_strings.at(col_conf.towns[0]);
-		auto current_world = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
-		if (current_world != town_string) {
-			std::cout << "switching to first town: " << town_string << std::endl;
-			agent::MassAgent::carla_client()->LoadWorld(town_string);
+		std::string new_town = config::town_map_strings.at(col_conf.towns[0]);
+		auto current_town = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
+		if (current_town != new_town) {
+			std::cout << "switching to first town: " << new_town << std::endl;
+			agent::MassAgent::carla_client()->LoadWorld(new_town);
 			std::this_thread::sleep_for(5s);
 			for (size_t i = 0; i < number_of_agents; ++i) {
-				agents.emplace_back(new agent::MassAgent());
+				agents.emplace_back(new agent::MassAgent(random_gen));
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[0]];
 		}
 		return;
 	}
-	for (size_t i = 1; i < col_conf.town_batch_counts.size(); ++i) {
-		if (batch == col_conf.town_batch_counts[i - 1]) {
-			std::string town_string = config::town_map_strings.at(col_conf.towns[i]);
-			std::cout << "\nswitching to " << town_string << std::endl;
+	for (size_t i = 1; i < col_conf.cumulative_batch_counts.size(); ++i) {
+		if (batch == col_conf.cumulative_batch_counts[i - 1]) {
+			std::string new_town = config::town_map_strings.at(col_conf.towns[i]);
+			std::cout << "\nswitching to " << new_town << std::endl;
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				delete agents[i];
 			}
 			agents.clear();
-			agent::MassAgent::carla_client()->LoadWorld(town_string);
+			std::string new_town = config::town_map_strings.at(col_conf.towns[i]);
+			auto current_town = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
+			// in case same town is used consecutively to force agent changing/recoloring
+			if (current_town != new_town) {
+				agent::MassAgent::carla_client()->LoadWorld(new_town);
+				std::this_thread::sleep_for(5s);
+			}
 			for (size_t i = 0; i < number_of_agents; ++i) {
-				agents.emplace_back(new agent::MassAgent());
+				agents.emplace_back(new agent::MassAgent(random_gen));
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[i]];
 			std::cout << "switch complete, gathering data..." << std::endl;
