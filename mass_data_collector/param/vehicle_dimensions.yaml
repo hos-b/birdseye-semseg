@@ -59,7 +59,7 @@ vehicle.mercedes-benz.coupe:
   back: 2.46365
   left: 1.0249
   right: 0.986128
-  camera-shift: 0.0
+  camera-shift: 0.1
 vehicle.mini.cooperst:
   front: 1.90962
   back: 1.87918
