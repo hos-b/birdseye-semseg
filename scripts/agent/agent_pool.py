@@ -28,25 +28,25 @@ class CurriculumPool:
         create adjacency matrix based on current difficulty
         """
         self.agent_count = masks.shape[0]
-        # also no calculations necessary for difficulty = 1
+        # no calculations necessary for difficulty = 1
         if self.difficulty ==  1:
             self.combined_masks = masks.clone()
             self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool, device=self.device)
             return
-        # no calculations necessary for max possible difficulty (!= max_difficulty)
+        # no calculations necessary for max number of agents (!= max_difficulty)
         elif self.difficulty == self.max_agent_count:
             self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
             self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.bool, device=self.device)
             return
         # for other cases, need to do some stuff
         self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
-        # identifying the masks
+        # identifying the masks (giving them ids)
         new_masks = masks.clone()
         for i in range(ids.shape[1]):
-            new_masks[i] *= 1 << ids[0, i, 0].item() # the id tensors are fucked but squeeze() makes it worse
+            new_masks[i] *= 1 << ids[0, i, 0].item()
         self.combined_masks = get_all_aggregate_masks(new_masks, transforms, pixels_per_meter, h, w,
                                                       center_x, center_y, 'nearest').long()
-        # using the unique values of the mask to find agent view overlaps
+        # using the unique ids of the masks to find biggest 
         for i in range(self.agent_count):
             possible_connections, counts = self.combined_masks[i].unique(sorted=False, return_counts=True)
             possible_connections = possible_connections.long().cpu().tolist()
@@ -56,6 +56,8 @@ class CurriculumPool:
             try:
                 # no one cares where mask is 0
                 possible_connections.remove(0)
+                # or if the agent view overlaps itself
+                possible_connections.remove(1 << i)
             except ValueError:
                 pass
             # the ego-mask is always pre-selected
@@ -64,14 +66,16 @@ class CurriculumPool:
             # while 
             while accepted_connection_count < self.difficulty and len(possible_connections) > 0:
                 current_connection = possible_connections.pop(0)
-                # if already accepted this connection earlier in another
+                import pdb; pdb.set_trace()
+                # if already accepted this connection earlier
                 if (~accepted_connections & current_connection) == 0:
                     continue
                 # considering the constituent mask elements
-                for uniq_mask_id in decompose_binary_elements(current_connection):
+                for agent_id in decompose_binary_elements(current_connection):
+                    uniq_mask_id = 1 << agent_id
                     # if agent has not been considered before
-                    if (uniq_mask_id & ~accepted_connections):
-                        self.adjacency_matrix[i, uniq_mask_id] = 1
+                    if (uniq_mask_id & ~accepted_connections) != 0:
+                        self.adjacency_matrix[i, agent_id] = 1
                         accepted_connections |= uniq_mask_id
                         accepted_connection_count += 1
                         # not adding too many
@@ -87,14 +91,14 @@ def decompose_binary_elements(mask_value) -> list:
     """
     as a part of generating a connection strategy, the mask value that has had
     the highest overlap with the current agent is decomposed into its elements
-    Example: mask_value = 2 + 16 + 32 + 64 -> [1, 4, 5, 6]
+    Example: mask_value = 1 + 2 + 16 + 32 + 64 -> [0, 1, 4, 5, 6]
     """
     elements = []
     shifts = 0
     max_mask_value = 1 << shifts
     while mask_value >= max_mask_value:
+        shifts += 1
         if mask_value & max_mask_value:
             elements.append(shifts)
-        shifts += 1
         max_mask_value = 1 << shifts
     return elements
