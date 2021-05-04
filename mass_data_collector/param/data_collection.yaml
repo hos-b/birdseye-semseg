@@ -1,15 +1,14 @@
 dataset:
   path: '/home/mass/data/test.hdf5'
-  name: 'town-01'
-  town: 4 # 1-5
-  append: true
+  name: 'training-2345'
+  towns: [2, 3, 4, 5]
+  append: false
 
 collection:
   random_seed: 515
   minimum_cars: 3
   maximum_cars: 3
-  round_batch_count: 5 # number of datapoints in the next run
-  total_batch_count: 10 # total number of datapoints
+  town_batch_counts: [5, 5, 5, 5] # number of datapoints in the each town
   hdf5_chunk_size: 5
   # mandatory delay after each batch because moving cars in carla is not
   # a blocking call unless in sync mode. 100 for slow PC, 10 for fast

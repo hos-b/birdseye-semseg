@@ -45,7 +45,7 @@ public:
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(const std::unordered_map<int, bool>& restricted_roads);
 	boost::shared_ptr<carla::client::Waypoint>
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-				  size_t knn_pts, const MassAgent* agents, const bool* deadlock,
+				  size_t knn_pts, const std::vector<MassAgent*>& agents, const bool* deadlock,
 				  std::vector<unsigned int> indices, unsigned int max_index,
 				  const std::unordered_map<int, bool>& restricted_roads);
 	void HideAgent();
@@ -65,7 +65,7 @@ public:
 	// static stuff
 	static std::unique_ptr<cc::Client>& carla_client();
 	static std::vector<const MassAgent*>& agents();
-	static void DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path);
+	static void DebugMultiAgentCloud(std::vector<MassAgent*>& agents, const std::string& path);
 
 	// debug functions
 	cv::Mat GetMap();
@@ -85,7 +85,6 @@ public:
 	template<class BBox>
 	bool kdtree_get_bbox(BBox& /* bb */) const {return false;}
 
-
 private:
 	std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors(float rgb_cam_shift);
@@ -95,7 +94,6 @@ private:
 	void AssertSize(size_t size);
 	static std::vector<std::string> GetBlueprintNames();
 	static geom::base_members::Settings& sc_settings();
-
 
 	// state
 	uint16 id_;

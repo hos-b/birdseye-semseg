@@ -137,7 +137,7 @@ ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
    the indices of the other agents must be given and only up until `max_index will be considered */
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-						 size_t knn_pts, const MassAgent* agents, const bool* deadlock,
+						 size_t knn_pts, const std::vector<MassAgent*>& agents, const bool* deadlock,
 				  		 std::vector<unsigned int> indices, unsigned int max_index,
 						 const std::unordered_map<int, bool>& restricted_roads) {
 	// last agent in queue has hit a deadlock, forwarding nullptr
@@ -189,7 +189,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		}
 		target_tf = next_wp->GetTransform();
 		for (unsigned int i = 0; i < max_index; ++i) {
-			const MassAgent* agent = &agents[indices[i]];
+			const MassAgent* agent = agents[indices[i]];
 			// technically impossible to hit this if
 			if (agent->id_ == id_) {
 				continue;
@@ -628,12 +628,18 @@ void MassAgent::SetupSensors(float rgb_cam_shift) {
 
 /* returns the static carla client. only one is needed for all agents */
 std::unique_ptr<cc::Client>& MassAgent::carla_client() {
-	static std::unique_ptr<cc::Client> carla_client = std::make_unique<cc::Client>("127.0.0.1", 2000);
+	static std::unique_ptr<cc::Client> carla_client;
 	static std::once_flag flag;
 	std::call_once(flag, [&]() {
-		carla_client->SetTimeout(2s);
-		std::cout << "client version: " << carla_client->GetClientVersion() << "\t"
-				  << "server version: " << carla_client->GetServerVersion() << std::endl;
+		try {
+			carla_client = std::make_unique<cc::Client>("127.0.0.1", 2000);
+			carla_client->SetTimeout(2s);
+			std::cout << "client version: " << carla_client->GetClientVersion() << "\t"
+					  << "server version: " << carla_client->GetServerVersion() << std::endl;
+		} catch (carla::client::TimeoutException& e) {
+			std::cout << "connection to the simulator timed out" << std::endl;
+			std::exit(EXIT_FAILURE);
+		}
 	});
 	return carla_client;
 }
@@ -660,19 +666,19 @@ void MassAgent::AssertSize(size_t size) {
 }
 
 /* create a single cloud using all cameras of all agents */
-void MassAgent::DebugMultiAgentCloud(MassAgent* agents, size_t size, const std::string& path) {
+void MassAgent::DebugMultiAgentCloud(std::vector<MassAgent*>& agents, const std::string& path) {
 	geom::base_members::Settings semantic_conf{1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128};
 	geom::SemanticCloud<geom::CloudBackend::KD_TREE> target_cloud(semantic_conf);
-	for (size_t i = 0; i < size; ++i) {
-		agents[i].CaptureOnce();
+	for (size_t i = 0; i < agents.size(); ++i) {
+		agents[i]->CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
-		for (auto& semantic_depth_cam : agents[i].semantic_pc_cams_) {
+		for (auto& semantic_depth_cam : agents[i]->semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();
 			if (success) {
-				Eigen::Matrix4d tf = agents[0].transform_.inverse() * agents[i].transform_;
+				Eigen::Matrix4d tf = agents[0]->transform_.inverse() * agents[i]->transform_;
 				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
 			} else {
-				std::cout << "ERROR: agent " + std::to_string(agents[i].id_)
+				std::cout << "ERROR: agent " + std::to_string(agents[i]->id_)
 						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
 				return;
 			}
