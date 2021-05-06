@@ -48,7 +48,6 @@ struct CollectionConfig
             conf.maximum_cars = collection["maximum_cars"].as<unsigned int>();
             auto yaml_batch_counts = collection["town_batch_counts"];
             if (yaml_batch_counts.IsSequence()) {
-                std::cout << "yaml batch count is a seq" << std::endl;
                 for (const auto &batch_count : yaml_batch_counts) {
                     if (batch_count.IsScalar()) {
                         conf.town_batch_counts.emplace_back(batch_count.as<size_t>());

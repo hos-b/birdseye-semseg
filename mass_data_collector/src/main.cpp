@@ -201,6 +201,9 @@ int main(int argc, char **argv)
 		dataset->Close();
 		time_thread->join();
 	}
+	for (size_t i = 0; i < number_of_agents; ++i) {
+		delete agents[i];
+	}
 	return 0;
 }
 
@@ -347,7 +350,7 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			agent::MassAgent::carla_client()->LoadWorld(new_town);
 			std::this_thread::sleep_for(5s);
 			for (size_t i = 0; i < number_of_agents; ++i) {
-				agents.emplace_back(new agent::MassAgent(random_gen));
+				new agent::MassAgent(random_gen);
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[0]];
 		}
@@ -368,7 +371,7 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 				std::this_thread::sleep_for(5s);
 			}
 			for (size_t i = 0; i < number_of_agents; ++i) {
-				agents.emplace_back(new agent::MassAgent(random_gen));
+				new agent::MassAgent(random_gen);
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[i]];
 			std::cout << "switch complete, gathering data..." << std::endl;

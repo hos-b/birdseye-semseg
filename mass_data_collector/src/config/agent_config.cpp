@@ -172,6 +172,8 @@ namespace config
     // town10 roads to avoid
     const std::unordered_map<int, bool> town10_restricted_roads ({
         {8, true}, // under tram stop
+        {1, true}, // leading to tram stop
+        {4, true}  // leading to tram stop
     });
     const std::unordered_map<int, bool>* restricted_roads[] = {
         nullptr,
@@ -194,8 +196,6 @@ namespace config
         {5, "/Game/Carla/Maps/Town05"},
         {6, "/Game/Carla/Maps/Town06"},
         {7, "/Game/Carla/Maps/Town07"},
-        {8, "does not exist"},
-        {9, "does not exist"},
-        {10, "/Game/Carla/Maps/Town10HD"}
+        {10,"/Game/Carla/Maps/Town10HD"}
     });
 } // namespace config
