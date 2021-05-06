@@ -40,8 +40,19 @@ namespace config
 	extern const bool filtered_semantics[23];
 	extern const double semantic_weight[23];
 
+	/* Towns
+        /Game/Carla/Maps/Town01 small, no exceptions
+        /Game/Carla/Maps/Town02 small, no exceptions
+        /Game/Carla/Maps/Town03 default
+        /Game/Carla/Maps/Town04 large but mostly highway
+        /Game/Carla/Maps/Town05 medium. has underpass
+        /Game/Carla/Maps/Town06 suburb. no occlusions
+        /Game/Carla/Maps/Town07 small farmhouse
+        /Game/Carla/Maps/Town10HD small very urban
+    */
+
 	// hash maps for restricted areas on map
-	extern const std::unordered_map<int, bool>* restricted_roads[6];
+	extern const std::unordered_map<int, bool>* restricted_roads[10];
 	extern const std::unordered_map<int, std::string> town_map_strings;
 
 } // namespace config

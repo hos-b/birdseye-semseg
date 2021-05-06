@@ -161,19 +161,41 @@ namespace config
         {1985, true}, // underpass junction
         {1986, true}  // underpass junction
     });
+    // town6 roads to avoid
+    const std::unordered_map<int, bool> town6_restricted_roads ({
+
+    });
+    // town7 roads to avoid
+    const std::unordered_map<int, bool> town7_restricted_roads ({
+
+    });
+    // town10 roads to avoid
+    const std::unordered_map<int, bool> town10_restricted_roads ({
+        {8, true}, // under tram stop
+    });
     const std::unordered_map<int, bool>* restricted_roads[] = {
         nullptr,
         &town1_restricted_roads,
         &town2_restricted_roads,
         &town3_restricted_roads,
         &town4_restricted_roads,
-        &town5_restricted_roads
+        &town5_restricted_roads,
+        &town6_restricted_roads,
+        &town7_restricted_roads,
+        nullptr,
+        nullptr,
+        &town10_restricted_roads
     };
     const std::unordered_map<int, std::string> town_map_strings ({
         {1, "/Game/Carla/Maps/Town01"},
         {2, "/Game/Carla/Maps/Town02"},
         {3, "/Game/Carla/Maps/Town03"},
         {4, "/Game/Carla/Maps/Town04"},
-        {5, "/Game/Carla/Maps/Town05"}
+        {5, "/Game/Carla/Maps/Town05"},
+        {6, "/Game/Carla/Maps/Town06"},
+        {7, "/Game/Carla/Maps/Town07"},
+        {8, "does not exist"},
+        {9, "does not exist"},
+        {10, "/Game/Carla/Maps/Town10HD"},
     });
 } // namespace config

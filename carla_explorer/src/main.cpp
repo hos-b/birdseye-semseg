@@ -81,18 +81,16 @@ int main(int argc, char** argv)
               << "A: print coordinate data\n" << std::endl;
     ros::Subscriber joy_sub = node_handle.subscribe<sensor_msgs::Joy>("joy", 10, JoystickCallback);
     // connect & change town
-    auto spectator = InitCARLA("/Game/Carla/Maps/Town02");
+    auto spectator = InitCARLA("/Game/Carla/Maps/Town10HD");
     /*  Towns
         /Game/Carla/Maps/Town01 small, no exceptions
         /Game/Carla/Maps/Town02 small, no exceptions
         /Game/Carla/Maps/Town03 default
         /Game/Carla/Maps/Town04 large but mostly highway
         /Game/Carla/Maps/Town05 medium. has underpass
-        /Game/Carla/Maps/Town01_Opt
-        /Game/Carla/Maps/Town02_Opt
-        /Game/Carla/Maps/Town03_Opt
-        /Game/Carla/Maps/Town04_Opt
-        /Game/Carla/Maps/Town05_Opt
+        /Game/Carla/Maps/Town06 suburb. no occlusions
+        /Game/Carla/Maps/Town07 small farmhouse
+        /Game/Carla/Maps/Town10HD small very urban
     */
     auto world = carla_client->GetWorld();
     auto map = world.GetMap();
