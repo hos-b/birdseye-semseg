@@ -359,7 +359,6 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::vector<agent::MassAg
 				delete agents[i];
 			}
 			agents.clear();
-			std::string new_town = config::town_map_strings.at(col_conf.towns[i]);
 			auto current_town = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
 			// in case same town is used consecutively to force agent changing/recoloring
 			if (current_town != new_town) {
