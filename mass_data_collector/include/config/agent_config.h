@@ -52,7 +52,7 @@ namespace config
     */
 
 	// hash maps for restricted areas on map
-	extern const std::unordered_map<int, bool>* restricted_roads[10];
+	extern const std::unordered_map<int, bool>* restricted_roads[11];
 	extern const std::unordered_map<int, std::string> town_map_strings;
 
 } // namespace config

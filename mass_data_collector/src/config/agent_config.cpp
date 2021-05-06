@@ -196,6 +196,6 @@ namespace config
         {7, "/Game/Carla/Maps/Town07"},
         {8, "does not exist"},
         {9, "does not exist"},
-        {10, "/Game/Carla/Maps/Town10HD"},
+        {10, "/Game/Carla/Maps/Town10HD"}
     });
 } // namespace config
