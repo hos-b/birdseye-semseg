@@ -315,7 +315,7 @@ void AssertConfiguration() {
 		}
 	}
 	for (auto& town_no : col_conf.towns) {
-		if (town_no < 1 || town_no > 5) {
+		if (town_no < 1 || town_no > 10 || town_no == 7 || town_no == 8) {
 			failed = true;
 			std::cout << "invalid town number " << town_no << ", expected integer between 1 and 5" << std::endl;
 		}
