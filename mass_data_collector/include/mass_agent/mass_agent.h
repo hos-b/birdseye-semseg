@@ -46,12 +46,10 @@ public:
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(const std::unordered_map<int, bool>& restricted_roads);
 	boost::shared_ptr<carla::client::Waypoint>
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-				  size_t knn_pts, const std::vector<MassAgent*>& agents, const bool* deadlock,
+				  size_t knn_pts, const bool* deadlock,
 				  std::vector<unsigned int> indices, unsigned int max_index,
 				  const std::unordered_map<int, bool>& restricted_roads);
 	void HideAgent();
-	// TODO: implement
-	void RandomizeColor();
 	void PauseSensorCallbacks();
 	void ResumeSensorCallbacks();
 
@@ -65,12 +63,11 @@ public:
 	
 	// static stuff
 	static std::unique_ptr<cc::Client>& carla_client();
-	static std::vector<const MassAgent*>& agents();
-	static void DebugMultiAgentCloud(std::vector<MassAgent*>& agents, const std::string& path);
+	static std::vector<MassAgent*>& agents();
+	static void DebugMultiAgentCloud(const std::string& path);
 
 	// debug functions
 	cv::Mat GetMap();
-	void ExploreMap();
 
 	// obligatory kd-tree stuff
 	inline size_t kdtree_get_point_count() const { return kd_points_.size(); }

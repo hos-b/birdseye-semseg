@@ -17,9 +17,10 @@ using namespace std::chrono_literals;
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
-void SwitchTown(size_t, size_t, std::vector<agent::MassAgent*>&, std::unordered_map<int, bool>&, std::mt19937&);
+void SwitchTown(size_t, size_t, std::unordered_map<int, bool>&, std::mt19937&);
 std::string SecondsToString(uint32);
 
+using agent::MassAgent;
 
 int main(int argc, char **argv)
 {
@@ -72,7 +73,6 @@ int main(int argc, char **argv)
 		}
 	}
 	// CARLA setup ----------------------------------------------------------------------------------------------
-	std::vector<agent::MassAgent*> agents;
 	boost::shared_ptr<carla::client::Waypoint> random_pose;
 	// some timing stuff ----------------------------------------------------------------------------------------
 	float avg_batch_time = 0.0f;
@@ -92,17 +92,18 @@ int main(int argc, char **argv)
 	std::vector<unsigned int> shuffled(number_of_agents);
     std::iota(shuffled.begin(), shuffled.end(), 0);
 	// debugging ------------------------------------------------------------------------------------------------
+	auto& agents = agent::MassAgent::agents();
 	if (debug_mode) {
-		SwitchTown(0, number_of_agents, agents, restricted_roads, random_gen);
+		SwitchTown(0, number_of_agents, restricted_roads, random_gen);
 		std::vector<unsigned int> indices(number_of_agents);
     	std::iota(indices.begin(), indices.end(), 0);
 		std::cout << "creating uniform pointcloud" << std::endl;
 		random_pose = agents[0]->SetRandomPose(restricted_roads);
 		for (size_t i = 1; i < number_of_agents; ++i) {
-			random_pose = agents[i]->SetRandomPose(random_pose, 30, agents, &deadlock,
+			random_pose = agents[i]->SetRandomPose(random_pose, 30, &deadlock,
 												   indices, i, restricted_roads);
 		}
-		agent::MassAgent::DebugMultiAgentCloud(agents, config.dataset_path + ".pcl");
+		agent::MassAgent::DebugMultiAgentCloud(config.dataset_path + ".pcl");
 		ros::shutdown();
 	}
 	// data collection loop -------------------------------------------------------------------------------------
@@ -111,7 +112,7 @@ int main(int argc, char **argv)
 			break;
 		}
 		state = 'i';
-		SwitchTown(batch_count, number_of_agents, agents, restricted_roads, random_gen);
+		SwitchTown(batch_count, number_of_agents, restricted_roads, random_gen);
 		// timing
 		auto batch_start_t = std::chrono::high_resolution_clock::now();
 		// randoming the batch size and shuffling the agents
@@ -132,8 +133,8 @@ int main(int argc, char **argv)
 			agents_done = 1;
 			for (size_t i = 1; i < batch_size; ++i) {
 				agents_done += 1;
-				random_pose = agents[shuffled[i]]->SetRandomPose(random_pose, 32, agents, &deadlock,
-																shuffled, i, restricted_roads);
+				random_pose = agents[shuffled[i]]->SetRandomPose(random_pose, 32, &deadlock,
+																 shuffled, i, restricted_roads);
 			}
 		} while (deadlock);
 		// hiding & disabling callbacks for the ones that didn't make it
@@ -331,9 +332,10 @@ void AssertConfiguration() {
 }
 
 /* switch town based on the batch number */
-void SwitchTown(size_t batch, size_t number_of_agents, std::vector<agent::MassAgent*>& agents,
-				std::unordered_map<int, bool>& restricted_roads, std::mt19937& random_gen) {
+void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, bool>& restricted_roads,
+				std::mt19937& random_gen) {
 	auto& col_conf = CollectionConfig::GetConfig();
+	auto& agents = MassAgent::agents();
 	if (batch == col_conf.total_batch_count) {
 		throw std::runtime_error("should not be reaching this line");
 	}

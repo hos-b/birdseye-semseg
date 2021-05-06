@@ -40,9 +40,21 @@ MassAgent::MassAgent(std::mt19937& random_generator) {
 	try {
 		auto world = carla_client()->GetWorld();
 		auto spawn_points = world.GetMap()->GetRecommendedSpawnPoints();
-		// initializing kd_tree (if empty)
+		// initialize kd_tree (if empty)
 		InitializeKDTree();
-
+		// random the car model
+		auto car_models = GetBlueprintNames();
+		bool repetitive = false;
+		auto& all_agents = agents();
+		do {
+			blueprint_name_	= RandomChoice(car_models, random_generator);
+			for (size_t i = 0; i < all_agents.size(); ++i) {
+				if (i != id_ && blueprint_name_ == all_agents[i]->blueprint_name_) {
+					repetitive = true;
+					break;
+				}
+			}
+		} while(repetitive);
 		auto blueprint_library = world.GetBlueprintLibrary();
 		blueprint_name_ = GetBlueprintNames()[id_];
 		auto vehicles = blueprint_library->Filter(blueprint_name_);
@@ -154,7 +166,7 @@ ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
    the indices of the other agents must be given and only up until `max_index will be considered */
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-						 size_t knn_pts, const std::vector<MassAgent*>& agents, const bool* deadlock,
+						 size_t knn_pts, const bool* deadlock,
 				  		 std::vector<unsigned int> indices, unsigned int max_index,
 						 const std::unordered_map<int, bool>& restricted_roads) {
 	// last agent in queue has hit a deadlock, forwarding nullptr
@@ -206,7 +218,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		}
 		target_tf = next_wp->GetTransform();
 		for (unsigned int i = 0; i < max_index; ++i) {
-			const MassAgent* agent = agents[indices[i]];
+			const MassAgent* agent = agents()[indices[i]];
 			// technically impossible to hit this if
 			if (agent->id_ == id_) {
 				continue;
@@ -683,19 +695,19 @@ void MassAgent::AssertSize(size_t size) {
 }
 
 /* create a single cloud using all cameras of all agents */
-void MassAgent::DebugMultiAgentCloud(std::vector<MassAgent*>& agents, const std::string& path) {
+void MassAgent::DebugMultiAgentCloud(const std::string& path) {
 	geom::base_members::Settings semantic_conf{1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128};
 	geom::SemanticCloud<geom::CloudBackend::KD_TREE> target_cloud(semantic_conf);
-	for (size_t i = 0; i < agents.size(); ++i) {
-		agents[i]->CaptureOnce();
+	for (size_t i = 0; i < agents().size(); ++i) {
+		agents()[i]->CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
-		for (auto& semantic_depth_cam : agents[i]->semantic_pc_cams_) {
+		for (auto& semantic_depth_cam : agents()[i]->semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();
 			if (success) {
-				Eigen::Matrix4d tf = agents[0]->transform_.inverse() * agents[i]->transform_;
+				Eigen::Matrix4d tf = agents()[0]->transform_.inverse() * agents()[i]->transform_;
 				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
 			} else {
-				std::cout << "ERROR: agent " + std::to_string(agents[i]->id_)
+				std::cout << "ERROR: agent " + std::to_string(agents()[i]->id_)
 						+ "'s " << semantic_depth_cam->name() << " is unresponsive" << std::endl;
 				return;
 			}
@@ -733,82 +745,9 @@ geom::base_members::Settings& MassAgent::sc_settings() {
 }
 
 /* static function that returns a vector of all active agents */
-std::vector<const MassAgent*>& MassAgent::agents() {
-	static std::vector<const MassAgent*> agents;
+std::vector<MassAgent*>& MassAgent::agents() {
+	static std::vector<MassAgent*> agents;
 	return agents;
 }
 
-/* used to explore the map to find the road ID of corrupt samples */
-[[deprecated("debug function")]] void MassAgent::ExploreMap() {
-	/* 
-	enum class LaneType : uint32_t {
-		None          = 0x1,
-		Driving       = 0x1 << 1,
-		Stop          = 0x1 << 2,
-		Shoulder      = 0x1 << 3,
-		Biking        = 0x1 << 4,
-		Sidewalk      = 0x1 << 5,
-		Border        = 0x1 << 6,
-		Restricted    = 0x1 << 7,
-		Parking       = 0x1 << 8,
-		Bidirectional = 0x1 << 9,
-		Median        = 0x1 << 10,
-		Special1      = 0x1 << 11,
-		Special2      = 0x1 << 12,
-		Special3      = 0x1 << 13,
-		RoadWorks     = 0x1 << 14,
-		Tram          = 0x1 << 15,
-		Rail          = 0x1 << 16,
-		Entry         = 0x1 << 17,
-		Exit          = 0x1 << 18,
-		OffRamp       = 0x1 << 19,
-		OnRamp        = 0x1 << 20,
-		Any           = 0xFFFFFFFE
-		};
-	*/
-	float poses[16][2] = {
-	// {5.7187e+01, 1.9257e+02}, // buildings look weird
-	// {147.305500, 151.092400}, // buildings look weird again
-	// {-74.1480, -79.5321}, // fine but has a weird building artifact
-	{2.2314e+02, 2.0064e+02}, // tunnel
-	{1.6323e+02, 1.9390e+02}, // end of junction leading to tunnel
-	{170.402800, 193.900000}, // beginning of tunnel
-	{174.264400, 193.900000}, // more inside the tunnel
-	{244.0300,  78.4943}, // inside tunnel and another car
-	{244.2139,  86.0548}, // inside tunnel
-	{244.0843,  80.7248}, // inside tunnel
-	{234.0437,  99.7434}, // tunnel
-	{234.2429, 107.9337}, // tunnel
-	{234.1480, 104.0332}, // tunnel
-	{ -35.6166, -177.2975}, // gas station?
-	{ -29.9447, -174.1371}, // yes?
-	{ -25.4275, -172.1239}, // maybe
-	{248.6527, 147.9556}, // tunnel and side lane
-	{251.6419, 148.2102}, // tunnel and side lane
-	{250.8483, 154.8452}, // tunnel
-	};
-	std::string strings[] = {
-		"tunnel",
-		"end of junction leading to tunnel",
-		"beginning of tunnel",
-		"more inside the tunnel",
-		"inside tunnel and another car",
-		"inside tunnel",
-		"inside tunnel",
-		"tunnel",
-		"tunnel",
-		"tunnel",
-		"gas station?",
-		"yes?",
-		"maybe",
-		"tunnel and side lane",
-		"tunnel and side lane",
-		"tunnel"
-	};
-	auto map = carla_client()->GetWorld().GetMap();
-	for (int i = 0; i < 33; ++i) {
-		auto wp = map->GetWaypoint(carla::geom::Location(poses[i][0], -poses[i][1], 0.0));
-		std::cout << i << " " + strings[i] << ": " << wp->GetRoadId() << " X " << wp->GetLaneId() << std::endl;
-	}
-}
 } // namespace agent
