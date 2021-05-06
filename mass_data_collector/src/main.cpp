@@ -315,9 +315,9 @@ void AssertConfiguration() {
 		}
 	}
 	for (auto& town_no : col_conf.towns) {
-		if (town_no < 1 || town_no > 10 || town_no == 7 || town_no == 8) {
+		if (town_no < 1 || town_no > 10 || town_no == 8 || town_no == 9) {
 			failed = true;
-			std::cout << "invalid town number " << town_no << ", expected integer between 1 and 5" << std::endl;
+			std::cout << "invalid town number " << town_no << ", expected 1-7 or 10" << std::endl;
 		}
 	}
 	if (col_conf.towns.size() != col_conf.town_batch_counts.size()) {
