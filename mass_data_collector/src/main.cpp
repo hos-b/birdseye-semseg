@@ -348,7 +348,7 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 		if (current_town != new_town) {
 			std::cout << "switching to first town: " << new_town << std::endl;
 			agent::MassAgent::carla_client()->LoadWorld(new_town);
-			std::this_thread::sleep_for(5s);
+			std::this_thread::sleep_for(20s);
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				new agent::MassAgent(random_gen);
 			}
@@ -368,7 +368,7 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			// in case same town is used consecutively to force agent changing/recoloring
 			if (current_town != new_town) {
 				agent::MassAgent::carla_client()->LoadWorld(new_town);
-				std::this_thread::sleep_for(5s);
+				std::this_thread::sleep_for(20s);
 			}
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				new agent::MassAgent(random_gen);

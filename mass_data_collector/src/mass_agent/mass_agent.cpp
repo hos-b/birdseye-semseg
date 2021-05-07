@@ -662,7 +662,7 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	std::call_once(flag, [&]() {
 		try {
 			carla_client = std::make_unique<cc::Client>("127.0.0.1", 2000);
-			carla_client->SetTimeout(5s);
+			carla_client->SetTimeout(20s);
 			std::cout << "client version: " << carla_client->GetClientVersion() << "\t"
 					  << "server version: " << carla_client->GetServerVersion() << std::endl;
 		} catch (carla::client::TimeoutException& e) {
