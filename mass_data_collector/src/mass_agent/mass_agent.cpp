@@ -47,7 +47,8 @@ MassAgent::MassAgent(std::mt19937& random_generator) {
 		bool repetitive = false;
 		auto& all_agents = agents();
 		do {
-			blueprint_name_	= car_models[std::rand() % car_models.size()];
+			repetitive = false;
+			blueprint_name_	= RandomChoice(car_models, random_generator);
 			for (size_t i = 0; i < all_agents.size(); ++i) {
 				if (i != id_ && blueprint_name_ == all_agents[i]->blueprint_name_) {
 					repetitive = true;
@@ -56,7 +57,6 @@ MassAgent::MassAgent(std::mt19937& random_generator) {
 			}
 		} while(repetitive);
 		auto blueprint_library = world.GetBlueprintLibrary();
-		blueprint_name_ = GetBlueprintNames()[id_];
 		auto vehicles = blueprint_library->Filter(blueprint_name_);
 		if (vehicles->empty()) {
 			ROS_ERROR("ERROR: did not find car model with name: %s... using vehicle.seat.leon", blueprint_name_.c_str());
@@ -662,7 +662,7 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	std::call_once(flag, [&]() {
 		try {
 			carla_client = std::make_unique<cc::Client>("127.0.0.1", 2000);
-			carla_client->SetTimeout(20s);
+			carla_client->SetTimeout(10s);
 			std::cout << "client version: " << carla_client->GetClientVersion() << "\t"
 					  << "server version: " << carla_client->GetServerVersion() << std::endl;
 		} catch (carla::client::TimeoutException& e) {
