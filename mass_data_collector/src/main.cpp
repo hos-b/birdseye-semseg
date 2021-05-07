@@ -94,7 +94,13 @@ int main(int argc, char **argv)
 	// debugging ------------------------------------------------------------------------------------------------
 	auto& agents = agent::MassAgent::agents();
 	if (debug_mode) {
-		SwitchTown(0, number_of_agents, restricted_roads, random_gen);
+		try {
+			SwitchTown(0, number_of_agents, restricted_roads, random_gen);
+		} catch(carla::client::TimeoutException& e) {
+			std::cout << "connection to simulator timed out, closing dataset..." << std::endl;
+			dataset->Close();
+			std::exit(EXIT_FAILURE);
+		}
 		std::vector<unsigned int> indices(number_of_agents);
     	std::iota(indices.begin(), indices.end(), 0);
 		std::cout << "creating uniform pointcloud" << std::endl;
