@@ -8,6 +8,7 @@ collection:
   random_seed: 515
   minimum_cars: 3
   maximum_cars: 3
+  maximum_batch_count: 10000
   town_batch_counts: [5, 5, 5, 5, 5, 5, 5, 5] # number of datapoints in the each town
   hdf5_chunk_size: 5
   # mandatory delay after each batch because moving cars in carla is not

@@ -17,7 +17,7 @@ struct CollectionConfig
     std::vector<size_t> cumulative_batch_counts;
     unsigned int minimum_cars;
     unsigned int maximum_cars;
-    unsigned int total_batch_count;
+    unsigned int max_batch_count;
     unsigned int batch_delay_ms;
     unsigned int hdf5_chunk_size;
     unsigned long random_seed;
@@ -43,16 +43,17 @@ struct CollectionConfig
                     }
                 }
             }
-
             conf.minimum_cars = collection["minimum_cars"].as<unsigned int>();
             conf.maximum_cars = collection["maximum_cars"].as<unsigned int>();
+            conf.max_batch_count = collection["maximum_batch_count"].as<unsigned int>();
             auto yaml_batch_counts = collection["town_batch_counts"];
             if (yaml_batch_counts.IsSequence()) {
+                size_t commulative_batch_count = 0;
                 for (const auto &batch_count : yaml_batch_counts) {
                     if (batch_count.IsScalar()) {
                         conf.town_batch_counts.emplace_back(batch_count.as<size_t>());
-                        conf.total_batch_count += conf.town_batch_counts.back();
-                        conf.cumulative_batch_counts.emplace_back(conf.total_batch_count);
+                        commulative_batch_count += conf.town_batch_counts.back();
+                        conf.cumulative_batch_counts.emplace_back(commulative_batch_count);
                     }
                 }
             }

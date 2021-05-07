@@ -53,7 +53,7 @@ int main(int argc, char **argv)
 	}
 	srand(config.random_seed);
 	std::cout << "collecting data with up to " << number_of_agents << " agents for "
-			  << config.total_batch_count << " iterations in towns " << config.towns_string() << "\n";
+			  << config.cumulative_batch_counts.back() << " iterations in towns " << config.towns_string() << "\n";
 	// dataset --------------------------------------------------------------------------------------------------
 	HDF5Dataset* dataset = nullptr;
 	if (!debug_mode) {
@@ -64,10 +64,10 @@ int main(int argc, char **argv)
 		}
 		dataset = new HDF5Dataset(config.dataset_path, config.dataset_name,
 								  mode, compression::NONE, 1,
-								 (config.total_batch_count + 1) * config.maximum_cars,
+								 (config.max_batch_count + 1) * config.maximum_cars,
 								  config.hdf5_chunk_size);
 		auto [sz, max_sz] = dataset->GetCurrentSize();
-		if ((max_sz - sz + 1) < config.total_batch_count * config.maximum_cars) {
+		if ((max_sz - sz + 1) < config.cumulative_batch_counts.back() * config.maximum_cars) {
 			std::cout << "not enough remaining space for given round batch count" << std::endl;
 			std::exit(EXIT_FAILURE);
 		}
@@ -83,8 +83,8 @@ int main(int argc, char **argv)
 	unsigned int agents_done = 0;
 	bool deadlock = false;
 	if (!debug_mode) {
-		time_thread = new std::thread(WatchdogThreadCallback, &batch_count,  config.total_batch_count, &state,
-									  &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
+		time_thread = new std::thread(WatchdogThreadCallback, &batch_count, config.cumulative_batch_counts.back(),
+									  &state, &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
 	}
 	// random distribution & shuffling necessities --------------------------------------------------------------
 	std::mt19937 random_gen(config.random_seed);
@@ -108,7 +108,7 @@ int main(int argc, char **argv)
 	}
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
-		if (batch_count == config.total_batch_count) {
+		if (batch_count == config.cumulative_batch_counts.back()) {
 			break;
 		}
 		state = 'i';
@@ -339,7 +339,7 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 				std::mt19937& random_gen) {
 	auto& col_conf = CollectionConfig::GetConfig();
 	auto& agents = MassAgent::agents();
-	if (batch == col_conf.total_batch_count) {
+	if (batch == col_conf.max_batch_count) {
 		throw std::runtime_error("should not be reaching this line");
 	}
 	if (batch == 0) {
