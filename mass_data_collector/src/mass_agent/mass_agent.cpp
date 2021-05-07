@@ -47,7 +47,7 @@ MassAgent::MassAgent(std::mt19937& random_generator) {
 		bool repetitive = false;
 		auto& all_agents = agents();
 		do {
-			blueprint_name_	= RandomChoice(car_models, random_generator);
+			blueprint_name_	= car_models[std::rand() % car_models.size()];
 			for (size_t i = 0; i < all_agents.size(); ++i) {
 				if (i != id_ && blueprint_name_ == all_agents[i]->blueprint_name_) {
 					repetitive = true;
