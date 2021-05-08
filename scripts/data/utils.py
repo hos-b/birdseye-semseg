@@ -2,7 +2,6 @@ import cv2
 import torch
 from data.color_map import our_semantics_to_cityscapes_rgb
 import numpy as np
-import matplotlib
 from matplotlib import pyplot as plt
 
 def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
@@ -70,7 +69,7 @@ def save_seg_prediction(seg, path='mask.png'):
     ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
     cv2.imwrite(path, cv2.cvtColor(ss_pred_img, cv2.COLOR_RGB2BGR))
 
-# dicts for plotting batchesbased on agent count
+# dicts for plotting batches based on agent count
 newline_dict = {
     1: '',
     2: '',
