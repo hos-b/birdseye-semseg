@@ -17,7 +17,7 @@ using namespace std::chrono_literals;
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
-void SwitchTown(size_t, size_t, std::unordered_map<int, bool>&, std::mt19937&);
+bool SwitchTown(size_t, size_t, std::unordered_map<int, bool>&, std::mt19937&);
 std::string SecondsToString(uint32);
 
 using agent::MassAgent;
@@ -94,13 +94,7 @@ int main(int argc, char **argv)
 	// debugging ------------------------------------------------------------------------------------------------
 	auto& agents = agent::MassAgent::agents();
 	if (debug_mode) {
-		try {
-			SwitchTown(0, number_of_agents, restricted_roads, random_gen);
-		} catch(carla::client::TimeoutException& e) {
-			std::cout << "connection to simulator timed out, closing dataset..." << std::endl;
-			dataset->Close();
-			std::exit(EXIT_FAILURE);
-		}
+		SwitchTown(0, number_of_agents, restricted_roads, random_gen);
 		std::vector<unsigned int> indices(number_of_agents);
     	std::iota(indices.begin(), indices.end(), 0);
 		std::cout << "creating uniform pointcloud" << std::endl;
@@ -118,7 +112,9 @@ int main(int argc, char **argv)
 			break;
 		}
 		state = 'i';
-		SwitchTown(batch_count, number_of_agents, restricted_roads, random_gen);
+		if (!SwitchTown(batch_count, number_of_agents, restricted_roads, random_gen)) {
+			break;
+		}
 		// timing
 		auto batch_start_t = std::chrono::high_resolution_clock::now();
 		// randoming the batch size and shuffling the agents
@@ -341,7 +337,7 @@ void AssertConfiguration() {
 }
 
 /* switch town based on the batch number */
-void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, bool>& restricted_roads,
+bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, bool>& restricted_roads,
 				std::mt19937& random_gen) {
 	auto& col_conf = CollectionConfig::GetConfig();
 	auto& agents = MassAgent::agents();
@@ -354,13 +350,12 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 		if (current_town != new_town) {
 			std::cout << "switching to first town: " << new_town << std::endl;
 			agent::MassAgent::carla_client()->LoadWorld(new_town);
-			std::this_thread::sleep_for(10s);
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				new agent::MassAgent(random_gen);
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[0]];
 		}
-		return;
+		return true;
 	}
 	for (size_t i = 1; i < col_conf.cumulative_batch_counts.size(); ++i) {
 		if (batch == col_conf.cumulative_batch_counts[i - 1]) {
@@ -373,7 +368,12 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			auto current_town = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
 			// in case same town is used consecutively to force agent changing/recoloring
 			if (current_town != new_town) {
-				agent::MassAgent::carla_client()->LoadWorld(new_town);
+				try {
+					agent::MassAgent::carla_client()->LoadWorld(new_town);
+				} catch(carla::client::TimeoutException& e) {
+					std::cout << "connection to simulator timed out..." << std::endl;
+					return false;
+				}
 				std::this_thread::sleep_for(10s);
 			}
 			for (size_t i = 0; i < number_of_agents; ++i) {
@@ -381,7 +381,8 @@ void SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[i]];
 			std::cout << "switch complete, gathering data..." << std::endl;
-			return;
+			return true;
 		}
 	}
+	return true;
 }
