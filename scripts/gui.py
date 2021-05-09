@@ -31,16 +31,7 @@ class SampleWindow:
         self.window = tkinter.Tk()
         self.agent_index = 0
         self.agent_count = 8
-        self.agent_label  = tkinter.Label(self.window, text=f'agent {self.agent_index}/{self.agent_count}')
-        self.next_agent   = tkinter.Button(self.window, command=lambda: self.next_prev_clicked(True), text='next agent')
-        self.prev_agent   = tkinter.Button(self.window, command=lambda: self.next_prev_clicked(False), text='prev agent')
-        self.next_sample  = tkinter.Button(self.window, command=self.change_sample, text='next sample')
-        self.smask_button = tkinter.Button(self.window, command=self.toggle_self_masking, text=f'self mask: {int(self.self_masking_en)}')
-        self.agent_label. grid(column=21, row=0)
-        self.next_agent.  grid(column=21, row=1)
-        self.prev_agent.  grid(column=21, row=2)
-        self.next_sample. grid(column=21, row=3)
-        self.smask_button.grid(column=21, row=4)
+        # image panels
         self.rgb_panel         = tkinter.Label(self.window, text='placeholder')
         self.masked_pred_panel = tkinter.Label(self.window, text='placeholder')
         self.full_pred_panel   = tkinter.Label(self.window, text='placeholder')
@@ -57,21 +48,44 @@ class SampleWindow:
         self.masked_pred_panel_caption. grid(column=6, row=0, columnspan=5)
         self.full_pred_panel_caption.   grid(column=11, row=0, columnspan=5)
         self.target_panel_caption.      grid(column=16, row=0, columnspan=5)
+        # agent selection buttons
+        self.sep_1 = tkinter.Label(self.window, text='  ')
+        self.sep_1.grid(row=0, rowspan=10, column=21)
+        buttons_per_row = 4
+        for i in range(8):
+            exec(f"self.abutton_{i} = tkinter.Button(self.window, text={i + 1})")
+            exec(f"self.abutton_{i}.configure(command=lambda: self.agent_clicked({i}))", locals(), locals())
+            exec(f"self.abutton_{i}.grid(column={22 + (i % buttons_per_row)}, row={1 + (i // buttons_per_row)})")
+        # misc. buttons
+        self.agent_label  = tkinter.Label(self.window, text=f'agent {self.agent_index}/{self.agent_count}')
+        self.next_sample  = tkinter.Button(self.window, command=self.change_sample, text='next sample')
+        self.smask_button = tkinter.Button(self.window, command=self.toggle_self_masking, text=f'self mask: {int(self.self_masking_en)}')
+        self.agent_label. grid(column=22, row=0, columnspan=4)
+        self.smask_button.grid(column=22, row=3, columnspan=4)
+        self.next_sample. grid(column=22, row=4, columnspan=4)
+        # adjacency matrix buttons
+        self.sep_2 = tkinter.Label(self.window, text='  ')
+        self.sep_2.grid(row=0, rowspan=10, column=26)
+        for j in range(8):
+            for i in range(8):
+                if i == 0:
+                    exec(f"self.mlabel_{j}{i} = tkinter.Label(self.window, text={j + 1})")
+                    exec(f"self.mlabel_{j}{i}.grid(column={j + 28}, row={i})")
+                if j == 0:
+                    exec(f"self.mlabel_{j}{i} = tkinter.Label(self.window, text={i + 1})")
+                    exec(f"self.mlabel_{j}{i}.grid(column={j + 27}, row={i + 1})")
+                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
+                exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
+                exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
 
     def assign_dataset(self, dset_iterator):
         self.dset_iterator = dset_iterator
 
     def assign_network(self, net: torch.nn.Module):
         self.network = net
+        self.network.eval()
 
     def start(self):
-        for j in range(8):
-            for i in range(8):
-                exec(f"self.button_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
-                exec(f"self.button_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
-                exec(f"self.button_{j}{i}.grid(column={j + 22}, row={i})")
-
-        self.window.title('MASS GUI')
         self.change_sample()
         self.window.mainloop()
 
@@ -79,30 +93,28 @@ class SampleWindow:
         if self.adjacency_matrix[j, i] == 1:
             self.adjacency_matrix[j, i] = 0
             self.adjacency_matrix[i, j] = 0
-            exec(f"self.button_{j}{i}.configure(text='0')")
-            exec(f"self.button_{i}{j}.configure(text='0')")
+            exec(f"self.mbutton_{j}{i}.configure(text='0')")
+            exec(f"self.mbutton_{i}{j}.configure(text='0')")
         else:
             self.adjacency_matrix[j, i] = 1
             self.adjacency_matrix[i, j] = 1
-            exec(f"self.button_{j}{i}.configure(text='1')")
-            exec(f"self.button_{i}{j}.configure(text='1')")
+            exec(f"self.mbutton_{j}{i}.configure(text='1')")
+            exec(f"self.mbutton_{i}{j}.configure(text='1')")
         self.update_prediction()
 
-    def next_prev_clicked(self, next: bool):
-        if next:
-            self.agent_index = min(self.agent_index + 1, self.agent_count - 1)
-        else:
-            self.agent_index = max(self.agent_index - 1, 0)
-        self.agent_label.configure(text=f'agent {self.agent_index + 1}/{self.agent_count}')
-        self.update_prediction()
-    
+    def agent_clicked(self, agent_id: int):
+        if agent_id < self.agent_count:
+            self.agent_index = agent_id
+            self.agent_label.configure(text=f'agent {self.agent_index + 1}/{self.agent_count}')
+            self.update_prediction()
+
     def toggle_self_masking(self):
         self.self_masking_en = not self.self_masking_en
         self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
         self.update_prediction()
 
     def change_sample(self):
-        (_, rgbs, labels, masks, car_transforms, _) = next(self.dset_iterator)
+        (_, rgbs, labels, masks, car_transforms, batch_index) = next(self.dset_iterator)
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
                                                         self.device, False)
@@ -110,15 +122,23 @@ class SampleWindow:
         self.current_data = (rgbs, labels, masks, car_transforms)
         self.agent_count = rgbs.shape[0]
         self.adjacency_matrix = torch.eye(self.agent_count)
+        self.window.title(f'batch #{batch_index.squeeze().item()}')
         self.agent_index = 0
         self.agent_label.configure(text=f'agent {self.agent_index + 1}/{self.agent_count}')
-        # enable/disable matrix
+        # enable/disable adjacency matrix buttons, reset their labels
         for j in range(8):
             for i in range(8):
+                exec(f"self.mbutton_{j}{i}.configure(text='1' if {i} == {j} else '0')")
                 if i < self.agent_count and j < self.agent_count:
-                    exec(f"self.button_{j}{i}['state'] = 'normal'")
+                    exec(f"self.mbutton_{j}{i}['state'] = 'normal'")
                 else:
-                    exec(f"self.button_{j}{i}['state'] = 'disabled'")
+                    exec(f"self.mbutton_{j}{i}['state'] = 'disabled'")
+        # enable/disable agent buttons
+        for i in range(8):
+            if i < self.agent_count:
+                exec(f"self.abutton_{i}['state'] = 'normal'")
+            else:
+                exec(f"self.abutton_{i}['state'] = 'disabled'")
         self.update_prediction()
 
     def update_prediction(self):
@@ -126,7 +146,7 @@ class SampleWindow:
         # prediction for combined prediction
         with torch.no_grad():
             sseg_preds, mask_preds = self.network(rgbs, car_transforms, torch.eye(self.agent_count))
-        
+
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
