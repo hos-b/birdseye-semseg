@@ -1,5 +1,5 @@
 logging:
-  name: 'noavg-basic-67'
+  name: 'last-avg-attempt-67'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -16,14 +16,8 @@ training:
 network:
   model-name: 'mcnnLW'
   aggregation-type: 'bilinear' # or 'nearest'
+  average-aggregation: true
   aggregation-activation-limit: 1e-6
-  average-aggregation: false
-
-resume:
-  flag: false
-  starting-epoch: 27
-  difficulty: 2
-  model-version: 'best'
 
 curriculum:
   initial-difficulty: 1
@@ -41,6 +35,12 @@ hyperparameters:
   output-w: 205
   classes: 'ours'
   num-classes: 7
+
+resume:
+  flag: false
+  starting-epoch: 27
+  difficulty: 2
+  model-version: 'best'
 
 validation:
   # threshold for counting the mask pixel as detected

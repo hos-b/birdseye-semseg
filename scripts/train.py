@@ -38,7 +38,7 @@ def train(**kwargs):
     semseg_loss = kwargs.get('semseg_loss')
     mask_loss_weight = kwargs.get('mask_loss_weight')
     sseg_loss_weight = kwargs.get('sseg_loss_weight')
-    last_snapshot_metric = 0.0
+    last_snapshot_metric = 1e6
     # dataset
     train_loader = kwargs.get('train_loader')
     test_loader = kwargs.get('test_loader')
@@ -142,19 +142,17 @@ def train(**kwargs):
 
         # more wandb logging -------------------------------------------------------------------
         elevation_metric = 0.0
-        new_snapshot_metric = 0.0
         log_dict = {}
         for key, val in segmentation_classes.items():
             log_dict[f'{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
-            new_snapshot_metric += sseg_ious[key] / sample_count
             if val != 'Misc' and val != 'Water':
                 elevation_metric += sseg_ious[key] / sample_count
-        new_snapshot_metric += mask_ious / sample_count
         elevation_metric += mask_ious / sample_count
         log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
         log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
         log_dict['mask iou'] = (mask_ious / sample_count).item()
         log_dict['epoch'] = ep + 1
+        log_dict['save'] = 0
         if train_cfg.strategy == 'metric':
             log_dict['elevation metric'] = (elevation_metric / 6).item()
         if train_cfg.weight_losses:
@@ -164,10 +162,11 @@ def train(**kwargs):
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
-        if new_snapshot_metric > last_snapshot_metric:
+        if log_dict['total validation seg loss'] < last_snapshot_metric:
             print(f'best model @ epoch {ep + 1}')
-            last_snapshot_metric = new_snapshot_metric
+            last_snapshot_metric = log_dict['total validation seg loss']
             snapshot_tag = 'best'
+            log_dict['save'] = 1
         torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
                     f'/{snapshot_tag}_optimizer')
         torch.save(model.state_dict(), train_cfg.snapshot_dir +
