@@ -66,7 +66,6 @@ class CurriculumPool:
             # while 
             while accepted_connection_count < self.difficulty and len(possible_connections) > 0:
                 current_connection = possible_connections.pop(0)
-                import pdb; pdb.set_trace()
                 # if already accepted this connection earlier
                 if (~accepted_connections & current_connection) == 0:
                     continue
