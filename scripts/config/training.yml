@@ -16,6 +16,7 @@ training:
 network:
   model-name: 'mcnnLW'
   aggregation-type: 'bilinear' # or 'nearest'
+  average-aggregation: true
   aggregation-activation-limit: 1e-6
   average-aggregation: false
   decoder-only: false
@@ -40,6 +41,12 @@ hyperparameters:
   # probability that an agent stops transmitting
   drop-prob: 0.0
   color-jitter: [0.5, 0.5, 0.5]
+
+resume:
+  flag: false
+  starting-epoch: 27
+  difficulty: 2
+  model-version: 'best'
 
 validation:
   # threshold for counting the mask pixel as detected
