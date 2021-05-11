@@ -63,7 +63,6 @@ class CurriculumPool:
             # the ego-mask is always pre-selected
             accepted_connections = 1 << i
             accepted_connection_count = 1
-            # while 
             while accepted_connection_count < self.difficulty and len(possible_connections) > 0:
                 current_connection = possible_connections.pop(0)
                 # if already accepted this connection earlier
@@ -96,8 +95,8 @@ def decompose_binary_elements(mask_value) -> list:
     shifts = 0
     max_mask_value = 1 << shifts
     while mask_value >= max_mask_value:
-        shifts += 1
         if mask_value & max_mask_value:
             elements.append(shifts)
+        shifts += 1
         max_mask_value = 1 << shifts
     return elements
