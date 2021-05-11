@@ -1,8 +1,12 @@
+# evaluation configuration used in evalutate.py and partially in gui.py
+
 device: 'cuda'
-run: 'bigbi-67-ce'
+run: 'baseline'
+torch-seed: 0
+snapshot-dir: './runs/{}/snapshots'
 
 model:
-  model-name: 'mcnnL'
+  model-name: 'mcnnLW'
   model-version: 'best' # || 'best'
   aggregation-type: 'bilinear' # or 'nearest'
   average-aggregation: false
@@ -14,7 +18,17 @@ plot:
   plot-dir: './runs/{}/plots'
   plot-tag: 'nostats' # added to dir name
 
-dataset:
+curriculum:
   difficulty: 1
+  maximum-agent-count: 8
+
+dataset:
   random-samples: false
+  classes: 'ours'
+  num-classes: 7
+  output-h: 256
+  output-w: 205
   dataset-split: 'test'
+  dataset-dir: '/export/home/aiscar4/mass-data'
+  dataset-file: 'dataset_10k.hdf5'
+  dataset-name: 'town-01'

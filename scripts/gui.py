@@ -16,8 +16,7 @@ from model.large_mcnn import LMCNN, LWMCNN
 from model.mcnn import MCNN, MCNN4
 
 class SampleWindow:
-    def __init__(self, class_count: int, device: torch.device,
-                 tcfg: TrainingConfig, new_size, center, ppm):
+    def __init__(self, class_count: int, device: torch.device, new_size, center, ppm):
         self.output_h = new_size[0]
         self.output_w = new_size[1]
         self.center_x = center[0]
@@ -188,46 +187,45 @@ class SampleWindow:
         self.full_pred_panel.image = full_pred_tk
 
 def main():
-    train_cfg = TrainingConfig('config/training.yml')
     sem_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     eval_cfg = EvaluationConfig('config/evaluation.yml')
     device = torch.device(eval_cfg.device)
-    torch.manual_seed(train_cfg.torch_seed)
+    torch.manual_seed(eval_cfg.torch_seed)
     # image geometry
-    NEW_SIZE = (train_cfg.output_h, train_cfg.output_w)
+    NEW_SIZE = (eval_cfg.output_h, eval_cfg.output_w)
     CENTER = (sem_cfg.center_x(NEW_SIZE[1]), sem_cfg.center_y(NEW_SIZE[0]))
     PPM = sem_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
     # gui object
-    gui = SampleWindow(train_cfg.num_classes, device, train_cfg, NEW_SIZE, CENTER, PPM)
+    gui = SampleWindow(eval_cfg.num_classes, device, NEW_SIZE, CENTER, PPM)
     # dataloader stuff
-    _, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
-                               train_cfg.dset_file, (0.8, 0.2),
-                               NEW_SIZE, train_cfg.classes)
+    _, test_set = get_datasets(eval_cfg.dset_name, eval_cfg.dset_dir,
+                               eval_cfg.dset_file, (0.8, 0.2),
+                               NEW_SIZE, eval_cfg.classes)
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset(iter(loader))
     # network stuff
     if eval_cfg.model_version != 'best' and eval_cfg.model_version != 'last':
         print("valid model version are 'best' and 'last'")
         exit()
-    train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(eval_cfg.run)
+    eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.run)
     snapshot_path = f'{eval_cfg.model_version}_model.pth'
-    snapshot_path = train_cfg.snapshot_dir + '/' + snapshot_path
+    snapshot_path = eval_cfg.snapshot_dir + '/' + snapshot_path
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
         exit()
     if eval_cfg.model_name == 'mcnn':
-        model = MCNN(train_cfg.num_classes, NEW_SIZE,
+        model = MCNN(eval_cfg.num_classes, NEW_SIZE,
                      sem_cfg, eval_cfg.aggregation_type).to(device)
     elif eval_cfg.model_name == 'mcnn4':
-        model = MCNN4(train_cfg.num_classes, NEW_SIZE,
+        model = MCNN4(eval_cfg.num_classes, NEW_SIZE,
                       sem_cfg, eval_cfg.aggregation_type).to(device)
     elif eval_cfg.model_name == 'mcnnL':
-        model = LMCNN(train_cfg.num_classes, NEW_SIZE,
+        model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
                       sem_cfg, eval_cfg.aggregation_type,
                       eval_cfg.aggregation_activation_limit,
                       eval_cfg.average_aggregation).to(device)
     elif eval_cfg.model_name == 'mcnnLW':
-        model = LWMCNN(train_cfg.num_classes, NEW_SIZE,
+        model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
                        sem_cfg, eval_cfg.aggregation_type,
                        eval_cfg.aggregation_activation_limit,
                        eval_cfg.average_aggregation).to(device)

@@ -74,12 +74,9 @@ class TrainingConfig:
         self.strategy_parameter = conf['curriculum']['strategy-parameter']
         # hyperparameters
         self.drop_prob = float(conf['hyperparameters']['drop-prob'])
-        self.output_h = int(conf['hyperparameters']['output-h'])
-        self.output_w = int(conf['hyperparameters']['output-w'])
-        self.classes = str(conf['hyperparameters']['classes'])
-        self.num_classes = int(conf['hyperparameters']['num-classes'])
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = int(conf['hyperparameters']['epochs'])
+        self.color_jitter = list(conf['hyperparameters']['color-jitter'])
         # validation parameters
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
         # dataloader config
@@ -87,6 +84,10 @@ class TrainingConfig:
         self.pin_memory = bool(conf['dataloader']['pin-memory'])
         self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
         # dataset config
+        self.output_h = int(conf['dataset']['output-h'])
+        self.output_w = int(conf['dataset']['output-w'])
+        self.classes = str(conf['dataset']['classes'])
+        self.num_classes = int(conf['dataset']['num-classes'])
         self.dset_dir = str(conf['dataset']['dataset-dir'])
         self.dset_file = str(conf['dataset']['dataset-file'])
         self.dset_name = str(conf['dataset']['dataset-name'])
@@ -99,18 +100,29 @@ class EvaluationConfig:
         # evaluation parameters
         self.device = str(conf['device'])
         self.run = str(conf['run'])
-
+        self.torch_seed = int(conf['torch-seed'])
+        self.snapshot_dir = str(conf['snapshot-dir'])
+        # model parameters
         self.model_name = str(conf['model']['model-name'])
         self.model_version = str(conf['model']['model-version'])
         self.aggregation_type = str(conf['model']['aggregation-type'])
         self.aggregation_activation_limit = float(conf['model']['aggregation-activation-limit'])
         self.average_aggregation = bool(conf['model']['average-aggregation'])
-
+        # plotting parameters
         self.plot_count = int(conf['plot']['count'])
         self.plot_type = str(conf['plot']['plot-type'])
         self.plot_dir = str(conf['plot']['plot-dir'])
         self.plot_tag = str(conf['plot']['plot-tag'])
-
+        # dataset parameters
         self.random_samples = bool(conf['dataset']['random-samples'])
-        self.difficulty = int(conf['dataset']['difficulty'])
         self.data_split = str(conf['dataset']['dataset-split'])
+        self.dset_dir = str(conf['dataset']['dataset-dir'])
+        self.dset_file = str(conf['dataset']['dataset-file'])
+        self.dset_name = str(conf['dataset']['dataset-name'])
+        self.output_h = int(conf['dataset']['output-h'])
+        self.output_w = int(conf['dataset']['output-w'])
+        self.classes = str(conf['dataset']['classes'])
+        self.num_classes = int(conf['dataset']['num-classes'])
+        # curriculum parameters
+        self.difficulty = int(conf['curriculum']['difficulty'])
+        self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])

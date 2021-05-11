@@ -1,5 +1,5 @@
 logging:
-  name: 'noavg-basic-67'
+  name: 'debug'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -18,9 +18,11 @@ network:
   aggregation-type: 'bilinear' # or 'nearest'
   aggregation-activation-limit: 1e-6
   average-aggregation: false
+  decoder-only: false
 
 resume:
   flag: false
+  decoder-only: false
   starting-epoch: 27
   difficulty: 2
   model-version: 'best'
@@ -37,10 +39,7 @@ hyperparameters:
   epochs: 500
   # probability that an agent stops transmitting
   drop-prob: 0.0
-  output-h: 256
-  output-w: 205
-  classes: 'ours'
-  num-classes: 7
+  color-jitter: [0.5, 0.5, 0.5]
 
 validation:
   # threshold for counting the mask pixel as detected
@@ -52,6 +51,10 @@ dataloader:
   shuffle-data: true
 
 dataset:
-  dataset-dir: '/export/home/bahadorm/mass-data'
+  output-h: 256
+  output-w: 205
+  classes: 'ours'
+  num-classes: 7
+  dataset-dir: '/export/home/aiscar4/mass-data'
   dataset-file: 'dataset_10k.hdf5'
   dataset-name: 'town-01'
