@@ -203,7 +203,7 @@ int main(int argc, char **argv)
 		dataset->Close();
 		time_thread->join();
 	}
-	for (size_t i = 0; i < number_of_agents; ++i) {
+	for (size_t i = 0; i < agents.size(); ++i) {
 		delete agents[i];
 	}
 	return 0;
