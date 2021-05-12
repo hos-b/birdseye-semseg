@@ -1,5 +1,5 @@
 logging:
-  name: 'debug'
+  name: 'last-avg-66'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -18,7 +18,6 @@ network:
   aggregation-type: 'bilinear' # or 'nearest'
   average-aggregation: true
   aggregation-activation-limit: 1e-6
-  average-aggregation: false
   decoder-only: false
 
 resume:
@@ -33,14 +32,15 @@ curriculum:
   maximum-difficulty: 8
   maximum-agent-count: 8
   strategy: 'metric'
-  strategy-parameter: 0.67
+  strategy-parameter: 0.66
 
 hyperparameters:
   learning-rate: 5e-3
   epochs: 500
   # probability that an agent stops transmitting
   drop-prob: 0.0
-  color-jitter: [0.5, 0.5, 0.5]
+  # brightness, contrast, saturation, hue
+  color-jitter: [0.2, 0.2, 0.2, 0.2]
 
 resume:
   flag: false
@@ -62,6 +62,6 @@ dataset:
   output-w: 205
   classes: 'ours'
   num-classes: 7
-  dataset-dir: '/export/home/aiscar4/mass-data'
+  dataset-dir: '/export/home/bahadorm/mass-data'
   dataset-file: 'dataset_10k.hdf5'
   dataset-name: 'town-01'
