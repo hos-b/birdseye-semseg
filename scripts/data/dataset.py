@@ -16,6 +16,7 @@ class MassHDF5(torch.utils.data.Dataset):
         self.hdf5name = kwargs.get('hdf5name')
         self.full_path = self.path + '/' + self.hdf5name
         self.size = kwargs.get('size')
+        self.jitter = kwargs.get('jitter')
         self.dset_name = kwargs.get('dataset', 'town-01')
         self.use_class_subset = kwargs.get('classes') == 'ours'
         print(f'opening {self.full_path}')
@@ -28,7 +29,8 @@ class MassHDF5(torch.utils.data.Dataset):
         print(f"found {self.n_samples} samples in {self.batch_sizes.shape[0]} batches")
         self.rgb_transform = transforms.Compose([
             transforms.ToPILImage(),
-            transforms.ColorJitter(hue=.05, saturation=.05),
+            transforms.ColorJitter(brightness=self.jitter[0], contrast=self.jitter[1],
+                                   hue=self.jitter[2], saturation=self.jitter[3]),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
@@ -146,10 +148,10 @@ class MassHDF5(torch.utils.data.Dataset):
             print(f'could not write metadata to file {self.path}/{filename}')
         return batch_start_indices, batch_sizes
 
-def get_datasets(dataset, path, hdf5name, split=(0.8, 0.2), size=(500, 400), classes='carla'):
+def get_datasets(dataset, path, hdf5name, split=(0.8, 0.2), size=(500, 400), classes='carla', jitter=[0,0,0,0]):
     if classes != 'carla' and classes != 'ours':
         print("unknown segmentation class category: {classes}, using 'carla'")
         classes = 'carla'
     dset = MassHDF5(dataset=dataset, path=path, hdf5name=hdf5name,
-                    size=size, classes=classes)
+                    size=size, classes=classes, jitter=jitter)
     return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])

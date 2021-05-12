@@ -217,7 +217,8 @@ def parse_and_execute():
     # dataset ----------------------------------------------------------------------------------
     train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
                                        train_cfg.dset_file, (0.8, 0.2),
-                                       new_size, train_cfg.classes)
+                                       new_size, train_cfg.classes,
+                                       train_cfg.color_jitter)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
                                                pin_memory=train_cfg.pin_memory,
