@@ -188,7 +188,7 @@ namespace config
         nullptr,
         &town10_restricted_roads
     };
-    const std::unordered_map<int, std::string> town_map_strings ({
+    const std::unordered_map<int, std::string> town_map_full_names ({
         {1, "/Game/Carla/Maps/Town01"},
         {2, "/Game/Carla/Maps/Town02"},
         {3, "/Game/Carla/Maps/Town03"},
@@ -198,4 +198,15 @@ namespace config
         {7, "/Game/Carla/Maps/Town07"},
         {10,"/Game/Carla/Maps/Town10HD"}
     });
+    const std::unordered_map<int, std::string> town_map_short_names ({
+        {1, "Town01"},
+        {2, "Town02"},
+        {3, "Town03"},
+        {4, "Town04"},
+        {5, "Town05"},
+        {6, "Town06"},
+        {7, "Town07"},
+        {10,"Town10HD"}
+    });
+    
 } // namespace config
