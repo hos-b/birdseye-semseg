@@ -1,3 +1,4 @@
+# front facing camera, rgb
 camera-front:
   type: "sensor.camera.rgb"
   id: "front"
@@ -50,6 +51,7 @@ camera-front:
   lens_y_size: 0.08
   sensor_tick: 0.1
 
+# top-down camera, semantic & depth used for target semantics
 camera-mass:
   x: 0.0
   y: 0.0
@@ -62,8 +64,8 @@ camera-mass:
   fov: 90
   sensor_tick: 0.1
 
+# front facing camera, semantic & depth used for mask generation
 camera-mask:
-  type: "sensor.camera.rgb"
   id: "front"
   x: 2.0
   y: 0.0
@@ -86,7 +88,6 @@ camera-mask:
   exposure_max_bright: 9.0
   bloom_intensity: 0.675
   lens_flare_intensity: 0.1
-
   exposure_speed_up: 3.0
   exposure_speed_down: 1.0
   calibration_constant: 16.0

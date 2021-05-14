@@ -197,7 +197,6 @@ void cloud_base<CloudBackend::KD_TREE>::SaveCloud(const std::string& path) const
 	pcl::io::savePCDFile(path, rgb_cloud);
 }
 
-
 /* returns the visible points in the cloud that are visible in the given camera geometry */
 void cloud_base<CloudBackend::KD_TREE>::
 	SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_geometry,
@@ -424,7 +423,7 @@ cv::Mat cloud_base<CloudBackend::SURFACE_MAP>::GetFOVMask(size_t min_point_count
 	return bev_mask;
 }
 #pragma endregion
-/* ------- Mixed template specialization -------------------------------------------- */
+/* ------- Mixed template specialization ------------------------------------------------------- */
 #pragma region MIXED
 /* constructor */
 template<>
@@ -684,7 +683,7 @@ std::tuple<cv::Mat, cv::Mat> cloud_base<CloudBackend::MIXED>::
 	return std::make_tuple(semantic_bev, mask);
 }
 #pragma endregion
-/* --------- Shared definitions ---------------------------------------------------------------- */
+/* ------- Shared definitions ------------------------------------------------------------------ */
 
 /* converts the smenatic mat to an RGB image */
 template <CloudBackend B>
