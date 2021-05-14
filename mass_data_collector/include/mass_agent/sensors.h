@@ -52,7 +52,6 @@ private:
 	std::vector<cv::Mat> images_;
 	std::shared_ptr<geom::CameraGeometry> geometry_;
 	std::function<void(const boost::shared_ptr<carla::sensor::SensorData>& data)> rgb_callback_;
-	std::mutex buffer_mutex_;
 };
 
 class SemanticPointCloudCamera {
@@ -86,8 +85,6 @@ private:
 	std::shared_ptr<geom::CameraGeometry> geometry_;
 	std::vector<cv::Mat> semantic_images_;
 	std::vector<cv::Mat> depth_images_;
-	std::mutex semantic_buffer_mutex_;
-	std::mutex depth_buffer_mutex_;
 };
 
 

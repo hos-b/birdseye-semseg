@@ -50,6 +50,7 @@ public:
 				  std::vector<unsigned int> indices, unsigned int max_index,
 				  const std::unordered_map<int, bool>& restricted_roads);
 	void HideAgent();
+	void CaptureOnce();
 	void PauseSensorCallbacks();
 	void ResumeSensorCallbacks();
 
@@ -87,7 +88,6 @@ private:
 	std::tuple<float, float, float> GetPostion() const;
 	void SetupSensors(float rgb_cam_shift);
 	void DestroyAgent();
-	void CaptureOnce();
 	void InitializeKDTree();
 	void AssertSize(size_t size);
 	static std::vector<std::string> GetBlueprintNames();

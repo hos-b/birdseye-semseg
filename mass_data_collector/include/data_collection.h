@@ -18,7 +18,6 @@ struct CollectionConfig
     unsigned int minimum_cars;
     unsigned int maximum_cars;
     unsigned int max_batch_count;
-    unsigned int batch_delay_ms;
     unsigned int hdf5_chunk_size;
     unsigned long random_seed;
     float deadlock_multiplier;
@@ -57,7 +56,6 @@ struct CollectionConfig
                     }
                 }
             }
-            conf.batch_delay_ms = collection["batch_delay_ms"].as<unsigned int>();
             conf.hdf5_chunk_size = collection["hdf5_chunk_size"].as<unsigned int>();
             conf.random_seed = collection["random_seed"].as<unsigned long>();
             conf.deadlock_multiplier = collection["deadlock_multiplier"].as<float>();

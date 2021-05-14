@@ -13,14 +13,14 @@
 #include "data_collection.h"
 
 using namespace std::chrono_literals;
+using agent::MassAgent;
 
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
 bool SwitchTown(size_t, size_t, std::unordered_map<int, bool>&, std::mt19937&);
 std::string SecondsToString(uint32);
-
-using agent::MassAgent;
+bool EnableSyncMode();
 
 int main(int argc, char **argv)
 {
@@ -92,7 +92,7 @@ int main(int argc, char **argv)
 	std::vector<unsigned int> shuffled(number_of_agents);
     std::iota(shuffled.begin(), shuffled.end(), 0);
 	// debugging ------------------------------------------------------------------------------------------------
-	auto& agents = agent::MassAgent::agents();
+	auto& agents = MassAgent::agents();
 	if (debug_mode) {
 		SwitchTown(0, number_of_agents, restricted_roads, random_gen);
 		std::vector<unsigned int> indices(number_of_agents);
@@ -103,8 +103,12 @@ int main(int argc, char **argv)
 			random_pose = agents[i]->SetRandomPose(random_pose, 30, &deadlock,
 												   indices, i, restricted_roads);
 		}
-		agent::MassAgent::DebugMultiAgentCloud(config.dataset_path + ".pcl");
+		MassAgent::DebugMultiAgentCloud(config.dataset_path + ".pcl");
+		for (size_t i = 0; i < agents.size(); ++i) {
+			delete agents[i];
+		}
 		ros::shutdown();
+		return 0;
 	}
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
@@ -122,15 +126,10 @@ int main(int argc, char **argv)
 		batch_size = distrib(random_gen);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
-		// enabling callbacks for chosen ones
-		for (size_t i = 0; i < batch_size; ++i) {
-			agents[shuffled[i]]->ResumeSensorCallbacks();
-		}
-		state = 'p';
 		// chain randoming poses for the chosen ones, reset on deadlock
+		state = 'p';
 		do {
 			deadlock = false;
-			agents_done = 0;
 			random_pose = agents[shuffled[0]]->SetRandomPose(restricted_roads);
 			agents_done = 1;
 			for (size_t i = 1; i < batch_size; ++i) {
@@ -139,23 +138,29 @@ int main(int argc, char **argv)
 																 shuffled, i, restricted_roads);
 			}
 		} while (deadlock);
-		// hiding & disabling callbacks for the ones that didn't make it
-		state = 'h';
-		for (size_t i = batch_size; i < number_of_agents; ++i) {
-			agents[shuffled[i]]->PauseSensorCallbacks();
-			agents[shuffled[i]]->HideAgent();
+		// capturing frames
+		state = 'c';
+		agents_done = 0;
+		for (size_t i = 0; i < batch_size; ++i) {
+			agents[shuffled[i]]->CaptureOnce();
 		}
-		// mandatory delay because moving cars in carla is not a blocking call
-		std::this_thread::sleep_for(std::chrono::milliseconds(config.batch_delay_ms));
-
+		state = 't';
+		// Ticking() the simulator. for some reason need 2x
+		try {
+			MassAgent::carla_client()->GetWorld().Tick(5s);
+			MassAgent::carla_client()->GetWorld().Tick(5s);
+		} catch (carla::client::TimeoutException& ex) {
+			std::cout << "connection to simulator timed out while Tick()ing" << std::endl;
+			break;
+		}
 		std::future<MASSDataType> promise[batch_size];
 		// gathering data (async)
-		agents_done = 0;
 		state = 'g';
+		agents_done = 0;
 		size_t agent_batch_index = 0;
 		for (unsigned int i = 0; i < batch_size; ++i) {
 			agents_done += 1;
-			promise[i] = std::async(&agent::MassAgent::GenerateDataPoint
+			promise[i] = std::async(&MassAgent::GenerateDataPoint
 									<geom::CloudBackend::KD_TREE>,
 									agents[shuffled[i]], agent_batch_index++);
 		}
@@ -167,7 +172,6 @@ int main(int argc, char **argv)
 			dataset->AppendElement(&datapoint);
 		}
 		// timing stuff
-		state = 't';
 		batch_count += 1;
 		auto batch_end_t = std::chrono::high_resolution_clock::now();
 		std::chrono::duration<float> batch_duration = batch_end_t - batch_start_t;
@@ -175,34 +179,33 @@ int main(int argc, char **argv)
 										  (batch_duration.count() - avg_batch_time);
 		batch_finished = true;
 	}
-	if (!debug_mode) {
-		std::cout << "\ndone, closing dataset..." << std::endl;
-		auto batch_histogram = stats.AsVector();
-		if (config.append) {
-			// updating histogram from last run
-			std::vector<uint32_t> old_stats(batch_histogram.size(), 0);
-			dataset->ReadU32Attribute("batch_histogram", &old_stats[0]);
-			for (size_t i = 0; i < batch_histogram.size(); ++i) {
-				batch_histogram[i] += old_stats[i];
-			}
-			dataset->UpdateU32Attribute("batch_histogram", &batch_histogram[0]);
-			// updating max agent count if it's larger in this round
-			uint32_t data[] = {0};
-			dataset->ReadU32Attribute("max_agent_count", data);
-			if (config.maximum_cars > data[0]) {
-				data[0] = config.maximum_cars;
-				dataset->UpdateU32Attribute("max_agent_count", data);
-			}
-		} else {
-			dataset->AddU32Attribute(&batch_histogram[0], batch_histogram.size(), "batch_histogram");
-			uint32_t data[] = {config.maximum_cars};
-			dataset->AddU32Attribute(data, 1, "max_agent_count");
-			data[0] = config.minimum_cars;
-			dataset->AddU32Attribute(data, 1, "min_agent_count");
+	auto batch_histogram = stats.AsVector();
+	if (config.append) {
+		// updating histogram from last run
+		std::vector<uint32_t> old_stats(batch_histogram.size(), 0);
+		dataset->ReadU32Attribute("batch_histogram", &old_stats[0]);
+		for (size_t i = 0; i < batch_histogram.size(); ++i) {
+			batch_histogram[i] += old_stats[i];
 		}
-		dataset->Close();
-		time_thread->join();
+		dataset->UpdateU32Attribute("batch_histogram", &batch_histogram[0]);
+		// updating max agent count if it's larger in this round
+		uint32_t data[] = {0};
+		dataset->ReadU32Attribute("max_agent_count", data);
+		if (config.maximum_cars > data[0]) {
+			data[0] = config.maximum_cars;
+			dataset->UpdateU32Attribute("max_agent_count", data);
+		}
+	} else {
+		dataset->AddU32Attribute(&batch_histogram[0], batch_histogram.size(), "batch_histogram");
+		uint32_t data[] = {config.maximum_cars};
+		dataset->AddU32Attribute(data, 1, "max_agent_count");
+		data[0] = config.minimum_cars;
+		dataset->AddU32Attribute(data, 1, "min_agent_count");
 	}
+	dataset->Close();
+	std::cout << "\ndata collection finished, dataset closed" << std::endl;
+	time_thread->join();
+	std::cout << "\njoined timer thread" << std::endl;
 	for (size_t i = 0; i < agents.size(); ++i) {
 		delete agents[i];
 	}
@@ -331,7 +334,7 @@ void AssertConfiguration() {
 		std::cout << "number of towns " << col_conf.towns.size()
 				  << " doesn't match batch counts " << col_conf.town_batch_counts.size() << std::endl;
 	}
-	if (failed) {
+	if (failed || !EnableSyncMode()) {
 		std::exit(EXIT_FAILURE);
 	}
 }
@@ -345,44 +348,65 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 		throw std::runtime_error("should not be reaching this line");
 	}
 	if (batch == 0) {
-		std::string new_town = config::town_map_strings.at(col_conf.towns[0]);
-		auto current_town = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
-		if (current_town != new_town) {
+		std::string new_town = config::town_map_short_names.at(col_conf.towns[0]);
+		if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
 			std::cout << "switching to first town: " << new_town << std::endl;
-			agent::MassAgent::carla_client()->LoadWorld(new_town);
-			for (size_t i = 0; i < number_of_agents; ++i) {
-				new agent::MassAgent(random_gen);
-			}
+			MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[0]));
+			MassAgent::carla_client()->GetWorld().Tick(5s);
 			restricted_roads = *config::restricted_roads[col_conf.towns[0]];
+		}
+		for (size_t i = 0; i < number_of_agents; ++i) {
+			new MassAgent(random_gen);
 		}
 		return true;
 	}
 	for (size_t i = 1; i < col_conf.cumulative_batch_counts.size(); ++i) {
 		if (batch == col_conf.cumulative_batch_counts[i - 1]) {
-			std::string new_town = config::town_map_strings.at(col_conf.towns[i]);
+			std::string new_town = config::town_map_short_names.at(col_conf.towns[i]);
 			std::cout << "\nswitching to " << new_town << std::endl;
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				delete agents[i];
 			}
 			agents.clear();
-			auto current_town = agent::MassAgent::carla_client()->GetWorld().GetMap()->GetName();
 			// in case same town is used consecutively to force agent changing/recoloring
-			if (current_town != new_town) {
+			if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
 				try {
-					agent::MassAgent::carla_client()->LoadWorld(new_town);
+					MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[i]));
+					MassAgent::carla_client()->GetWorld().Tick(5s);
 				} catch(carla::client::TimeoutException& e) {
 					std::cout << "connection to simulator timed out..." << std::endl;
 					return false;
 				}
-				std::this_thread::sleep_for(10s);
 			}
 			for (size_t i = 0; i < number_of_agents; ++i) {
-				new agent::MassAgent(random_gen);
+				new MassAgent(random_gen);
 			}
 			restricted_roads = *config::restricted_roads[col_conf.towns[i]];
-			std::cout << "switch complete, gathering data..." << std::endl;
+			std::cout << "town switch complete" << std::endl;
 			return true;
 		}
+	}
+	return true;
+}
+/* set the simulator to synchronous mode */
+bool EnableSyncMode() {
+	// get sensor tick from sensors yaml
+	std::string yaml_path = ros::package::getPath("mass_data_collector");
+	yaml_path += "/param/sensors.yaml";
+	YAML::Node base = YAML::LoadFile(yaml_path);
+	YAML::Node front_msk_node = base["camera-mask"];
+	double sensor_tick = front_msk_node["sensor_tick"].as<double>();
+	auto settings = MassAgent::carla_client()->GetWorld().GetSettings();
+	if (!settings.synchronous_mode || settings.fixed_delta_seconds != sensor_tick) {
+		settings.synchronous_mode = true;
+		settings.fixed_delta_seconds = sensor_tick;
+		try {
+			MassAgent::carla_client()->GetWorld().ApplySettings(settings, 5s);
+		} catch (carla::client::TimeoutException& e) {
+			std::cout << "switch to sync mode failed. connection timed out" << std::endl;
+			return false;
+		}
+		std::cout << "synchronus mode enabled" << std::endl;
 	}
 	return true;
 }

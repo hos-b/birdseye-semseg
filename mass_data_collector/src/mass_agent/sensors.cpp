@@ -51,7 +51,6 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 	save_ = false;
 	// register a callback to publish images
 	rgb_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
-		std::lock_guard<std::mutex> guard(buffer_mutex_);
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
 		if (save_) {
@@ -64,9 +63,6 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 /* lets the camera save the next frame [[blocking]] */
 void RGBCamera::CaputreOnce() {
 	save_ = true;
-	while (save_) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
-	}
 }
 /* destroys the sensor and clears the queue */
 void RGBCamera::Destroy() {
@@ -82,7 +78,6 @@ size_t RGBCamera::count() const {
 /* returns true and the oldest buffer element. false and empty element if empty */
 std::pair <bool, cv::Mat> RGBCamera::pop() {
 	if (!images_.empty()) {
-		std::lock_guard<std::mutex> guard(buffer_mutex_);
 		cv::Mat rgb = std::move(images_.front());
 		images_.erase(images_.begin());
 		return std::make_pair(true, rgb);
@@ -149,7 +144,6 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	depth_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_depth_) {
-			std::lock_guard<std::mutex> guard(depth_buffer_mutex_);
 			depth_images_.emplace_back(DecodeToDepthMat(image));
 			save_depth_ = false;
 		}
@@ -172,7 +166,6 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	semantic_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		if (save_semantics_) {
-			std::lock_guard<std::mutex> guard(semantic_buffer_mutex_);
 			semantic_images_.emplace_back(DecodeToSemSegMat(image));
 			save_semantics_ = false;
 		}
@@ -200,9 +193,6 @@ void SemanticPointCloudCamera::Destroy() {
 void SemanticPointCloudCamera::CaputreOnce() {
 	save_semantics_ = true;
 	save_depth_ = true;
-	while (save_depth_ || save_semantics_) {
-		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
-	}
 }
 /* returns the minimum size of the two buffer */
 size_t SemanticPointCloudCamera::count() const {
@@ -219,9 +209,6 @@ size_t SemanticPointCloudCamera::semantic_image_count() const {
 /* returns true and oldest data tuple. false and empty tuple if empty */
 std::tuple<bool, cv::Mat, cv::Mat> SemanticPointCloudCamera::pop() {
 	if (std::min(semantic_images_.size(), depth_images_.size()) > 0) {
-		std::lock(semantic_buffer_mutex_, depth_buffer_mutex_);
-		std::lock_guard<std::mutex> sguard(semantic_buffer_mutex_, std::adopt_lock);
-		std::lock_guard<std::mutex> dguard(depth_buffer_mutex_, std::adopt_lock);
 		cv::Mat semantic = std::move(semantic_images_.front());
 		cv::Mat depth = std::move(depth_images_.front());
 		semantic_images_.erase(semantic_images_.begin());

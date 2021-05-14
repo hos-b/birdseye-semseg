@@ -9,8 +9,8 @@ from data.config import SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all
 
 train_cfg = TrainingConfig('config/training.yml')
-DATASET_DIR = train_cfg.dset_dir
-PKG_NAME = train_cfg.dset_file
+DATASET_DIR = '/export/home/aiscar4/mass-data'
+PKG_NAME = 'test.hdf5'
 classes = train_cfg.classes
 random_samples = False
 
@@ -23,7 +23,7 @@ CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
 # opening hdf5 file for the dataset
-dset = MassHDF5(dataset='town-01', path=DATASET_DIR,
+dset = MassHDF5(dataset='town-01', path=DATASET_DIR, jitter=[0.0, 0.0, 0.0, 0.0],
                 hdf5name=PKG_NAME, size=NEW_SIZE, classes=classes)
 loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_workers=1)
 # plot stuff
@@ -32,7 +32,6 @@ for idx, (_, rgbs, semsegs, masks, car_transforms, _) in enumerate(loader):
     # randomly skip samples (useful for large datasets)
     if random_samples and bool(random.randint(0, 1)):
         continue
-
     rgbs, semsegs, masks, car_transforms = squeeze_all(rgbs, semsegs, masks, car_transforms)
     print (f"index {idx + 1}/{len(loader)}")
     fig = plt.figure(figsize=(20, 30))

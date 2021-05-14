@@ -134,16 +134,6 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
 	vehicle_->SetTransform(tf);
-	// blocking until moved
-	do {
-		auto current_tf = vehicle_->GetTransform();
-		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(current_tf.location.x - tf.location.x) +
-			std::abs(current_tf.location.y - tf.location.y) < 1e-2) {
-			break;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
-	} while(true);
 	return initial_wp;
 }
 
@@ -243,16 +233,6 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
 	vehicle_->SetTransform(target_tf);
-	// blocking until moved
-	do {
-		auto current_tf = vehicle_->GetTransform();
-		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(current_tf.location.x - target_tf.location.x) +
-			std::abs(current_tf.location.y - target_tf.location.y) < 1e-2) {
-			break;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
-	} while(true);
 	return next_wp;
 }
 
@@ -464,15 +444,6 @@ void MassAgent::HideAgent() {
 	tf.location.z = -200;
     transform_(2, 3) = -200;
 	vehicle_->SetTransform(tf);
-	// blocking until moved
-	do {
-		auto current_tf = vehicle_->GetTransform();
-		// if this is not enough, it just means I have a scientifically proven shit luck
-		if (std::abs(current_tf.location.z - tf.location.z) < 1e-2) {
-			break;
-		}
-		std::this_thread::sleep_for(std::chrono::milliseconds(config::kPollInterval));
-	} while(true);
 }
 
 /* stops the callback on all sensors */
