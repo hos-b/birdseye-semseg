@@ -113,7 +113,7 @@ namespace config
     };
     std::unordered_map<int, bool> GetRestrictedRoads(int town_no) {
         static std::once_flag once;
-        static std::unordered_map<int, bool> restirected_towns[10];
+        static std::unordered_map<int, bool> restirected_towns[11];
         std::call_once(once, []() {
             restirected_towns[1] = std::unordered_map<int, bool>{};
             restirected_towns[2] = std::unordered_map<int, bool>{};
