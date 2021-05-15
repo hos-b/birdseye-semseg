@@ -1,6 +1,7 @@
 #include "config/agent_config.h"
 #include <opencv2/core/matx.hpp>
 #include <vector>
+#include <mutex>
 
 /* turned all into extern to speed up compilation */
 
@@ -110,84 +111,66 @@ namespace config
         static_cast<double>(filtered_semantics[kCARLAWaterSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLATerrainSemanticID]) * 1.0
     };
-    // town1 roads to avoid
-    const std::unordered_map<int, bool> town1_restricted_roads ({
-    });
-    // town2 roads to avoid
-    const std::unordered_map<int, bool> town2_restricted_roads ({
-    });
-    // town3 roads to avoid
-    const std::unordered_map<int, bool> town3_restricted_roads ({
-        {65, true},  // tunnel
-        {526, true}, // junction after the tunnel
-        {510, true}, // junction lane leading to tunnel
-        {499, true}, // junction lane leading to tunnel
-        {551, true}, // junction lane leading to tunnel
-        {533, true}, // junction lane leading to tunnel
-        {519, true}, // junction lane leading to tunnel
-        {1166, true},// junction lane leading to tunnel
-        {1165, true},// junction after the tunnel
-        {1158, true},// junction after the tunnel
-        {1156, true},// junction after the tunnel
+    std::unordered_map<int, bool> GetRestrictedRoads(int town_no) {
+        static std::once_flag once;
+        static std::unordered_map<int, bool> restirected_towns[10];
+        std::call_once(once, []() {
+            restirected_towns[1] = std::unordered_map<int, bool>{};
+            restirected_towns[2] = std::unordered_map<int, bool>{};
+            restirected_towns[3] = std::unordered_map<int, bool>{
+                {65, true},  // tunnel
+                {526, true}, // junction after the tunnel
+                {510, true}, // junction lane leading to tunnel
+                {499, true}, // junction lane leading to tunnel
+                {551, true}, // junction lane leading to tunnel
+                {533, true}, // junction lane leading to tunnel
+                {519, true}, // junction lane leading to tunnel
+                {1166, true},// junction lane leading to tunnel
+                {1165, true},// junction after the tunnel
+                {1158, true},// junction after the tunnel
+                {1156, true},// junction after the tunnel
 
-        {58, true},  // gas station
-        {1020, true},  // before gas station
-        {1933, true},  // after gas station
-    });
-    // town4 roads to avoid
-    const std::unordered_map<int, bool> town4_restricted_roads ({
-        {47, true}, // overpass
+                {58, true},  // gas station
+                {1020, true},  // before gas station
+                {1933, true},  // after gas station
+            };
+            restirected_towns[4] = std::unordered_map<int, bool>{
+                {47, true}, // overpass
+                {880, true}, // gas station
+                {886, true}, // gas station
+                {477, true}, // gas station
+                {467, true}, // gas station
+                {468, true}, // gas station
+            };
+            restirected_towns[5] = std::unordered_map<int, bool>{
+                {39, true}, // overhanging building
 
-        {880, true}, // gas station
-        {886, true}, // gas station
-        {477, true}, // gas station
-        {467, true}, // gas station
-        {468, true}, // gas station
-
-    });
-    // town5 roads to avoid
-    const std::unordered_map<int, bool> town5_restricted_roads ({
-        {39, true}, // overhanging building
-
-        {3, true}, // leading to underpass
-        {9, true}, // leading to underpass
-        {10, true}, // underpass
-        {11, true}, // underpass
-        {24, true}, // underpass
-        {1931, true}, // underpass junction
-        {1940, true}, // underpass junction
-        {1946, true}, // underpass junction
-        {1957, true}, // underpass junction
-        {1985, true}, // underpass junction
-        {1986, true}  // underpass junction
-    });
-    // town6 roads to avoid
-    const std::unordered_map<int, bool> town6_restricted_roads ({
-
-    });
-    // town7 roads to avoid
-    const std::unordered_map<int, bool> town7_restricted_roads ({
-
-    });
-    // town10 roads to avoid
-    const std::unordered_map<int, bool> town10_restricted_roads ({
-        {8, true}, // under tram stop
-        {1, true}, // leading to tram stop
-        {4, true}  // leading to tram stop
-    });
-    const std::unordered_map<int, bool>* restricted_roads[] = {
-        nullptr,
-        &town1_restricted_roads,
-        &town2_restricted_roads,
-        &town3_restricted_roads,
-        &town4_restricted_roads,
-        &town5_restricted_roads,
-        &town6_restricted_roads,
-        &town7_restricted_roads,
-        nullptr,
-        nullptr,
-        &town10_restricted_roads
-    };
+                {3, true}, // leading to underpass
+                {9, true}, // leading to underpass
+                {10, true}, // underpass
+                {11, true}, // underpass
+                {24, true}, // underpass
+                {1931, true}, // underpass junction
+                {1940, true}, // underpass junction
+                {1946, true}, // underpass junction
+                {1957, true}, // underpass junction
+                {1985, true}, // underpass junction
+                {1986, true}  // underpass junction
+            };
+            restirected_towns[6] = std::unordered_map<int, bool>{};
+            restirected_towns[7] = std::unordered_map<int, bool>{};
+            restirected_towns[10] = std::unordered_map<int, bool>{
+                {1, true}, // leading to tram stop
+                {4, true}, // leading to tram stop
+                {8, true}  // under tram stop
+            };
+            
+        });
+        if (town_no < 1 || town_no == 8 || town_no == 9 || town_no > 10) {
+            return std::unordered_map<int, bool>{{-505, true}};
+        }
+        return restirected_towns[town_no];
+    }
     const std::unordered_map<int, std::string> town_map_full_names ({
         {1, "/Game/Carla/Maps/Town01"},
         {2, "/Game/Carla/Maps/Town02"},
