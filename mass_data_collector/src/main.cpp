@@ -24,92 +24,53 @@ bool EnableSyncMode();
 
 int main(int argc, char **argv)
 {
-	// assertions, config & stats
+	// ros init, signal handling --------------------------------------------------------------------------------
+	ros::init(argc, argv, "mass_data_collector");
+	std::shared_ptr<ros::NodeHandle> node_handle = std::make_shared<ros::NodeHandle>();
+	signal(SIGINT, SIGINT_handler);
+	// reading configs ------------------------------------------------------------------------------------------
 	AssertConfiguration();
 	auto& config = CollectionConfig::GetConfig();
 	CollectionStats stats(config.minimum_cars, config.maximum_cars);
 	std::unordered_map<int, bool> restricted_roads;
-	// ros init, signal handling
-	ros::init(argc, argv, "mass_data_collector");
-	std::shared_ptr<ros::NodeHandle> node_handle = std::make_shared<ros::NodeHandle>();
-	signal(SIGINT, SIGINT_handler);
-	// reading command line args --------------------------------------------------------------------------------
-	bool debug_mode = false;
-	size_t number_of_agents = 0;
+	size_t number_of_agents = config.maximum_cars;
+	srand(config.random_seed);
 	size_t batch_count = 0;
-	if (argc == 1) {
-		number_of_agents = config.maximum_cars;
-	} else if (argc == 2) {
-		if (std::strcmp(argv[1], "--debug") == 0) {
-			number_of_agents = 3;
-			debug_mode = true;
-		} else {
-			std::cout << "use --debug" << std::endl;
-			std::exit(EXIT_FAILURE);
-		}
-	} else {
-		std::cout << "use param/data_collection.yaml for conf" << std::endl;
+	std::cout << "collecting data with up to " << number_of_agents
+			  << " agents for " << config.cumulative_batch_counts.back()
+			  << " iterations in towns " << config.towns_string() << "\n";
+	// dataset --------------------------------------------------------------------------------------------------
+	unsigned int mode = mode::FILE_TRUNC | mode::DSET_CREAT;
+	if (config.append) {
+		mode = mode::FILE_RDWR | mode::DSET_OPEN;
+		std::cout << "appending to the dataset ...\n";
+	}
+	HDF5Dataset dataset(config.dataset_path, config.dataset_name,
+						mode, compression::NONE, 1,
+					   (config.max_batch_count + 1) * config.maximum_cars,
+						config.hdf5_chunk_size);
+	auto [sz, max_sz] = dataset.GetCurrentSize();
+	if ((max_sz - sz + 1) < config.cumulative_batch_counts.back() * config.maximum_cars) {
+		std::cout << "not enough remaining space for given round batch count" << std::endl;
 		std::exit(EXIT_FAILURE);
 	}
-	srand(config.random_seed);
-	std::cout << "collecting data with up to " << number_of_agents << " agents for "
-			  << config.cumulative_batch_counts.back() << " iterations in towns " << config.towns_string() << "\n";
-	// dataset --------------------------------------------------------------------------------------------------
-	HDF5Dataset* dataset = nullptr;
-	if (!debug_mode) {
-		unsigned int mode = mode::FILE_TRUNC | mode::DSET_CREAT;
-		if (config.append) {
-			mode = mode::FILE_RDWR | mode::DSET_OPEN;
-			std::cout << "appending to the dataset ...\n";
-		}
-		dataset = new HDF5Dataset(config.dataset_path, config.dataset_name,
-								  mode, compression::NONE, 1,
-								 (config.max_batch_count + 1) * config.maximum_cars,
-								  config.hdf5_chunk_size);
-		auto [sz, max_sz] = dataset->GetCurrentSize();
-		if ((max_sz - sz + 1) < config.cumulative_batch_counts.back() * config.maximum_cars) {
-			std::cout << "not enough remaining space for given round batch count" << std::endl;
-			std::exit(EXIT_FAILURE);
-		}
-	}
-	// CARLA setup ----------------------------------------------------------------------------------------------
-	boost::shared_ptr<carla::client::Waypoint> random_pose;
 	// some timing stuff ----------------------------------------------------------------------------------------
 	float avg_batch_time = 0.0f;
 	bool batch_finished = false;
-	std::thread *time_thread = nullptr;
 	char state = 'i';
 	unsigned int batch_size = 0;
 	unsigned int agents_done = 0;
 	bool deadlock = false;
-	if (!debug_mode) {
-		time_thread = new std::thread(WatchdogThreadCallback, &batch_count, config.cumulative_batch_counts.back(),
-									  &state, &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
-	}
+	std::thread time_thread(WatchdogThreadCallback, &batch_count, config.cumulative_batch_counts.back(),
+							&state, &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
 	// random distribution & shuffling necessities --------------------------------------------------------------
 	std::mt19937 random_gen(config.random_seed);
     std::uniform_int_distribution<> distrib(config.minimum_cars, config.maximum_cars);
 	std::vector<unsigned int> shuffled(number_of_agents);
     std::iota(shuffled.begin(), shuffled.end(), 0);
-	// debugging ------------------------------------------------------------------------------------------------
+	// CARLA stuff ----------------------------------------------------------------------------------------------
 	auto& agents = MassAgent::agents();
-	if (debug_mode) {
-		SwitchTown(0, number_of_agents, restricted_roads, random_gen);
-		std::vector<unsigned int> indices(number_of_agents);
-    	std::iota(indices.begin(), indices.end(), 0);
-		std::cout << "creating uniform pointcloud" << std::endl;
-		random_pose = agents[0]->SetRandomPose(restricted_roads);
-		for (size_t i = 1; i < number_of_agents; ++i) {
-			random_pose = agents[i]->SetRandomPose(random_pose, 30, &deadlock,
-												   indices, i, restricted_roads);
-		}
-		MassAgent::DebugMultiAgentCloud(config.dataset_path + ".pcl");
-		for (size_t i = 0; i < agents.size(); ++i) {
-			delete agents[i];
-		}
-		ros::shutdown();
-		return 0;
-	}
+	boost::shared_ptr<carla::client::Waypoint> random_pose;
 	// data collection loop -------------------------------------------------------------------------------------
 	while (ros::ok()) {
 		if (batch_count == config.cumulative_batch_counts.back()) {
@@ -169,7 +130,7 @@ int main(int argc, char **argv)
 		for (unsigned int i = 0; i < batch_size; ++i) {
 			agents_done += 1;
 			MASSDataType datapoint = promise[i].get();
-			dataset->AppendElement(&datapoint);
+			dataset.AppendElement(&datapoint);
 		}
 		// timing stuff
 		batch_count += 1;
@@ -183,28 +144,28 @@ int main(int argc, char **argv)
 	if (config.append) {
 		// updating histogram from last run
 		std::vector<uint32_t> old_stats(batch_histogram.size(), 0);
-		dataset->ReadU32Attribute("batch_histogram", &old_stats[0]);
+		dataset.ReadU32Attribute("batch_histogram", &old_stats[0]);
 		for (size_t i = 0; i < batch_histogram.size(); ++i) {
 			batch_histogram[i] += old_stats[i];
 		}
-		dataset->UpdateU32Attribute("batch_histogram", &batch_histogram[0]);
+		dataset.UpdateU32Attribute("batch_histogram", &batch_histogram[0]);
 		// updating max agent count if it's larger in this round
 		uint32_t data[] = {0};
-		dataset->ReadU32Attribute("max_agent_count", data);
+		dataset.ReadU32Attribute("max_agent_count", data);
 		if (config.maximum_cars > data[0]) {
 			data[0] = config.maximum_cars;
-			dataset->UpdateU32Attribute("max_agent_count", data);
+			dataset.UpdateU32Attribute("max_agent_count", data);
 		}
 	} else {
-		dataset->AddU32Attribute(&batch_histogram[0], batch_histogram.size(), "batch_histogram");
+		dataset.AddU32Attribute(&batch_histogram[0], batch_histogram.size(), "batch_histogram");
 		uint32_t data[] = {config.maximum_cars};
-		dataset->AddU32Attribute(data, 1, "max_agent_count");
+		dataset.AddU32Attribute(data, 1, "max_agent_count");
 		data[0] = config.minimum_cars;
-		dataset->AddU32Attribute(data, 1, "min_agent_count");
+		dataset.AddU32Attribute(data, 1, "min_agent_count");
 	}
-	dataset->Close();
+	dataset.Close();
 	std::cout << "\ndata collection finished, dataset closed" << std::endl;
-	time_thread->join();
+	time_thread.join();
 	std::cout << "\njoined timer thread" << std::endl;
 	for (size_t i = 0; i < agents.size(); ++i) {
 		delete agents[i];
@@ -353,7 +314,7 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			std::cout << "switching to first town: " << new_town << std::endl;
 			MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[0]));
 			MassAgent::carla_client()->GetWorld().Tick(5s);
-			restricted_roads = *config::restricted_roads[col_conf.towns[0]];
+			restricted_roads = config::GetRestrictedRoads(col_conf.towns[0]);
 		}
 		for (size_t i = 0; i < number_of_agents; ++i) {
 			new MassAgent(random_gen);
@@ -381,7 +342,7 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			for (size_t i = 0; i < number_of_agents; ++i) {
 				new MassAgent(random_gen);
 			}
-			restricted_roads = *config::restricted_roads[col_conf.towns[i]];
+			restricted_roads = config::GetRestrictedRoads(col_conf.towns[i]);
 			std::cout << "town switch complete" << std::endl;
 			return true;
 		}
