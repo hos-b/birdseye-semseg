@@ -265,7 +265,6 @@ void MassAgent::DestroyAgent() {
 template <>
 MASSDataType MassAgent::GenerateDataPoint
 		<geom::CloudBackend::KD_TREE>(unsigned int agent_batch_index) {
-	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud<geom::CloudBackend::KD_TREE> mask_cloud(sc_settings());
@@ -324,7 +323,6 @@ MASSDataType MassAgent::GenerateDataPoint
 template<>
 MASSDataType MassAgent::GenerateDataPoint
 		<geom::CloudBackend::SURFACE_MAP>(unsigned int agent_batch_index) {
-	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud<geom::CloudBackend::SURFACE_MAP> mask_cloud(sc_settings());
@@ -384,7 +382,6 @@ MASSDataType MassAgent::GenerateDataPoint
 template<>
 MASSDataType MassAgent::GenerateDataPoint
 		<geom::CloudBackend::MIXED>(unsigned int agent_batch_index) {
-	CaptureOnce();
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud<geom::CloudBackend::MIXED> mixed_cloud(sc_settings());
@@ -670,7 +667,6 @@ void MassAgent::DebugMultiAgentCloud(const std::string& path) {
 	geom::base_members::Settings semantic_conf{1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128};
 	geom::SemanticCloud<geom::CloudBackend::KD_TREE> target_cloud(semantic_conf);
 	for (size_t i = 0; i < agents().size(); ++i) {
-		agents()[i]->CaptureOnce();
 		// ---------------------- creating target cloud ----------------------
 		for (auto& semantic_depth_cam : agents()[i]->semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();

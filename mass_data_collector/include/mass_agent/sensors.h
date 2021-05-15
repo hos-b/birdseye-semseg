@@ -47,7 +47,7 @@ public:
 	std::shared_ptr<geom::CameraGeometry> geometry() const;
 	std::pair <bool, cv::Mat> pop();
 private:
-	bool save_;
+	std::atomic<bool> save_;
 	boost::shared_ptr<carla::client::Sensor> sensor_;
 	std::vector<cv::Mat> images_;
 	std::shared_ptr<geom::CameraGeometry> geometry_;
@@ -76,8 +76,8 @@ public:
 	std::tuple<bool, cv::Mat, cv::Mat> pop();
 private:
 	std::string name_;
-	bool save_depth_;
-	bool save_semantics_;
+	std::atomic<bool> save_depth_;
+	std::atomic<bool> save_semantics_;
 	boost::shared_ptr<carla::client::Sensor> depth_sensor_;
 	boost::shared_ptr<carla::client::Sensor> semantic_sensor_;
 	std::function<void(const boost::shared_ptr<carla::sensor::SensorData>& data)> depth_callback_;

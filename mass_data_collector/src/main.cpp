@@ -166,7 +166,7 @@ int main(int argc, char **argv)
 	dataset.Close();
 	std::cout << "\ndata collection finished, dataset closed" << std::endl;
 	time_thread.join();
-	std::cout << "\njoined timer thread" << std::endl;
+	std::cout << "joined timer thread" << std::endl;
 	for (size_t i = 0; i < agents.size(); ++i) {
 		delete agents[i];
 	}

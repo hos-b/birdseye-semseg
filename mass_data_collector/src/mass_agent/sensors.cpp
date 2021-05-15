@@ -53,9 +53,9 @@ RGBCamera::RGBCamera(const YAML::Node& rgb_cam_node,
 	rgb_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
 		auto mat = cv::Mat(image->GetHeight(), image->GetWidth(), CV_8UC4, image->data());
-		if (save_) {
-			images_.emplace_back(mat.clone());
+		if (save_.load()) {
 			save_ = false;
+			images_.emplace_back(mat.clone());
 		}
 	};
 	sensor_->Listen(rgb_callback_);
@@ -143,9 +143,9 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	save_depth_ = false;
 	depth_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
-		if (save_depth_) {
-			depth_images_.emplace_back(DecodeToDepthMat(image));
+		if (save_depth_.load()) {
 			save_depth_ = false;
+			depth_images_.emplace_back(DecodeToDepthMat(image));
 		}
 	};
 	depth_sensor_->Listen(depth_callback_);
@@ -165,9 +165,9 @@ SemanticPointCloudCamera::SemanticPointCloudCamera(const YAML::Node& mass_cam_no
 	save_semantics_ = false;
 	semantic_callback_ = [this](const boost::shared_ptr<carla::sensor::SensorData>& data) {
 		auto image = boost::static_pointer_cast<csd::Image>(data);
-		if (save_semantics_) {
-			semantic_images_.emplace_back(DecodeToSemSegMat(image));
+		if (save_semantics_.load()) {
 			save_semantics_ = false;
+			semantic_images_.emplace_back(DecodeToSemSegMat(image));
 		}
 	};
 	semantic_sensor_->Listen(semantic_callback_);
@@ -298,7 +298,7 @@ cv::Mat DecodeToSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_im
    returns CV_8UC3
 */
 cv::Mat DecodeToCityScapesPalleteSemSegMat(boost::shared_ptr<csd::ImageTmpl<csd::Color>> carla_image) {
-	// TODO(hosein): do the pallete yourself with opencv to avoid double copy
+	// TODO: do the pallete yourself with opencv to avoid double copy
 	auto image_view = carla::image::ImageView::MakeColorConvertedView(carla::image::ImageView::MakeView(*carla_image), 
 																	  carla::image::ColorConverter::CityScapesPalette());
 	auto rgb_view = boost::gil::color_converted_view<boost::gil::rgb8_pixel_t>(image_view);
