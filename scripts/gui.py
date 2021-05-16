@@ -277,14 +277,10 @@ def main():
                       sem_cfg, eval_cfg.aggregation_type).to(device)
     elif eval_cfg.model_name == 'mcnnL':
         model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
-                      sem_cfg, eval_cfg.aggregation_type,
-                      eval_cfg.aggregation_activation_limit,
-                      eval_cfg.average_aggregation).to(device)
+                      sem_cfg, eval_cfg.aggregation_type).to(device)
     elif eval_cfg.model_name == 'mcnnLW':
         model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
-                       sem_cfg, eval_cfg.aggregation_type,
-                       eval_cfg.aggregation_activation_limit,
-                       eval_cfg.average_aggregation).to(device)
+                       sem_cfg, eval_cfg.aggregation_type).to(device)
     else:
         print('unknown network architecture {eval_cfg.model_name}')
         exit()

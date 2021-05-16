@@ -172,14 +172,10 @@ def main():
                       geom_cfg, eval_cfg.aggregation_type).cuda(0)
     elif eval_cfg.model_name == 'mcnnL':
         model = LMCNN(eval_cfg.num_classes, new_size,
-                      geom_cfg, eval_cfg.aggregation_type,
-                      eval_cfg.aggregation_activation_limit,
-                      eval_cfg.average_aggregation).cuda(0)
+                      geom_cfg, eval_cfg.aggregation_type).cuda(0)
     elif eval_cfg.model_name == 'mcnnLW':
         model = LWMCNN(eval_cfg.num_classes, new_size,
-                       geom_cfg, eval_cfg.aggregation_type,
-                       eval_cfg.aggregation_activation_limit,
-                       eval_cfg.average_aggregation).cuda(0)
+                       geom_cfg, eval_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {eval_cfg.model_name}')
         exit()

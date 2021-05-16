@@ -242,9 +242,7 @@ def parse_and_execute():
                       geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnL':
         model = LMCNN(train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.aggregation_type,
-                      train_cfg.aggregation_activation_limit,
-                      train_cfg.average_aggregation).cuda(0)
+                      geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnLW':
         model = LWMCNN(train_cfg.num_classes, new_size,
                        geom_cfg, train_cfg.aggregation_type,
