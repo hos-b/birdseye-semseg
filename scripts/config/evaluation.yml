@@ -9,8 +9,6 @@ model:
   model-name: 'mcnnLW'
   model-version: 'best' # || 'best'
   aggregation-type: 'bilinear' # or 'nearest'
-  average-aggregation: false
-  aggregation-activation-limit: 1e-6
 
 plot:
   count: 10

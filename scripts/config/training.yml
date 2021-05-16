@@ -16,8 +16,6 @@ training:
 network:
   model-name: 'mcnnLW'
   aggregation-type: 'bilinear' # or 'nearest'
-  average-aggregation: true
-  aggregation-activation-limit: 1e-6
   decoder-only: false
 
 resume:
