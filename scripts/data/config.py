@@ -51,9 +51,7 @@ class TrainingConfig:
         self.snapshot_dir = str(conf['logging']['snapshot-dir'])
         # training config
         self.device = str(conf['training']['device'])
-        self.world_size = int(conf['training']['world-size'])
         self.torch_seed = int(conf['training']['torch-seed'])
-        self.distributed = bool(conf['training']['distributed'])
         self.loss_function = str(conf['training']['loss'])
         self.weight_losses = bool(conf['training']['weight-losses'])
         # network

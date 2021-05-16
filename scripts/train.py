@@ -199,9 +199,6 @@ def parse_and_execute():
     # parsing config file
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     train_cfg = TrainingConfig('config/training.yml')
-    if train_cfg.distributed:
-        print('change training.distributed to false in the configs')
-        exit()
     # gpu selection ----------------------------------------------------------------------------
     device_str = train_cfg.device
     if train_cfg.device == 'cuda':

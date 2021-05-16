@@ -10,7 +10,6 @@ training:
   torch-seed: 0
   loss: 'cross-entropy' # 'focal'
   weight-losses: true
-  distributed: false
   world-size: 2
 
 network:
