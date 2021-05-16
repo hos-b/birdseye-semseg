@@ -218,7 +218,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 									  (agent->carla_z() - target_tf.location.z));
 			if (distance < vehicle_length_ * config::kMinDistCoeff) {
 				admissable = false;
-				continue;
+				break;
 			}
 		}
 	}

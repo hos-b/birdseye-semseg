@@ -98,6 +98,13 @@ int main(int argc, char **argv)
 																 shuffled, i);
 			}
 		} while (deadlock);
+		// Ticking() the simulator
+		try {
+			MassAgent::carla_client()->GetWorld().Tick(5s);
+		} catch (carla::client::TimeoutException& ex) {
+			std::cout << "connection to simulator timed out while Tick()ing" << std::endl;
+			break;
+		}
 		// capturing frames
 		state = 'c';
 		agents_done = 0;
@@ -105,7 +112,7 @@ int main(int argc, char **argv)
 			agents[shuffled[i]]->CaptureOnce();
 		}
 		state = 't';
-		// Ticking() the simulator. for some reason need 2x
+		// Ticking() the simulator. for some reason once doesn't suffice
 		try {
 			MassAgent::carla_client()->GetWorld().Tick(5s);
 			MassAgent::carla_client()->GetWorld().Tick(5s);
