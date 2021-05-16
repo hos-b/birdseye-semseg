@@ -18,7 +18,7 @@ using agent::MassAgent;
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
-bool SwitchTown(size_t, size_t, std::unordered_map<int, bool>&, std::mt19937&);
+bool SwitchTown(size_t, size_t, std::mt19937&);
 std::string SecondsToString(uint32);
 bool EnableSyncMode();
 
@@ -32,7 +32,6 @@ int main(int argc, char **argv)
 	AssertConfiguration();
 	auto& config = CollectionConfig::GetConfig();
 	CollectionStats stats(config.minimum_cars, config.maximum_cars);
-	std::unordered_map<int, bool> restricted_roads;
 	size_t number_of_agents = config.maximum_cars;
 	srand(config.random_seed);
 	size_t batch_count = 0;
@@ -77,7 +76,7 @@ int main(int argc, char **argv)
 			break;
 		}
 		state = 'i';
-		if (!SwitchTown(batch_count, number_of_agents, restricted_roads, random_gen)) {
+		if (!SwitchTown(batch_count, number_of_agents, random_gen)) {
 			break;
 		}
 		// timing
@@ -91,12 +90,12 @@ int main(int argc, char **argv)
 		state = 'p';
 		do {
 			deadlock = false;
-			random_pose = agents[shuffled[0]]->SetRandomPose(restricted_roads);
+			random_pose = agents[shuffled[0]]->SetRandomPose();
 			agents_done = 1;
 			for (size_t i = 1; i < batch_size; ++i) {
 				agents_done += 1;
 				random_pose = agents[shuffled[i]]->SetRandomPose(random_pose, 32, &deadlock,
-																 shuffled, i, restricted_roads);
+																 shuffled, i);
 			}
 		} while (deadlock);
 		// capturing frames
@@ -301,8 +300,7 @@ void AssertConfiguration() {
 }
 
 /* switch town based on the batch number */
-bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, bool>& restricted_roads,
-				std::mt19937& random_gen) {
+bool SwitchTown(size_t batch, size_t number_of_agents, std::mt19937& random_gen) {
 	auto& col_conf = CollectionConfig::GetConfig();
 	auto& agents = MassAgent::agents();
 	if (batch == col_conf.max_batch_count) {
@@ -314,10 +312,9 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 			std::cout << "switching to first town: " << new_town << std::endl;
 			MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[0]));
 			MassAgent::carla_client()->GetWorld().Tick(5s);
-			restricted_roads = config::GetRestrictedRoads(col_conf.towns[0]);
 		}
 		for (size_t i = 0; i < number_of_agents; ++i) {
-			new MassAgent(random_gen);
+			new MassAgent(random_gen, config::GetRestrictedRoads(col_conf.towns[0]));
 		}
 		return true;
 	}
@@ -329,7 +326,7 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 				delete agents[i];
 			}
 			agents.clear();
-			// in case same town is used consecutively to force agent changing/recoloring
+			// in case the map has to be changed
 			if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
 				try {
 					MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[i]));
@@ -340,9 +337,8 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::unordered_map<int, b
 				}
 			}
 			for (size_t i = 0; i < number_of_agents; ++i) {
-				new MassAgent(random_gen);
+				new MassAgent(random_gen, config::GetRestrictedRoads(col_conf.towns[i]));
 			}
-			restricted_roads = config::GetRestrictedRoads(col_conf.towns[i]);
 			std::cout << "town switch complete" << std::endl;
 			return true;
 		}

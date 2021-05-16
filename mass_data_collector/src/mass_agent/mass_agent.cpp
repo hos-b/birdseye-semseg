@@ -32,8 +32,15 @@ static auto &RandomChoice(const RangeT &range, RNG &&generator) {
 }
 
 /* constructor */
-MassAgent::MassAgent(std::mt19937& random_generator) {
+MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<int, bool>& restricted_roads) {
 	// initialize some stuff & things
+	restricted_roads_ = restricted_roads;
+	waypoint_lambda_ = [this] (auto wp) {
+		return wp != nullptr &&
+			   (static_cast<uint32_t>(wp->GetType()) &
+			    static_cast<uint32_t>(carla::road::Lane::LaneType::Driving)) != 0u &&
+			   restricted_roads_.find(wp->GetRoadId()) == restricted_roads_.end();
+	};
 	transform_.setIdentity();
 	id_ = agents().size();
 	agents().emplace_back(this);
@@ -115,13 +122,13 @@ MassAgent::~MassAgent() {
    this function should only be called for the first car of the batch, because it does not check for collision
    with other cars.
 */
-boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::unordered_map<int, bool>& restricted_roads) {
+boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
 	while (true) {
 		initial_wp = kd_points_[std::rand() % kd_points_.size()];
 		// if not in a restricted area
-		if (restricted_roads.find(initial_wp->GetRoadId()) == restricted_roads.end()) {
+		if (restricted_roads_.find(initial_wp->GetRoadId()) == restricted_roads_.end()) {
 			tf = initial_wp->GetTransform();
 			break;
 		}
@@ -138,17 +145,24 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose(const std::u
 }
 
 /* expands the given waypoint by finding the points in its vicinity */
-static std::vector<boost::shared_ptr<carla::client::Waypoint>>
-ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
+std::vector<boost::shared_ptr<carla::client::Waypoint>>
+MassAgent::ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
+	candidates.reserve(64);
 	auto front_wps = wp->GetNext(min_dist +
 						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0));
 	auto rear_wps = wp->GetPrevious(min_dist +
 						(static_cast<double>(std::rand() % config::kMaxAgentDistance) / 100.0));
-	candidates.insert(candidates.end(), front_wps.begin(), front_wps.end());
-	candidates.insert(candidates.end(), rear_wps.begin(), rear_wps.end());
-	candidates.emplace_back(wp->GetLeft());
-	candidates.emplace_back(wp->GetRight());
+	std::copy_if(front_wps.begin(), front_wps.end(), std::back_inserter(candidates), waypoint_lambda_);
+	std::copy_if(rear_wps.begin(), rear_wps.end(), std::back_inserter(candidates), waypoint_lambda_);
+	auto left_wp = wp->GetLeft();
+	auto right_wp = wp->GetRight();
+	if (waypoint_lambda_(left_wp)) {
+		candidates.emplace_back(left_wp);
+	}
+	if (waypoint_lambda_(right_wp)) {
+		candidates.emplace_back(right_wp);
+	}
 	return candidates;
 }
 
@@ -157,16 +171,15 @@ ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist) {
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 						 size_t knn_pts, const bool* deadlock,
-				  		 std::vector<unsigned int> indices, unsigned int max_index,
-						 const std::unordered_map<int, bool>& restricted_roads) {
+				  		 std::vector<unsigned int> indices, unsigned int max_index) {
 	// last agent in queue has hit a deadlock, forwarding nullptr
 	if (initial_wp == nullptr) {
 		return nullptr;
 	}
 	// getting candidates around the given waypoints
-	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates;
-	auto initial_expansion = ExpandWayoint(initial_wp, vehicle_length_ * config::kMinDistCoeff);
-	candidates.insert(candidates.end(), initial_expansion.begin(), initial_expansion.end());
+	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates =
+		ExpandWayoint(initial_wp, vehicle_length_ * config::kMinDistCoeff);
+	
 	if (knn_pts > 0) {
 		auto query_tfm = initial_wp->GetTransform();
 		double query[3] = {query_tfm.location.x, query_tfm.location.y, query_tfm.location.y};
@@ -190,22 +203,6 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		}
 		admissable = true;
 		next_wp = candidates[std::rand() % candidates.size()];
-		// nullptr happens if unavailable
-		if (next_wp == nullptr) {
-			admissable = false;
-			continue;
-		}
-		// if the randomed wp is not drivable (parking spaces, shoulder lanes, etc)
-		if ((static_cast<uint32_t>(next_wp->GetType()) &
-			 static_cast<uint32_t>(carla::road::Lane::LaneType::Driving)) == 0u) {
-			admissable = false;
-			continue;
-		}
-		// if it's in the restricted area
-		if (restricted_roads.find(next_wp->GetRoadId()) != restricted_roads.end()) {
-			admissable = false;
-			continue;
-		}
 		target_tf = next_wp->GetTransform();
 		for (unsigned int i = 0; i < max_index; ++i) {
 			const MassAgent* agent = agents()[indices[i]];
@@ -567,7 +564,7 @@ double MassAgent::carla_z() const {
 }
 
 /* initializes the structures for the camera, lidar & depth measurements */
-void MassAgent::SetupSensors(float rgb_cam_shift) {
+void MassAgent::SetupSensors(float front_cam_shift) {
 	std::string yaml_path = ros::package::getPath("mass_data_collector");
 	yaml_path += "/param/sensors.yaml";
 	auto bp_library = vehicle_->GetWorld().GetBlueprintLibrary();
@@ -577,7 +574,7 @@ void MassAgent::SetupSensors(float rgb_cam_shift) {
 	// front rgb cam
 	if (front_rgb_node.IsDefined()) {
 		front_rgb_ = std::make_unique<data::RGBCamera>(front_rgb_node, bp_library,
-													   vehicle_, rgb_cam_shift, false);
+													   vehicle_, front_cam_shift, false);
 	} else {
 		std::cout << "ERROR: front camera node is not defined in sensor definition file" << std::endl;
 	}
@@ -586,7 +583,7 @@ void MassAgent::SetupSensors(float rgb_cam_shift) {
 		front_mask_pc_ = std::make_unique<data::SemanticPointCloudCamera>(front_msk_node,
 															bp_library,
 															vehicle_,
-															0, // no x hover
+															front_cam_shift, // same as rgb
 															0, // no y hover
 															false);
 	} else {

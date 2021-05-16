@@ -37,18 +37,18 @@ class MassAgent
 {
 public:
 	~MassAgent();
-	explicit MassAgent(std::mt19937& random_generator);
+	explicit MassAgent(std::mt19937& random_generator,
+					   const std::unordered_map<int, bool>& restricted_roads);
 	MassAgent(const MassAgent&) = delete;
 	const MassAgent& operator=(const MassAgent&) = delete;
 	MassAgent(MassAgent&&) = delete;
 	const MassAgent& operator=(MassAgent&&) = delete;
 
-	boost::shared_ptr<carla::client::Waypoint> SetRandomPose(const std::unordered_map<int, bool>& restricted_roads);
+	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
 	boost::shared_ptr<carla::client::Waypoint>
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 				  size_t knn_pts, const bool* deadlock,
-				  std::vector<unsigned int> indices, unsigned int max_index,
-				  const std::unordered_map<int, bool>& restricted_roads);
+				  std::vector<unsigned int> indices, unsigned int max_index);
 	void HideAgent();
 	void CaptureOnce();
 	void PauseSensorCallbacks();
@@ -86,13 +86,16 @@ public:
 
 private:
 	std::tuple<float, float, float> GetPostion() const;
-	void SetupSensors(float rgb_cam_shift);
+	void SetupSensors(float front_cam_shift);
 	void DestroyAgent();
 	void InitializeKDTree();
 	void AssertSize(size_t size);
+
+	std::vector<boost::shared_ptr<carla::client::Waypoint>>
+		ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist);
+
 	static std::vector<std::string> GetBlueprintNames();
 	static geom::base_members::Settings& sc_settings();
-
 	// state
 	uint16 id_;
 	Eigen::Matrix4d transform_;
@@ -101,6 +104,8 @@ private:
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> kd_points_;
+	std::unordered_map<int, bool> restricted_roads_;
+	std::function<bool(boost::shared_ptr<carla::client::Waypoint>)> waypoint_lambda_;
 	// carla sensors
 	std::unique_ptr<data::RGBCamera> front_rgb_;
 	std::unique_ptr<data::SemanticPointCloudCamera> front_mask_pc_;
