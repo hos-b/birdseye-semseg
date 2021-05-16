@@ -107,7 +107,7 @@ def evaluate(**kwargs):
     for idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(loader):
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
-                                                        device, False)
+                                                        device)
         rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
         agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],

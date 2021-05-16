@@ -145,7 +145,7 @@ class SampleWindow:
         (_, rgbs, labels, masks, car_transforms, batch_index) = next(self.dset_iterator)
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
-                                                        self.device, False)
+                                                        self.device)
         rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
         self.current_data = (rgbs, labels, masks, car_transforms)
         self.agent_count = rgbs.shape[0]

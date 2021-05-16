@@ -82,7 +82,6 @@ class TrainingConfig:
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
         # dataloader config
         self.loader_workers = int(conf['dataloader']['dataloder-workers'])
-        self.pin_memory = bool(conf['dataloader']['pin-memory'])
         self.shuffle_data = bool(conf['dataloader']['shuffle-data'])
         # dataset config
         self.output_h = int(conf['dataset']['output-h'])

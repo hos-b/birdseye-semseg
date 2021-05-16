@@ -41,12 +41,12 @@ def get_matplotlib_image(tensor_img: torch.Tensor, figsize=(4, 5)):
     plt.close(fig)
     return image
 
-def to_device(rgbs, labels, masks, car_transforms, device, non_blocking):
+def to_device(rgbs, labels, masks, car_transforms, device):
     """
     sends the tensors to the given device
     """
-    return rgbs.to(device, non_blocking=non_blocking), labels.to(device, non_blocking=non_blocking), \
-           masks.to(device, non_blocking=non_blocking), car_transforms.to(device, non_blocking=non_blocking)
+    return rgbs.to(device), labels.to(device), \
+           masks.to(device), car_transforms.to(device)
 
 
 # debugging functions

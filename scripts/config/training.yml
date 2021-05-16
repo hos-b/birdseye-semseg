@@ -46,7 +46,6 @@ validation:
   mask-det-threshold: 0.6
 
 dataloader:
-  pin-memory: false
   dataloder-workers: 1
   shuffle-data: true
 

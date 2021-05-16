@@ -56,9 +56,8 @@ def train(**kwargs):
             sample_count += rgbs.shape[1]
             print(f'\repoch: {ep + 1}/{epochs}, '
                   f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
-            rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
-                                                            masks, car_transforms,
-                                                            device, train_cfg.pin_memory)
+            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
+                                                            car_transforms, device)
             # simulate connection drops [disabled for now]
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
@@ -119,8 +118,8 @@ def train(**kwargs):
                   f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms,
-                                                            device, train_cfg.pin_memory)
+            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
+                                                            car_transforms, device)
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
@@ -224,11 +223,9 @@ def parse_and_execute():
                                        train_cfg.color_jitter)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
-                                               pin_memory=train_cfg.pin_memory,
                                                num_workers=train_cfg.loader_workers)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
                                               shuffle=train_cfg.shuffle_data,
-                                              pin_memory=train_cfg.pin_memory,
                                               num_workers=train_cfg.loader_workers)
     # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
