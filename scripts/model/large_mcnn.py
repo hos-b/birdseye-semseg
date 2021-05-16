@@ -47,7 +47,7 @@ class LMCNN(nn.Module):
         self.center_x = self.sem_cfg.center_x(self.cf_w) # 40
         self.center_y = self.sem_cfg.center_y(self.cf_h) # 48
 
-    def forward(self, x, transforms, adjacency_matrix):
+    def forward(self, x, transforms, adjacency_matrix, decoder_only = False):
         # B, 3, 480, 640: input size
         # B, 64, 60, 80
         shared = self.learning_to_downsample(x)
@@ -65,10 +65,16 @@ class LMCNN(nn.Module):
         # B, 128, 60, 80
         x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
                                              transforms, adjacency_matrix)
-        # B, 7, 60, 80
-        x_semantic = self.classifier(x_semantic)
-        # B, 1, 60, 80
-        x_mask = self.maskifier(x_mask)
+        if decoder_only:
+            # B, 7, 60, 80
+            x_semantic = self.classifier(x_semantic.detach())
+            # B, 1, 60, 80
+            x_mask = self.maskifier(x_mask).detach()
+        else:
+            # B, 7, 60, 80
+            x_semantic = self.classifier(x_semantic)
+            # B, 1, 60, 80
+            x_mask = self.maskifier(x_mask)
         # ----------- upsampling ------------
         # B, 7, 256, 205
         x_semantic = F.interpolate(x_semantic, self.output_size, mode='bilinear', align_corners=True)
@@ -76,7 +82,7 @@ class LMCNN(nn.Module):
         x_mask = torch.sigmoid(F.interpolate(x_mask, self.output_size, mode='bilinear', align_corners=True))
         return x_semantic, x_mask
 
-    def aggregate_features(self, x, transforms, adjacency_matrix):
+    def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):

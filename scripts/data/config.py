@@ -60,10 +60,13 @@ class TrainingConfig:
         self.model_name = str(conf['network']['model-name'])
         self.aggregation_type = str(conf['network']['aggregation-type'])
         # resume
+        self.resume_tag = str(conf['resume']['tag'])
         self.resume_training = bool(conf['resume']['flag'])
         self.resume_model_version = str(conf['resume']['model-version'])
         self.resume_starting_epoch = int(conf['resume']['starting-epoch'])
         self.resume_difficulty = int(conf['resume']['difficulty'])
+        self.resume_decoder_only = bool(conf['resume']['decoder-only'])
+        self.resume_optimizer_state = bool(conf['resume']['resume-optimizer-state'])
         # curriculum config
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])

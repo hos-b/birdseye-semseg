@@ -31,6 +31,7 @@ def train(**kwargs):
     device = kwargs.get('device')
     model = kwargs.get('model')
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
+    decoder_only = train_cfg.resume_decoder_only & train_cfg.resume_training
     # losses & optimization
     scheduler: lr_scheduler.LambdaLR = kwargs.get('scheduler')
     optimizer: torch.optim.Adam = kwargs.get('optimizer')
@@ -70,7 +71,9 @@ def train(**kwargs):
                                                     CENTER[0], CENTER[1])
             # fwd-bwd
             optimizer.zero_grad()
-            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+            sseg_preds, mask_preds = model(rgbs, car_transforms,
+                                           agent_pool.adjacency_matrix,
+                                           decoder_only)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))
@@ -245,9 +248,7 @@ def parse_and_execute():
                       geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnLW':
         model = LWMCNN(train_cfg.num_classes, new_size,
-                       geom_cfg, train_cfg.aggregation_type,
-                       train_cfg.aggregation_activation_limit,
-                       train_cfg.average_aggregation).cuda(0)
+                       geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()
@@ -265,26 +266,28 @@ def parse_and_execute():
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
                                 train_cfg.max_agent_count, device)
     # loading the network parameters/optimizer state -------------------------------------------
+    resume_tag = ''
     if train_cfg.resume_training:
+        resume_tag = train_cfg.resume_tag + '-'
         snapshot_path = train_cfg.snapshot_dir + \
             f'/{train_cfg.resume_model_version}_model.pth'
-        optimizer_path = train_cfg.snapshot_dir + \
-            f'/{train_cfg.resume_model_version}_optimizer'
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
             exit()
-        if not os.path.exists(optimizer_path):
-            print(f'{optimizer_path} does not exist')
-            exit()
-        start_ep = train_cfg.resume_starting_epoch
+        if train_cfg.resume_optimizer_state:
+            optimizer_path = train_cfg.snapshot_dir + \
+                f'/{train_cfg.resume_model_version}_optimizer'
+            if not os.path.exists(optimizer_path):
+                print(f'{optimizer_path} does not exist')
+                exit()
+            optimizer.load_state_dict(torch.load(optimizer_path))
         model.load_state_dict(torch.load(snapshot_path))
-        optimizer.load_state_dict(torch.load(optimizer_path))
         agent_pool.difficulty = train_cfg.resume_difficulty
         print(f'resuming {train_cfg.training_name} '
               f'using {train_cfg.resume_model_version} model '
               f'at epoch {start_ep + 1}')
     # logging ----------------------------------------------------------------------------------
-    name = train_cfg.training_name + '-'
+    name = train_cfg.training_name + '-' + resume_tag
     name += subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('utf-8')[:-1]
     # checking for --dirty
     git_diff = subprocess.Popen(['/usr/bin/git', 'diff', '--quiet'], stdout=subprocess.PIPE)

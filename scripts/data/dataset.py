@@ -19,8 +19,12 @@ class MassHDF5(torch.utils.data.Dataset):
         self.jitter = kwargs.get('jitter')
         self.dset_name = kwargs.get('dataset', 'town-01')
         self.use_class_subset = kwargs.get('classes') == 'ours'
-        print(f'opening {self.full_path}')
-        self.hdf5 = h5py.File(self.full_path, 'r')
+        print(f'dataset file: {self.full_path}')
+        try:
+            self.hdf5 = h5py.File(self.full_path, 'r')
+        except:
+            print('could not open hdf5 file for reading')
+            exit()
         self.dataset = self.hdf5[self.dset_name]
         self.min_agent_count = self.dataset.attrs['min_agent_count'][0]
         self.max_agent_count = self.dataset.attrs['max_agent_count'][0]
