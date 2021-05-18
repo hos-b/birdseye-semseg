@@ -11,6 +11,9 @@ from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform, get_all_relative_img_transforms
 
 class LMCNN(nn.Module):
+    """
+    large MCNN
+    """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(LMCNN, self).__init__()
         self.output_size = output_size
@@ -103,6 +106,9 @@ class LMCNN(nn.Module):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
 class LWMCNN(LMCNN):
+    """
+    large and wide MCNN
+    """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(LWMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
         # set aggregation parameters
@@ -113,6 +119,17 @@ class LWMCNN(LMCNN):
         self.learning_to_downsample = LearningToDownsampleL(dw_channels1=32,
                                                             dw_channels2=48,
                                                             out_channels=64)
+
+class TransposedMCNN(LWMCNN):
+    """
+    large and wide MCNN
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super(LWMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
+        pass
+    def forward(self, x, transforms, adjacency_matrix, decoder_only = False):
+        super().forward(x, transforms, adjacency_matrix, decoder_only)
+        
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
