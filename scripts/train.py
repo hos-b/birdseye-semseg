@@ -1,4 +1,3 @@
-from logging import log
 import os
 import torch
 import torch.nn as nn
@@ -20,7 +19,7 @@ from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN, LWMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -243,6 +242,9 @@ def parse_and_execute():
     elif train_cfg.model_name == 'mcnnLW':
         model = LWMCNN(train_cfg.num_classes, new_size,
                        geom_cfg, train_cfg.aggregation_type).cuda(0)
+    elif train_cfg.model_name == 'mcnnT':
+        model = TransposedMCNN(train_cfg.num_classes, new_size,
+                               geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()

@@ -1,5 +1,5 @@
 logging:
-  name: 'baseline'
+  name: 'debug'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -13,11 +13,11 @@ training:
   world-size: 2
 
 network:
-  model-name: 'mcnnLW'
+  model-name: 'mcnnT'
   aggregation-type: 'bilinear' # or 'nearest'
 
 resume:
-  flag: true
+  flag: false
   tag: 'dec-only'
   decoder-only: true
   resume-optimizer-state: false

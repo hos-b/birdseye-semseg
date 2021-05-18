@@ -1,8 +1,6 @@
 #########################################################
 # based on  https://github.com/Tramac/Fast-SCNN-pytorch #
 #########################################################
-
-from kornia.geometry import warp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -125,11 +123,9 @@ class TransposedMCNN(LWMCNN):
     large and wide MCNN
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
-        super(LWMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
-        pass
-    def forward(self, x, transforms, adjacency_matrix, decoder_only = False):
-        super().forward(x, transforms, adjacency_matrix, decoder_only)
-        
+        super(TransposedMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
+        self.classifier = TransposedClassifer(128, num_classes)
+        self.maskifier = TransposedClassifer(128, 1)
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
@@ -158,7 +154,6 @@ class LearningToDownsampleL(nn.Module):
         x = self.dsconv1(x)
         x = self.dsconv2(x)
         return x
-
 
 class GlobalFeatureExtractor(nn.Module):
     """Global feature extractor module"""
@@ -224,6 +219,29 @@ class Classifer(nn.Module):
         )
 
     def forward(self, x):
+        x = self.dsconv1(x)
+        x = self.dsconv2(x)
+        x = self.conv(x)
+        return x
+
+class TransposedClassifer(nn.Module):
+    """
+    Classifer + transposed convolution for upsampling
+    """
+    def __init__(self, dw_channels, num_classes, stride=1):
+        super(TransposedClassifer, self).__init__()
+        self.tconv1 = nn.ConvTranspose2d(dw_channels, dw_channels, kernel_size=(25, 1))
+        self.tconv2 = nn.ConvTranspose2d(dw_channels, dw_channels, kernel_size=(25, 1))
+        self.dsconv1 = _DSConv(dw_channels, dw_channels, stride)
+        self.dsconv2 = _DSConv(dw_channels, dw_channels, stride)
+        self.conv = nn.Sequential(
+            nn.Dropout(0.1),
+            nn.Conv2d(dw_channels, num_classes, 1)
+        )
+
+    def forward(self, x):
+        x = self.tconv1(x)
+        x = self.tconv2(x)
         x = self.dsconv1(x)
         x = self.dsconv2(x)
         x = self.conv(x)
