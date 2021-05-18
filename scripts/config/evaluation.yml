@@ -1,13 +1,13 @@
 # evaluation configuration used in evalutate.py and partially in gui.py
 
 device: 'cuda'
-run: 'baseline'
+run: 'last-no-avg-66'
 torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 model:
   model-name: 'mcnnLW'
-  model-version: 'best' # || 'best'
+  model-version: 'last' # || 'best'
   aggregation-type: 'bilinear' # or 'nearest'
 
 plot:

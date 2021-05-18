@@ -259,7 +259,13 @@ def main():
                                NEW_SIZE, eval_cfg.classes)
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset(iter(loader))
-    # network stuff
+    # baseline stuff
+    baseline_dir = eval_cfg.snapshot_dir.format('baseline')
+    baseline_path = baseline_dir + '/best_model.pth'
+    baseline_model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
+                            sem_cfg, eval_cfg.aggregation_type).to(device)
+    baseline_model.load_state_dict(torch.load(baseline_path))
+    # other network stuff
     if eval_cfg.model_version != 'best' and eval_cfg.model_version != 'last':
         print("valid model version are 'best' and 'last'")
         exit()
@@ -285,8 +291,9 @@ def main():
         print('unknown network architecture {eval_cfg.model_name}')
         exit()
     model.load_state_dict(torch.load(snapshot_path))
-    gui.add_network(model, 'baseline')
-    gui.add_network(model, 'baseline as a normal net')
+    print(snapshot_path)
+    gui.add_network(baseline_model, 'baseline')
+    gui.add_network(model, eval_cfg.run)
     # start the gui
     gui.start()
 
