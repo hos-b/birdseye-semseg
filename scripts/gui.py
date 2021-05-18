@@ -33,15 +33,7 @@ class SampleWindow:
         self.agent_index = 0
         self.agent_count = 8
         self.window = tkinter.Tk()
-        # # image panels
-        # self.rgb_panel         = tkinter.Label(self.window, text='placeholder')
-        # self.masked_pred_panel = tkinter.Label(self.window, text='placeholder')
-        # self.full_pred_panel   = tkinter.Label(self.window, text='placeholder')
-        # self.target_panel      = tkinter.Label(self.window, text='placeholder')
-        # self.rgb_panel.         grid(column=0, row=2, columnspan=5, rowspan=8)
-        # self.masked_pred_panel. grid(column=6, row=2, columnspan=5, rowspan=8)
-        # self.full_pred_panel.   grid(column=11, row=2, columnspan=5, rowspan=8)
-        # self.target_panel.      grid(column=16, row=2, columnspan=5, rowspan=8)
+        # image panels captions
         self.rgb_panel_caption         = tkinter.Label(self.window, text='front rgb')
         self.masked_pred_panel_caption = tkinter.Label(self.window, text='masked pred')
         self.full_pred_panel_caption   = tkinter.Label(self.window, text='full pred')
@@ -50,8 +42,6 @@ class SampleWindow:
         self.masked_pred_panel_caption. grid(column=6, row=0, columnspan=5)
         self.full_pred_panel_caption.   grid(column=11, row=0, columnspan=5)
         self.target_panel_caption.      grid(column=16, row=0, columnspan=5)
-        # self.baseline_label            = tkinter.Label(self.window, text='[baseline]')
-        # self.baseline_label.            grid(column=0, row=0, columnspan=1)
         # agent selection buttons
         self.sep_1 = tkinter.Label(self.window, text='  ')
         self.sep_1.grid(row=1, rowspan=10, column=21)
