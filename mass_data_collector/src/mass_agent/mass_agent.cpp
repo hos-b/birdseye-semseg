@@ -179,7 +179,10 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates =
 		ExpandWayoint(initial_wp, vehicle_length_ * config::kMinDistCoeff);
-	
+	// in the old code this would've caused a deadlock, now it's empty
+	if (candidates.size() == 0) {
+		return nullptr;
+	}
 	if (knn_pts > 0) {
 		auto query_tfm = initial_wp->GetTransform();
 		double query[3] = {query_tfm.location.x, query_tfm.location.y, query_tfm.location.y};
