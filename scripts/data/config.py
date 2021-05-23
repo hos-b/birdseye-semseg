@@ -87,7 +87,8 @@ class TrainingConfig:
         self.classes = str(conf['dataset']['classes'])
         self.num_classes = int(conf['dataset']['num-classes'])
         self.dset_dir = str(conf['dataset']['dataset-dir'])
-        self.dset_file = str(conf['dataset']['dataset-file'])
+        self.trainset_file = str(conf['dataset']['trainset-file'])
+        self.testset_file = str(conf['dataset']['testset-file'])
         self.dset_name = str(conf['dataset']['dataset-name'])
 
 class EvaluationConfig:
@@ -111,7 +112,6 @@ class EvaluationConfig:
         self.plot_tag = str(conf['plot']['plot-tag'])
         # dataset parameters
         self.random_samples = bool(conf['dataset']['random-samples'])
-        self.data_split = str(conf['dataset']['dataset-split'])
         self.dset_dir = str(conf['dataset']['dataset-dir'])
         self.dset_file = str(conf['dataset']['dataset-file'])
         self.dset_name = str(conf['dataset']['dataset-name'])

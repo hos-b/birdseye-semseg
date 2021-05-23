@@ -8,7 +8,7 @@ import numpy as np
 import PIL.ImageTk
 import PIL.Image as PILImage
 
-from data.dataset import get_datasets
+from data.dataset import MassHDF5
 from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.mask_warp import get_single_relative_img_transform
@@ -244,9 +244,9 @@ def main():
     # gui object
     gui = SampleWindow(eval_cfg.num_classes, device, NEW_SIZE, CENTER, PPM)
     # dataloader stuff
-    _, test_set = get_datasets(eval_cfg.dset_name, eval_cfg.dset_dir,
-                               eval_cfg.dset_file, (0.8, 0.2),
-                               NEW_SIZE, eval_cfg.classes)
+    test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
+                        hdf5name=eval_cfg.dset_file, size=NEW_SIZE,
+                        classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset(iter(loader))
     # baseline stuff

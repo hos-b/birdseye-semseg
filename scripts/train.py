@@ -13,7 +13,7 @@ matplotlib.use('Agg')
 from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.color_map import __our_classes as segmentation_classes
-from data.dataset import get_datasets
+from data.dataset import MassHDF5
 from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
@@ -213,10 +213,12 @@ def parse_and_execute():
     print(f'center: {center}')
     print(f'ppm: {ppm}')
     # dataset ----------------------------------------------------------------------------------
-    train_set, test_set = get_datasets(train_cfg.dset_name, train_cfg.dset_dir,
-                                       train_cfg.dset_file, (0.8, 0.2),
-                                       new_size, train_cfg.classes,
-                                       train_cfg.color_jitter)
+    train_set = MassHDF5(dataset=train_cfg.dset_name, path=train_cfg.dset_dir,
+                         hdf5name=train_cfg.trainset_file, size=new_size,
+                         classes=train_cfg.classes, jitter=train_cfg.color_jitter)
+    test_set = MassHDF5(dataset=train_cfg.dset_name, path=train_cfg.dset_dir,
+                        hdf5name=train_cfg.testset_file, size=new_size,
+                        classes=train_cfg.classes, jitter=[0, 0, 0, 0])
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
                                                num_workers=train_cfg.loader_workers)

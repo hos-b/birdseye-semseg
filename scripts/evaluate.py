@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from agent.agent_pool import CurriculumPool
 from data.color_map import our_semantics_to_cityscapes_rgb
-from data.dataset import get_datasets
+from data.dataset import MassHDF5
 from data.config import EvaluationConfig, SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all, to_device
 from data.utils import font_dict, newline_dict
@@ -183,22 +183,16 @@ def main():
     agent_pool = CurriculumPool(eval_cfg.difficulty, eval_cfg.difficulty,
                                 eval_cfg.max_agent_count, device)
     # dataloader stuff
-    train_set, test_set = get_datasets(eval_cfg.dset_name, eval_cfg.dset_dir,
-                                       eval_cfg.dset_file, (0.8, 0.2),
-                                       new_size, eval_cfg.classes)
-    if eval_cfg.data_split == 'train':
-        eval_set = train_set
-    elif eval_cfg.data_split == 'test':
-        eval_set = test_set
-    else:
-        print(f'uknown dataset split {eval_cfg.data_split}')
-        exit()
+    eval_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
+                        hdf5name=eval_cfg.dset_file, size=new_size,
+                        classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
+
     eval_loader = torch.utils.data.DataLoader(eval_set, batch_size=1,
                                               shuffle=eval_cfg.random_samples,
                                               num_workers=1)
     print(f'evaluating run {eval_cfg.run} with {eval_cfg.model_version} '
           f'snapshot of {eval_cfg.model_name}')
-    print(f'gathering at most {eval_cfg.plot_count} from the {eval_cfg.data_split} '
+    print(f'gathering at most {eval_cfg.plot_count} from {eval_cfg.dset_file} '
           f'set randomly? {eval_cfg.random_samples}, w/ difficulty = {eval_cfg.difficulty}')
     evaluate(model=model, agent_pool=agent_pool, loader=eval_loader, eval_cfg=eval_cfg,
              geom_properties=(new_size, center, ppm), device=device)
