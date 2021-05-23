@@ -13,6 +13,7 @@ from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
 from data.mask_warp import get_single_relative_img_transform
 from data.utils import squeeze_all, to_device
+from metrics.iou import iou_per_class
 from model.large_mcnn import LMCNN, LWMCNN
 from model.mcnn import MCNN, MCNN4
 
@@ -71,12 +72,15 @@ class SampleWindow:
                 exec(f"self.mbutton_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
+        # ious
+        self.ious = {}
 
     def add_network(self, network: torch.nn.Module, label: str):
         id = len(self.networks)
         net_row = 2 + len(self.networks) * 9
         network.eval()
         self.networks[label] = network
+        self.ious[label] = torch.zeros((self.class_count, 1), dtype=torch.float64).to(self.device)
         exec(f"self.network_label_{id}     = tkinter.Label(self.window, text='[{label}]')")
         exec(f"self.rgb_panel_{id}         = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.masked_pred_panel_{id} = tkinter.Label(self.window, text='placeholder')")
@@ -88,7 +92,25 @@ class SampleWindow:
         exec(f"self.full_pred_panel_{id}.   grid(column=11, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.target_panel_{id}.      grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
 
-    def assign_dataset(self, dset_iterator):
+    def calculate_ious(self):
+        for _, rgbs, labels, masks, car_transforms, _ in self.dset_iterator:
+            rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
+                                                        masks, car_transforms,
+                                                        self.device)
+            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
+            agent_count = rgbs.shape[0]
+            full_adjacency_matrix = torch.ones(agent_count, agent_count)
+            for (name, network) in self.networks:
+                with torch.no_grad():
+                    if name == 'baseline':
+                        ss_preds, _ = network(rgbs, car_transforms, torch.eye(agent_count))
+                    else:
+                        ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
+                                                                                agent_count)))
+                self.ious[name] += iou_per_class(ss_preds, labels, None).to(self.device)
+        pass
+
+    def assign_dataset_iterator(self, dset_iterator):
         self.dset_iterator = dset_iterator
 
     def set_baseline(self, net: torch.nn.Module):
@@ -172,13 +194,6 @@ class SampleWindow:
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         for i, (name, network) in enumerate(self.networks.items()):
-            # combined prediction
-            with torch.no_grad():
-                if name == 'baseline':
-                    all_ss_preds, all_mask_preds = network(rgbs, car_transforms, torch.eye(self.agent_count))
-                else:
-                    all_ss_preds, all_mask_preds = network(rgbs, car_transforms, self.adjacency_matrix)
-
             # >>> front RGB image
             exec(f"self.rgb_panel_{i}.configure(image=rgb_tk)")
             exec(f"self.rgb_panel_{i}.image = rgb_tk")
@@ -187,8 +202,11 @@ class SampleWindow:
             exec(f"self.target_panel_{i}.configure(image=target_tk)")
             exec(f"self.target_panel_{i}.image = target_tk")
 
-            # >>> masked predicted semseg w/o external influence
+
             if name == 'baseline':
+                # >>> masked predicted semseg w/o external influence
+                with torch.no_grad():
+                    all_ss_preds, all_mask_preds = network(rgbs, car_transforms, torch.eye(self.agent_count))
                 current_ss_pred = all_ss_preds[self.agent_index].argmax(dim=0)
                 current_ss_pred_img = our_semantics_to_cityscapes_rgb(current_ss_pred.cpu())
                 current_mask_pred = all_mask_preds[self.agent_index].squeeze().cpu()
@@ -196,24 +214,10 @@ class SampleWindow:
                 masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
                 exec(f"self.masked_pred_panel_{i}.configure(image=masked_pred_tk)")
                 exec(f"self.masked_pred_panel_{i}.image = masked_pred_tk")
-            else:
-                all_ss_eye, all_mask_eye = network(rgbs, car_transforms, torch.eye(self.agent_count))
-                current_ss_pred = all_ss_eye[self.agent_index].argmax(dim=0)
-                current_ss_pred_img = our_semantics_to_cityscapes_rgb(current_ss_pred.cpu())
-                current_mask_pred = all_mask_eye[self.agent_index].squeeze().cpu()
-                current_ss_pred_img[current_mask_pred == 0] = 0
-                masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
-                exec(f"self.masked_pred_panel_{i}.configure(image=masked_pred_tk)")
-                exec(f"self.masked_pred_panel_{i}.image = masked_pred_tk")
-
-            # >>> full predicted semseg w/ influence from adjacency matrix
-
-            # using self masking (only for baseline since others do latent masking)
-            if self.self_masking_en and name == 'baseline':
-                all_ss_preds *= all_mask_preds
-
-            # applying adjacency matrix (others already do in forward pass)
-            if name == 'baseline':
+                # >>> full predicted semseg w/ influence from adjacency matrix
+                # using self masking (only for baseline since others do latent masking)
+                if self.self_masking_en:
+                    all_ss_preds *= all_mask_preds
                 not_selected = torch.where(self.adjacency_matrix[self.agent_index] == 0)[0]
                 relative_tfs = get_single_relative_img_transform(car_transforms, self.agent_index,
                                                                  self.ppm, self.output_h, self.output_w,
@@ -225,6 +229,19 @@ class SampleWindow:
                 current_warped_semantics = current_warped_semantics.sum(dim=0).argmax(dim=0)
                 current_aggregated_semantics = our_semantics_to_cityscapes_rgb(current_warped_semantics.cpu())
             else:
+                # >>> masked predicted semseg w/o external influence
+                with torch.no_grad():
+                    all_ss_eye, all_mask_eye = network(rgbs, car_transforms, torch.eye(self.agent_count))
+                current_ss_pred = all_ss_eye[self.agent_index].argmax(dim=0)
+                current_ss_pred_img = our_semantics_to_cityscapes_rgb(current_ss_pred.cpu())
+                current_mask_pred = all_mask_eye[self.agent_index].squeeze().cpu()
+                current_ss_pred_img[current_mask_pred == 0] = 0
+                masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
+                exec(f"self.masked_pred_panel_{i}.configure(image=masked_pred_tk)")
+                exec(f"self.masked_pred_panel_{i}.image = masked_pred_tk")
+                # >>> full predicted semseg w/ influence from adjacency matrix
+                with torch.no_grad():
+                    all_ss_preds, all_mask_preds = network(rgbs, car_transforms, self.adjacency_matrix)
                 current_aggregated_semantics = \
                     our_semantics_to_cityscapes_rgb(all_ss_preds[self.agent_index].argmax(dim=0).cpu())
 
@@ -248,7 +265,7 @@ def main():
                         hdf5name=eval_cfg.dset_file, size=NEW_SIZE,
                         classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
-    gui.assign_dataset(iter(loader))
+    gui.assign_dataset_iterator(iter(loader))
     # baseline stuff
     baseline_dir = eval_cfg.snapshot_dir.format('baseline')
     baseline_path = baseline_dir + '/best_model.pth'
@@ -284,6 +301,8 @@ def main():
     print(snapshot_path)
     gui.add_network(baseline_model, 'baseline')
     gui.add_network(model, eval_cfg.run)
+    # evaluate the added networks
+
     # start the gui
     gui.start()
 
