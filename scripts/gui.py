@@ -11,7 +11,8 @@ import PIL.Image as PILImage
 from data.dataset import MassHDF5
 from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import our_semantics_to_cityscapes_rgb
-from data.mask_warp import get_single_relative_img_transform
+from data.color_map import __our_classes as segmentation_classes
+from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
 from metrics.iou import iou_per_class
 from model.large_mcnn import LMCNN, LWMCNN
@@ -73,42 +74,32 @@ class SampleWindow:
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
         # ious
-        self.ious = {}
+        self.mskd_ious = {}
+        self.full_ious = {}
 
     def add_network(self, network: torch.nn.Module, label: str):
         id = len(self.networks)
-        net_row = 2 + len(self.networks) * 9
+        net_row = 2 + len(self.networks) * 12
         network.eval()
         self.networks[label] = network
-        self.ious[label] = torch.zeros((self.class_count, 1), dtype=torch.float64).to(self.device)
-        exec(f"self.network_label_{id}     = tkinter.Label(self.window, text='[{label}]')")
-        exec(f"self.rgb_panel_{id}         = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.masked_pred_panel_{id} = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.full_pred_panel_{id}   = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.target_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.network_label_{id}.     grid(column=0, row={net_row - 1}, columnspan=1)")
-        exec(f"self.rgb_panel_{id}.         grid(column=0, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.masked_pred_panel_{id}. grid(column=6, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.full_pred_panel_{id}.   grid(column=11, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.target_panel_{id}.      grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
-
-    def calculate_ious(self):
-        for _, rgbs, labels, masks, car_transforms, _ in self.dset_iterator:
-            rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
-                                                        masks, car_transforms,
-                                                        self.device)
-            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            agent_count = rgbs.shape[0]
-            full_adjacency_matrix = torch.ones(agent_count, agent_count)
-            for (name, network) in self.networks:
-                with torch.no_grad():
-                    if name == 'baseline':
-                        ss_preds, _ = network(rgbs, car_transforms, torch.eye(agent_count))
-                    else:
-                        ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
-                                                                                agent_count)))
-                self.ious[name] += iou_per_class(ss_preds, labels, None).to(self.device)
-        pass
+        self.mskd_ious[label] = torch.zeros((self.class_count, 1), dtype=torch.float64).to(self.device)
+        self.full_ious[label] = torch.zeros((self.class_count, 1), dtype=torch.float64).to(self.device)
+        exec(f"self.network_label_{id}        = tkinter.Label(self.window, text='[{label}]')")
+        exec(f"self.rgb_panel_{id}            = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.masked_pred_panel_{id}    = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.full_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.target_panel_{id}         = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.masked_iou_label_{id}     = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.full_iou_label_{id}       = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.seperator_{id}            = tkinter.Label(self.window, text='{'-' * 105}')")
+        exec(f"self.network_label_{id}.         grid(column=0, row={net_row - 1}, columnspan=1)")
+        exec(f"self.rgb_panel_{id}.             grid(column=0, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.masked_pred_panel_{id}.     grid(column=6, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.full_pred_panel_{id}.       grid(column=11, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.target_panel_{id}.          grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.masked_iou_label_{id}.      grid(column=0, row={net_row + 8}, columnspan=20)")
+        exec(f"self.full_iou_label_{id}.        grid(column=0, row={net_row + 9}, columnspan=20)")
+        exec(f"self.seperator_{id}.             grid(column=0, row={net_row + 10}, columnspan=20)")
 
     def assign_dataset_iterator(self, dset_iterator):
         self.dset_iterator = dset_iterator
@@ -152,6 +143,42 @@ class SampleWindow:
         self.self_masking_en = not self.self_masking_en
         self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
         self.update_prediction()
+    
+    def calculate_ious(self, dataset: MassHDF5):
+        sample_count = 1
+        dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
+        total_length = len(dloader)
+        print('calculating IoUs...')
+        for idx, (_, rgbs, labels, masks, car_transforms, _) in enumerate(dloader):
+            print(f'\r{idx + 1}/{total_length}', end='')
+            rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
+                                                            masks, car_transforms,
+                                                            self.device)
+            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
+            aggregate_masks = get_all_aggregate_masks(masks, car_transforms, self.ppm,
+                                                      self.output_h, self.output_w,
+                                                      self.center_x, self.center_y)
+            agent_count = rgbs.shape[0]
+            sample_count += agent_count
+            full_adjacency_matrix = torch.ones(agent_count, agent_count)
+            for name, network in self.networks.items():
+                with torch.no_grad():
+                    if name == 'baseline':
+                        ss_preds, _ = network(rgbs, car_transforms, torch.eye(agent_count))
+                    else:
+                        ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
+                                                                                agent_count)))
+                self.mskd_ious[name] += iou_per_class(ss_preds, labels, aggregate_masks).to(self.device)
+                self.full_ious[name] += iou_per_class(ss_preds, labels, torch.ones_like(aggregate_masks)).to(self.device)
+
+        for i, (network) in enumerate(self.networks.keys()):
+            full_iou_txt = 'full IoU  '
+            mskd_iou_txt = 'mskd IoU  '
+            for semantic_idx, semantic_class in segmentation_classes.items():
+                full_iou_txt += f'{semantic_class.lower()}: {(self.full_ious[network][semantic_idx] / sample_count).item():.02f} '
+                mskd_iou_txt += f'{semantic_class.lower()}: {(self.mskd_ious[network][semantic_idx] / sample_count).item():.02f} '
+            exec(f"self.full_iou_label_{i}.configure(text='{full_iou_txt}')")
+            exec(f"self.masked_iou_label_{i}.configure(text='{mskd_iou_txt}')")
 
     def change_sample(self):
         (_, rgbs, labels, masks, car_transforms, batch_index) = next(self.dset_iterator)
@@ -302,7 +329,7 @@ def main():
     gui.add_network(baseline_model, 'baseline')
     gui.add_network(model, eval_cfg.run)
     # evaluate the added networks
-
+    gui.calculate_ious(test_set)
     # start the gui
     gui.start()
 
