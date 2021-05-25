@@ -171,6 +171,7 @@ int main(int argc, char **argv)
 	}
 	dataset.Close();
 	std::cout << "\ndata collection finished, dataset closed" << std::endl;
+	ros::shutdown();
 	time_thread.join();
 	std::cout << "joined timer thread" << std::endl;
 	for (size_t i = 0; i < agents.size(); ++i) {
@@ -335,11 +336,27 @@ bool SwitchTown(size_t batch, size_t number_of_agents, std::mt19937& random_gen)
 			agents.clear();
 			// in case the map has to be changed
 			if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
+				size_t timeout_count = 0;
 				try {
 					MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[i]));
 					MassAgent::carla_client()->GetWorld().Tick(5s);
 				} catch(carla::client::TimeoutException& e) {
-					std::cout << "connection to simulator timed out..." << std::endl;
+					timeout_count = 1;
+					std::cout << "connection to simulator timed out. reconnecting ..." << std::endl;
+				}
+				// retry up to 10 times
+				while (timeout_count > 0 && timeout_count < 10) {
+					try {
+						MassAgent::carla_client().reset(new cc::Client("127.0.0.1", 2000));
+						MassAgent::carla_client()->GetWorld().Tick(5s);
+						break;
+					} catch(carla::client::TimeoutException& e) {
+						std::cout << "retry failed (" << timeout_count << ")" << std::endl;
+						timeout_count += 1;
+					}
+				}
+				if (timeout_count == 10) {
+					std::cout << "maximum number of retries faield. exting ..." << std::endl;
 					return false;
 				}
 			}
