@@ -1,15 +1,15 @@
 dataset:
   path: '/home/mass/data/test.hdf5'
   name: 'town-01'
-  towns: [1, 2, 3, 10, 4, 5, 1, 2, 10, 1, 2, 3, 10, 4, 5, 1, 2, 10]
+  towns: [3]
   append: false
 
 collection:
-  random_seed: 515
-  minimum_cars: 8
-  maximum_cars: 8
-  maximum_batch_count: 10000
-  town_batch_counts: [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10] # number of datapoints in the each town
-  hdf5_chunk_size: 5
+  random-seed: 515
+  maximum-cars: 8
+  batch-size-distribution: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.2]
+  maximum-batch-count: 10000
+  town-batch-counts: [16] # number of datapoints in the each town
+  hdf5-chunk-size: 5
   # avg. batch time x multiplier = deadlock
-  deadlock_multiplier: 5.0
+  deadlock-multiplier: 5.0

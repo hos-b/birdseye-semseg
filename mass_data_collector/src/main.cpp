@@ -2,7 +2,6 @@
 #include <chrono>
 #include <csignal>
 #include <future>
-#include <algorithm>
 
 #include <ros/ros.h>
 #include <ros/package.h>
@@ -18,7 +17,7 @@ using agent::MassAgent;
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
-bool SwitchTown(size_t, size_t, std::mt19937&);
+bool SwitchTown(size_t, std::mt19937&);
 std::string SecondsToString(uint32);
 bool EnableSyncMode();
 
@@ -31,7 +30,7 @@ int main(int argc, char **argv)
 	// reading configs ------------------------------------------------------------------------------------------
 	AssertConfiguration();
 	auto& config = CollectionConfig::GetConfig();
-	CollectionStats stats(config.minimum_cars, config.maximum_cars);
+	CollectionStats stats(config.maximum_cars);
 	size_t number_of_agents = config.maximum_cars;
 	srand(config.random_seed);
 	size_t batch_count = 0;
@@ -64,7 +63,6 @@ int main(int argc, char **argv)
 							&state, &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
 	// random distribution & shuffling necessities --------------------------------------------------------------
 	std::mt19937 random_gen(config.random_seed);
-    std::uniform_int_distribution<> distrib(config.minimum_cars, config.maximum_cars);
 	std::vector<unsigned int> shuffled(number_of_agents);
     std::iota(shuffled.begin(), shuffled.end(), 0);
 	// CARLA stuff ----------------------------------------------------------------------------------------------
@@ -76,14 +74,16 @@ int main(int argc, char **argv)
 			break;
 		}
 		state = 'i';
-		if (!SwitchTown(batch_count, number_of_agents, random_gen)) {
+		auto [switch_flag, town_index] = config.GetNewTown(batch_count);
+		// exit if town switch was unsuccessful
+		if (switch_flag && !SwitchTown(town_index, random_gen)) {
 			break;
 		}
 		// timing
 		auto batch_start_t = std::chrono::high_resolution_clock::now();
 		// randoming the batch size and shuffling the agents
 		state = 'r';
-		batch_size = distrib(random_gen);
+		batch_size = config.GetBatchSize(batch_count);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
 		// chain randoming poses for the chosen ones, reset on deadlock
@@ -147,6 +147,8 @@ int main(int argc, char **argv)
 		batch_finished = true;
 	}
 	auto batch_histogram = stats.AsVector();
+	std::cout << "\nbatch size histogram:\n";
+	stats.Print();
 	if (config.append) {
 		// updating histogram from last run
 		std::vector<uint32_t> old_stats(batch_histogram.size(), 0);
@@ -166,11 +168,11 @@ int main(int argc, char **argv)
 		dataset.AddU32Attribute(&batch_histogram[0], batch_histogram.size(), "batch_histogram");
 		uint32_t data[] = {config.maximum_cars};
 		dataset.AddU32Attribute(data, 1, "max_agent_count");
-		data[0] = config.minimum_cars;
+		data[0] = 1;
 		dataset.AddU32Attribute(data, 1, "min_agent_count");
 	}
 	dataset.Close();
-	std::cout << "\ndata collection finished, dataset closed" << std::endl;
+	std::cout << "data collection finished, dataset closed" << std::endl;
 	ros::shutdown();
 	time_thread.join();
 	std::cout << "joined timer thread" << std::endl;
@@ -308,65 +310,47 @@ void AssertConfiguration() {
 }
 
 /* switch town based on the batch number */
-bool SwitchTown(size_t batch, size_t number_of_agents, std::mt19937& random_gen) {
+bool SwitchTown(size_t town_index, std::mt19937& random_gen) {
 	auto& col_conf = CollectionConfig::GetConfig();
 	auto& agents = MassAgent::agents();
-	if (batch == col_conf.max_batch_count) {
-		throw std::runtime_error("should not be reaching this line");
+	auto number_of_agents = col_conf.maximum_cars;
+	std::cout << std::endl;
+	for (size_t j = 0; j < agents.size(); ++j) {
+		delete agents[j];
 	}
-	if (batch == 0) {
-		std::string new_town = config::town_map_short_names.at(col_conf.towns[0]);
-		if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
-			std::cout << "switching to first town: " << new_town << std::endl;
-			MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[0]));
+	agents.clear();
+	// switching the town if necessary
+	std::string new_town = config::town_map_short_names.at(town_index);
+	if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
+		std::cout << "switching to " << new_town << std::endl;
+		size_t timeout_count = 0;
+		try {
+			MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(town_index));
 			MassAgent::carla_client()->GetWorld().Tick(5s);
+		} catch(carla::client::TimeoutException& e) {
+			timeout_count = 1;
+			std::cout << "connection to simulator timed out. reconnecting ..." << std::endl;
 		}
-		for (size_t i = 0; i < number_of_agents; ++i) {
-			new MassAgent(random_gen, config::GetRestrictedRoads(col_conf.towns[0]));
+		// retry up to 10 times
+		while (timeout_count > 0 && timeout_count < 10) {
+			try {
+				MassAgent::carla_client().reset(new cc::Client("127.0.0.1", 2000));
+				MassAgent::carla_client()->GetWorld().Tick(5s);
+				break;
+			} catch(carla::client::TimeoutException& e) {
+				std::cout << "retry failed (" << timeout_count << ")" << std::endl;
+				timeout_count += 1;
+			}
 		}
-		return true;
-	}
-	for (size_t i = 1; i < col_conf.cumulative_batch_counts.size(); ++i) {
-		if (batch == col_conf.cumulative_batch_counts[i - 1]) {
-			std::string new_town = config::town_map_short_names.at(col_conf.towns[i]);
-			std::cout << "\nswitching to " << new_town << std::endl;
-			for (size_t i = 0; i < number_of_agents; ++i) {
-				delete agents[i];
-			}
-			agents.clear();
-			// in case the map has to be changed
-			if (MassAgent::carla_client()->GetWorld().GetMap()->GetName() != new_town) {
-				size_t timeout_count = 0;
-				try {
-					MassAgent::carla_client()->LoadWorld(config::town_map_full_names.at(col_conf.towns[i]));
-					MassAgent::carla_client()->GetWorld().Tick(5s);
-				} catch(carla::client::TimeoutException& e) {
-					timeout_count = 1;
-					std::cout << "connection to simulator timed out. reconnecting ..." << std::endl;
-				}
-				// retry up to 10 times
-				while (timeout_count > 0 && timeout_count < 10) {
-					try {
-						MassAgent::carla_client().reset(new cc::Client("127.0.0.1", 2000));
-						MassAgent::carla_client()->GetWorld().Tick(5s);
-						break;
-					} catch(carla::client::TimeoutException& e) {
-						std::cout << "retry failed (" << timeout_count << ")" << std::endl;
-						timeout_count += 1;
-					}
-				}
-				if (timeout_count == 10) {
-					std::cout << "maximum number of retries faield. exting ..." << std::endl;
-					return false;
-				}
-			}
-			for (size_t i = 0; i < number_of_agents; ++i) {
-				new MassAgent(random_gen, config::GetRestrictedRoads(col_conf.towns[i]));
-			}
-			std::cout << "town switch complete" << std::endl;
-			return true;
+		if (timeout_count == 10) {
+			std::cout << "maximum number of retries faield. exting ..." << std::endl;
+			return false;
 		}
 	}
+	for (size_t i = 0; i < number_of_agents; ++i) {
+		new MassAgent(random_gen, config::GetRestrictedRoads(town_index));
+	}
+	std::cout << "town switch complete" << std::endl;
 	return true;
 }
 /* set the simulator to synchronous mode */
