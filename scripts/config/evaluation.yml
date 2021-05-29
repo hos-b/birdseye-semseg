@@ -23,7 +23,6 @@ curriculum:
 dataset:
   random-samples: false
   classes: 'ours'
-  num-classes: 7
   output-h: 256
   output-w: 205
   dataset-split: 'test'

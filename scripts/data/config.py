@@ -1,5 +1,11 @@
 import yaml
 
+num_classes_dict = {
+    'ours': 7,
+    'carla': 23,
+    'diminished': 3
+}
+
 class SemanticCloudConfig:
     def __init__(self, file_path: str):
         yaml_file = open(file_path)
@@ -86,7 +92,7 @@ class TrainingConfig:
         self.output_h = int(conf['dataset']['output-h'])
         self.output_w = int(conf['dataset']['output-w'])
         self.classes = str(conf['dataset']['classes'])
-        self.num_classes = int(conf['dataset']['num-classes'])
+        self.num_classes = num_classes_dict[self.classes]
         self.dset_dir = str(conf['dataset']['dataset-dir'])
         self.trainset_file = str(conf['dataset']['trainset-file'])
         self.validset_file = str(conf['dataset']['validset-file'])
@@ -120,7 +126,7 @@ class EvaluationConfig:
         self.output_h = int(conf['dataset']['output-h'])
         self.output_w = int(conf['dataset']['output-w'])
         self.classes = str(conf['dataset']['classes'])
-        self.num_classes = int(conf['dataset']['num-classes'])
+        self.num_classes = num_classes_dict[self.classes]
         # curriculum parameters
         self.difficulty = int(conf['curriculum']['difficulty'])
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])

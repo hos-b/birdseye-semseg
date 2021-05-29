@@ -52,7 +52,6 @@ dataset:
   output-h: 256
   output-w: 205
   classes: 'ours'
-  num-classes: 7
   dataset-dir: '/export/home/bahadorm/mass-data'
   trainset-file: 'towns_1234.hdf5'
   trainset-name: 'training_set'
