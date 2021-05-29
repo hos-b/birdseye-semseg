@@ -106,13 +106,13 @@ class EvaluationConfig:
         yaml_file.close()
         # evaluation parameters
         self.device = str(conf['device'])
-        self.run = str(conf['run'])
         self.torch_seed = int(conf['torch-seed'])
         self.snapshot_dir = str(conf['snapshot-dir'])
         # model parameters
-        self.model_name = str(conf['model']['model-name'])
-        self.model_version = str(conf['model']['model-version'])
-        self.aggregation_type = str(conf['model']['aggregation-type'])
+        self.runs = list(conf['models']['runs'])
+        self.model_names = list(conf['models']['model-names'])
+        self.model_versions = list(conf['models']['model-versions'])
+        self.aggregation_types = list(conf['models']['aggregation-types'])
         # plotting parameters
         self.plot_count = int(conf['plot']['count'])
         self.plot_type = str(conf['plot']['plot-type'])

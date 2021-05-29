@@ -15,7 +15,7 @@ from data.color_map import __our_classes as segmentation_classes
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
 from metrics.iou import iou_per_class
-from model.large_mcnn import LMCNN, LWMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN
 from model.mcnn import MCNN, MCNN4
 
 class SampleWindow:
@@ -299,35 +299,39 @@ def main():
     baseline_model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
                             sem_cfg, eval_cfg.aggregation_type).to(device)
     baseline_model.load_state_dict(torch.load(baseline_path))
-    # other network stuff
-    if eval_cfg.model_version != 'best' and eval_cfg.model_version != 'last':
-        print("valid model version are 'best' and 'last'")
-        exit()
-    eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.run)
-    snapshot_path = f'{eval_cfg.model_version}_model.pth'
-    snapshot_path = eval_cfg.snapshot_dir + '/' + snapshot_path
-    if not os.path.exists(snapshot_path):
-        print(f'{snapshot_path} does not exist')
-        exit()
-    if eval_cfg.model_name == 'mcnn':
-        model = MCNN(eval_cfg.num_classes, NEW_SIZE,
-                     sem_cfg, eval_cfg.aggregation_type).to(device)
-    elif eval_cfg.model_name == 'mcnn4':
-        model = MCNN4(eval_cfg.num_classes, NEW_SIZE,
-                      sem_cfg, eval_cfg.aggregation_type).to(device)
-    elif eval_cfg.model_name == 'mcnnL':
-        model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
-                      sem_cfg, eval_cfg.aggregation_type).to(device)
-    elif eval_cfg.model_name == 'mcnnLW':
-        model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
-                       sem_cfg, eval_cfg.aggregation_type).to(device)
-    else:
-        print('unknown network architecture {eval_cfg.model_name}')
-        exit()
-    model.load_state_dict(torch.load(snapshot_path))
-    print(snapshot_path)
     gui.add_network(baseline_model, 'baseline')
-    gui.add_network(model, eval_cfg.run)
+    # other network stuff
+    for i in range(len(eval_cfg.runs)):
+        if eval_cfg.model_versions[i] != 'best' and eval_cfg.model_versions[i] != 'last':
+            print("valid model version are 'best' and 'last'")
+            exit()
+        eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[i])
+        snapshot_path = f'{eval_cfg.model_versions[i]}_model.pth'
+        snapshot_path = eval_cfg.snapshot_dir + '/' + snapshot_path
+        if not os.path.exists(snapshot_path):
+            print(f'{snapshot_path} does not exist')
+            exit()
+        if eval_cfg.model_names[i] == 'mcnn':
+            model = MCNN(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        elif eval_cfg.model_names[i] == 'mcnn4':
+            model = MCNN4(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        elif eval_cfg.model_names[i] == 'mcnnL':
+            model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        elif eval_cfg.model_names[i] == 'mcnnLW':
+            model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        elif eval_cfg.model_names[i] == 'mcnnT':
+            model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        else:
+            print(f'unknown network architecture {eval_cfg.model_names[i]}')
+            exit()
+        model.load_state_dict(torch.load(snapshot_path))
+        print(f'loading {snapshot_path}')
+        gui.add_network(model, eval_cfg.runs[i])
     # evaluate the added networks
     gui.calculate_ious(test_set)
     # start the gui

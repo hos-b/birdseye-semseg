@@ -12,7 +12,7 @@ from data.config import EvaluationConfig, SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all, to_device
 from data.utils import font_dict, newline_dict
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN, LWMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN
 
 
 def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
@@ -131,6 +131,8 @@ def main():
     # configuration
     eval_cfg = EvaluationConfig('config/evaluation.yml')
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
+    if len(eval_cfg.runs) > 1:
+        print('more than one run selected, only using the first one')
     new_size = (eval_cfg.output_h, eval_cfg.output_w)
     center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
     ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
@@ -143,7 +145,7 @@ def main():
     # seed to insure the same train/test split
     torch.manual_seed(eval_cfg.torch_seed)
     # plot stuff 
-    eval_cfg.plot_dir = eval_cfg.plot_dir.format(eval_cfg.run)
+    eval_cfg.plot_dir = eval_cfg.plot_dir.format(eval_cfg.runs[0])
     eval_cfg.plot_dir += '_' + eval_cfg.plot_tag
     if not os.path.exists(eval_cfg.plot_dir):
         os.makedirs(eval_cfg.plot_dir)
@@ -155,27 +157,30 @@ def main():
         print("valid plot types are 'show' and 'disk'")
         exit()
     # network stuff
-    if eval_cfg.model_version != 'best' and eval_cfg.model_version != 'last':
+    if eval_cfg.model_versions[0] != 'best' and eval_cfg.model_versions[0] != 'last':
         print("valid model version are 'best' and 'last'")
         exit()
-    eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.run)
-    snapshot_path = f'{eval_cfg.model_version}_model.pth'
+    eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[0])
+    snapshot_path = f'{eval_cfg.model_versions[0]}_model.pth'
     snapshot_path = eval_cfg.snapshot_dir + '/' + snapshot_path
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
         exit()
-    if eval_cfg.model_name == 'mcnn':
+    if eval_cfg.model_names[0] == 'mcnn':
         model = MCNN(eval_cfg.num_classes, new_size,
-                     geom_cfg, eval_cfg.aggregation_type).cuda(0)
-    elif eval_cfg.model_name == 'mcnn4':
+                     geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
+    elif eval_cfg.model_names[0] == 'mcnn4':
         model = MCNN4(eval_cfg.num_classes, new_size,
-                      geom_cfg, eval_cfg.aggregation_type).cuda(0)
-    elif eval_cfg.model_name == 'mcnnL':
+                      geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
+    elif eval_cfg.model_names[0] == 'mcnnL':
         model = LMCNN(eval_cfg.num_classes, new_size,
-                      geom_cfg, eval_cfg.aggregation_type).cuda(0)
-    elif eval_cfg.model_name == 'mcnnLW':
+                      geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
+    elif eval_cfg.model_names[0] == 'mcnnLW':
         model = LWMCNN(eval_cfg.num_classes, new_size,
-                       geom_cfg, eval_cfg.aggregation_type).cuda(0)
+                       geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
+    elif eval_cfg.model_names[0] == 'mcnnT':
+        model = TransposedMCNN(eval_cfg.num_classes, new_size,
+                       geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
     else:
         print('unknown network architecture {eval_cfg.model_name}')
         exit()
@@ -190,8 +195,8 @@ def main():
     eval_loader = torch.utils.data.DataLoader(eval_set, batch_size=1,
                                               shuffle=eval_cfg.random_samples,
                                               num_workers=1)
-    print(f'evaluating run {eval_cfg.run} with {eval_cfg.model_version} '
-          f'snapshot of {eval_cfg.model_name}')
+    print(f'evaluating run {eval_cfg.runs[0]} with {eval_cfg.model_versions[0]} '
+          f'snapshot of {eval_cfg.model_names[0]}')
     print(f'gathering at most {eval_cfg.plot_count} from {eval_cfg.dset_file} '
           f'set randomly? {eval_cfg.random_samples}, w/ difficulty = {eval_cfg.difficulty}')
     evaluate(model=model, agent_pool=agent_pool, loader=eval_loader, eval_cfg=eval_cfg,

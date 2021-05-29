@@ -1,14 +1,14 @@
 # evaluation configuration used in evalutate.py and partially in gui.py
 
 device: 'cuda'
-run: 'last-no-avg-66'
 torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
-model:
-  model-name: 'mcnnLW'
-  model-version: 'last' # || 'best'
-  aggregation-type: 'bilinear' # or 'nearest'
+models:
+  runs: ['last-no-avg-66']
+  model-names: ['mcnnLW']
+  model-versions: ['last']
+  aggregation-types: ['bilinear']
 
 plot:
   count: 10
