@@ -174,19 +174,20 @@ def train(**kwargs):
                     f'/{snapshot_tag}_model.pth')
         # update curriculum difficulty ---------------------------------------------------------
         scheduler.step()
-        increase_diff = False
-        if train_cfg.strategy == 'every-x-epochs':
-            if (ep + 1) % int(train_cfg.strategy_parameter) == 0:
-                increase_diff = True
-        elif train_cfg.strategy == 'metric':
-            # elevation metric = avg[avg[important class IoU] + avg[mask IoU]]
-            elevation_metric /= 6
-            if elevation_metric >= train_cfg.strategy_parameter:
-                increase_diff = True
-        if increase_diff:
-            agent_pool.difficulty = min(agent_pool.difficulty + 1,
-                                        agent_pool.maximum_difficulty)
-            print(f'\n=======>> difficulty increased to {agent_pool.difficulty} <<=======')
+        if train_cfg.curriculum_activate:
+            increase_diff = False
+            if train_cfg.strategy == 'every-x-epochs':
+                if (ep + 1) % int(train_cfg.strategy_parameter) == 0:
+                    increase_diff = True
+            elif train_cfg.strategy == 'metric':
+                # elevation metric = avg[avg[important class IoU] + avg[mask IoU]]
+                elevation_metric /= 6
+                if elevation_metric >= train_cfg.strategy_parameter:
+                    increase_diff = True
+            if increase_diff:
+                agent_pool.difficulty = min(agent_pool.difficulty + 1,
+                                            agent_pool.maximum_difficulty)
+                print(f'\n=======>> difficulty increased to {agent_pool.difficulty} <<=======')
         log_dict['difficulty'] = agent_pool.difficulty
         if log_enable:
             wandb.log(log_dict)
@@ -213,11 +214,11 @@ def parse_and_execute():
     print(f'center: {center}')
     print(f'ppm: {ppm}')
     # dataset ----------------------------------------------------------------------------------
-    train_set = MassHDF5(dataset=train_cfg.dset_name, path=train_cfg.dset_dir,
+    train_set = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.trainset_file, size=new_size,
                          classes=train_cfg.classes, jitter=train_cfg.color_jitter)
-    test_set = MassHDF5(dataset=train_cfg.dset_name, path=train_cfg.dset_dir,
-                        hdf5name=train_cfg.testset_file, size=new_size,
+    test_set = MassHDF5(dataset=train_cfg.validset_name, path=train_cfg.dset_dir,
+                        hdf5name=train_cfg.validset_file, size=new_size,
                         classes=train_cfg.classes, jitter=[0, 0, 0, 0])
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
