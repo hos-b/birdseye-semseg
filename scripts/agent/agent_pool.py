@@ -1,5 +1,4 @@
 import torch
-import kornia
 
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 
@@ -35,7 +34,10 @@ class CurriculumPool:
             return
         # no calculations necessary for max number of agents (!= max_difficulty)
         elif self.difficulty == self.max_agent_count:
-            self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
+            try:
+                self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
+            except:
+                import pdb; pdb.set_trace()
             self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.bool, device=self.device)
             return
         # for other cases, need to do some stuff

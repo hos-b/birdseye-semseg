@@ -13,8 +13,14 @@ def drop_agent_data(rgbs, labels, masks, transforms, drop_probability):
         - masks:        batch_size x agent_count x H x W
         - transforms:   batch_size x agent_count x 16 x 16
     """
+    # don't drop for single batches
+    if rgbs.shape[1] == 1:
+        return rgbs[0, ...], labels[0, ...], masks[0, ...], transforms[0, ...]
     drop_probs = torch.ones((rgbs.shape[1], ), dtype=torch.float32) * drop_probability
     drops = torch.bernoulli(drop_probs).long()
+    # if randomed all ones (everything dropped), return everything
+    if drops.sum() == rgbs.shape[1]:
+        return rgbs[0, ...], labels[0, ...], masks[0, ...], transforms[0, ...]
     return rgbs[0, drops != 1, ...], labels[0, drops != 1, ...], \
            masks[0, drops != 1, ...], transforms[0, drops != 1, ...]
 
