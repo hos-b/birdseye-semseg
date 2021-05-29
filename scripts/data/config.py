@@ -66,6 +66,7 @@ class TrainingConfig:
         self.resume_decoder_only = bool(conf['resume']['decoder-only'])
         self.resume_optimizer_state = bool(conf['resume']['resume-optimizer-state'])
         # curriculum config
+        self.curriculum_activate = bool(conf['curriculum']['activate'])
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
         self.maximum_difficulty = int(conf['curriculum']['maximum-difficulty'])
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
@@ -88,8 +89,9 @@ class TrainingConfig:
         self.num_classes = int(conf['dataset']['num-classes'])
         self.dset_dir = str(conf['dataset']['dataset-dir'])
         self.trainset_file = str(conf['dataset']['trainset-file'])
-        self.testset_file = str(conf['dataset']['testset-file'])
-        self.dset_name = str(conf['dataset']['dataset-name'])
+        self.validset_file = str(conf['dataset']['validset-file'])
+        self.trainset_name = str(conf['dataset']['trainset-name'])
+        self.validset_name = str(conf['dataset']['validset-name'])
 
 class EvaluationConfig:
     def __init__(self, file_path: str):

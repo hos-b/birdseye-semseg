@@ -91,8 +91,7 @@ class MassHDF5(torch.utils.data.Dataset):
         total number of samples.
         """
         total_samples = 0
-        # for some reason the attribute is saved in reverse!
-        batch_histogram = np.flip(self.dataset.attrs['batch_histogram'])
+        batch_histogram = self.dataset.attrs['batch_histogram']
         for i in range(batch_histogram.shape[0]):
             total_samples += (i + self.min_agent_count) * batch_histogram[i]
         
