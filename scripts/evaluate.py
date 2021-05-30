@@ -66,7 +66,7 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
         ax[-1].set_title(f"predicted BEV {i}")
         ss_pred = torch.max(sseg_preds[i], dim=0)[1]
-        ss_pred_img = (ss_pred.cpu())
+        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
         plt.imshow(ss_pred_img)
 
         # masked predicted semseg

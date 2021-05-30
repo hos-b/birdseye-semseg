@@ -54,8 +54,6 @@ def train(**kwargs):
         model.train()
         for batch_idx, (ids, rgbs, labels, masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
-            print(f'\repoch: {ep + 1}/{epochs}, '
-                  f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
                                                             car_transforms, device)
             # simulate connection drops [disabled for now]
@@ -87,11 +85,14 @@ def train(**kwargs):
             optimizer.step()
 
             # log batch loss
-            if (batch_idx + 1) % train_cfg.log_every == 0 and log_enable:
-                wandb.log({
-                    'loss/batch train mask': batch_train_m_loss,
-                    'loss/batch train sseg': batch_train_s_loss
-                })
+            if (batch_idx + 1) % train_cfg.log_every == 0:
+                if log_enable:
+                    wandb.log({
+                        'loss/batch train mask': batch_train_m_loss,
+                        'loss/batch train sseg': batch_train_s_loss
+                    })
+                print(f'\repoch: {ep + 1}/{epochs}, '
+                      f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
             # end of batch
@@ -134,8 +135,8 @@ def train(**kwargs):
             total_valid_s_loss += torch.mean(s_loss).detach()
             # visaluize the first agent from the first batch
             if not visaulized and log_enable:
-                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool,
-                                 'image', title=f'Epoch {ep + 1}, Batch #{batch_no.item()}')
+                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, 'image',
+                                 train_cfg.classes, title=f'Epoch {ep + 1}, Batch #{batch_no.item()}')
                 wandb.log({
                     'media/results': wandb.Image(img, caption='full batch predictions'),
                     'misc/epoch': ep + 1
