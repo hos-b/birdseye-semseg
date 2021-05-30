@@ -2,35 +2,31 @@ import torch
 import matplotlib.pyplot as plt
 import random
 
-from data.color_map import carla_semantics_to_cityscapes_rgb, our_semantics_to_cityscapes_rgb
+from data.color_map import covert_semantics_to_rgb
 from data.dataset import MassHDF5
 from data.mask_warp import get_single_aggregate_mask
 from data.config import SemanticCloudConfig, TrainingConfig
 from data.utils import squeeze_all
 
-train_cfg = TrainingConfig('config/training.yml')
-DATASET_DIR = '/export/home/aiscar4/mass-data'
-PKG_NAME = 'test.hdf5'
-classes = train_cfg.classes
-random_samples = False
-
+show_random_samples = False
 # opening semantic cloud settings file
 cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
-
+train_cfg = TrainingConfig('config/training.yml')
 # image geometry
 NEW_SIZE = (train_cfg.output_h, train_cfg.output_w)
 CENTER = (cfg.center_x(NEW_SIZE[1]), cfg.center_y(NEW_SIZE[0]))
 PPM = cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
 
 # opening hdf5 file for the dataset
-dset = MassHDF5(dataset='town-01', path=DATASET_DIR, jitter=[0.0, 0.0, 0.0, 0.0],
-                hdf5name=PKG_NAME, size=NEW_SIZE, classes=classes)
+dset = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
+                hdf5name=train_cfg.trainset_file, size=NEW_SIZE,
+                classes=train_cfg.classes, jitter=train_cfg.color_jitter)
 loader = torch.utils.data.DataLoader(dset, batch_size=1, shuffle=False, num_workers=1)
 # plot stuff
 columns = 6
 for idx, (_, rgbs, semsegs, masks, car_transforms, _) in enumerate(loader):
     # randomly skip samples (useful for large datasets)
-    if random_samples and bool(random.randint(0, 1)):
+    if show_random_samples and bool(random.randint(0, 1)):
         continue
     rgbs, semsegs, masks, car_transforms = squeeze_all(rgbs, semsegs, masks, car_transforms)
     print (f"index {idx + 1}/{len(loader)}")
@@ -52,10 +48,7 @@ for idx, (_, rgbs, semsegs, masks, car_transforms, _) in enumerate(loader):
         # semantic BEV image
         ax.append(fig.add_subplot(rows, columns, i * columns + 2))
         ax[-1].set_title(f"semseg_{i}")
-        if classes == 'carla':
-            semantic_img = carla_semantics_to_cityscapes_rgb(semsegs[i, ...])
-        elif classes == 'ours':
-            semantic_img = our_semantics_to_cityscapes_rgb(semsegs[i, ...])
+        semantic_img = covert_semantics_to_rgb(semsegs[i, ...], train_cfg.classes)
         plt.imshow(semantic_img)
 
         # basic mask

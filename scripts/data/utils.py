@@ -1,6 +1,5 @@
 import cv2
 import torch
-from data.color_map import our_semantics_to_cityscapes_rgb
 import numpy as np
 from matplotlib import pyplot as plt
 
@@ -53,27 +52,6 @@ def to_device(rgbs, labels, masks, car_transforms, device):
     """
     return rgbs.to(device), labels.to(device), \
            masks.to(device), car_transforms.to(device)
-
-
-# debugging functions
-def save_mask(mask, path='mask.png'):
-    cv2.imwrite(path, cv2.cvtColor(get_matplotlib_image(mask.cpu()), cv2.COLOR_RGB2BGR))
-
-def save_seg_label(label, path='label.png'):
-    ss_trgt_img = our_semantics_to_cityscapes_rgb(label.cpu())
-    # predicted semantics            
-    cv2.imwrite(path, cv2.cvtColor(ss_trgt_img, cv2.COLOR_RGB2BGR))
-
-def save_masked_label(label, mask, path='masked_label.png'):
-    ss_trgt_img = our_semantics_to_cityscapes_rgb(label.cpu())
-    ss_trgt_img[mask.cpu() == 0, :] = 0
-    # predicted semantics            
-    cv2.imwrite(path, cv2.cvtColor(ss_trgt_img, cv2.COLOR_RGB2BGR))
-
-def save_seg_prediction(seg, path='mask.png'):
-    _, ss_pred = torch.max(seg, dim=0)
-    ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
-    cv2.imwrite(path, cv2.cvtColor(ss_pred_img, cv2.COLOR_RGB2BGR))
 
 # dicts for plotting batches based on agent count
 newline_dict = {

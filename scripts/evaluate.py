@@ -6,9 +6,9 @@ import matplotlib
 import matplotlib.pyplot as plt
 
 from agent.agent_pool import CurriculumPool
-from data.color_map import our_semantics_to_cityscapes_rgb
+from data.color_map import convert_semantics_to_rgb
 from data.dataset import MassHDF5
-from data.config import EvaluationConfig, SemanticCloudConfig, TrainingConfig
+from data.config import EvaluationConfig, SemanticCloudConfig
 from data.utils import squeeze_all, to_device
 from data.utils import font_dict, newline_dict
 from model.mcnn import MCNN, MCNN4
@@ -17,7 +17,11 @@ from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN
 
 def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
                mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
-               plot_dest: str, filename = 'test.png', title=''):
+               plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
+    """
+    plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
+    full output, masked output, full target and masked target for all agents in the batch.
+    """
     agent_count = rgbs.shape[0]
     columns = 7
     fig = plt.figure(figsize=(30, agent_count * 4))
@@ -28,7 +32,7 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         rgb = (rgb + 1) / 2
         single_gt_mask = gt_masks[i].cpu()
         combined_gt_mask = agent_pool.combined_masks[i].cpu()
-        ss_gt_img = our_semantics_to_cityscapes_rgb(labels[i].cpu())
+        ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
         # create subplot and append to ax
         ax = []
 
@@ -62,7 +66,7 @@ def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tenso
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
         ax[-1].set_title(f"predicted BEV {i}")
         ss_pred = torch.max(sseg_preds[i], dim=0)[1]
-        ss_pred_img = our_semantics_to_cityscapes_rgb(ss_pred.cpu())
+        ss_pred_img = (ss_pred.cpu())
         plt.imshow(ss_pred_img)
 
         # masked predicted semseg
@@ -119,7 +123,7 @@ def evaluate(**kwargs):
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
         plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
-                   f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png', 
+                   eval_cfg.classes, f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png',
                    f'Batch #{batch_no.item()}')
         
         eval_cfg.plot_count -= 1

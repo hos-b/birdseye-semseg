@@ -10,7 +10,7 @@ import PIL.Image as PILImage
 
 from data.dataset import MassHDF5
 from data.config import SemanticCloudConfig, EvaluationConfig
-from data.color_map import our_semantics_to_cityscapes_rgb
+from data.color_map import convert_semantics_to_rgb
 from data.color_map import __our_classes as segmentation_classes
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
@@ -19,7 +19,7 @@ from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN
 from model.mcnn import MCNN, MCNN4
 
 class SampleWindow:
-    def __init__(self, class_count: int, device: torch.device, new_size, center, ppm):
+    def __init__(self, semantic_classes: str, num_classes: int, device: torch.device, new_size, center, ppm):
         # network stuff
         self.networks = {}
         self.output_h = new_size[0]
@@ -27,7 +27,8 @@ class SampleWindow:
         self.center_x = center[0]
         self.center_y = center[1]
         self.ppm = ppm
-        self.class_count = class_count
+        self.semantic_classes = semantic_classes
+        self.class_count = num_classes
         self.device = device
         self.current_data = None
         self.adjacency_matrix = None
@@ -217,7 +218,7 @@ class SampleWindow:
         rgb_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(rgb), 'RGB')
 
         # target image
-        ss_gt_img = our_semantics_to_cityscapes_rgb(labels[self.agent_index].cpu())
+        ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), )
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         for i, (name, network) in enumerate(self.networks.items()):
@@ -235,7 +236,7 @@ class SampleWindow:
                 with torch.no_grad():
                     all_ss_preds, all_mask_preds = network(rgbs, car_transforms, torch.eye(self.agent_count))
                 current_ss_pred = all_ss_preds[self.agent_index].argmax(dim=0)
-                current_ss_pred_img = our_semantics_to_cityscapes_rgb(current_ss_pred.cpu())
+                current_ss_pred_img = convert_semantics_to_rgb(current_ss_pred.cpu(), self.semantic_classes)
                 current_mask_pred = all_mask_preds[self.agent_index].squeeze().cpu()
                 current_ss_pred_img[current_mask_pred == 0] = 0
                 masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
@@ -254,13 +255,14 @@ class SampleWindow:
                                                               flags='nearest')
                 current_warped_semantics[not_selected] = 0
                 current_warped_semantics = current_warped_semantics.sum(dim=0).argmax(dim=0)
-                current_aggregated_semantics = our_semantics_to_cityscapes_rgb(current_warped_semantics.cpu())
+                current_aggregated_semantics = convert_semantics_to_rgb(current_warped_semantics.cpu(),
+                                                                        self.semantic_classes)
             else:
                 # >>> masked predicted semseg w/o external influence
                 with torch.no_grad():
                     all_ss_eye, all_mask_eye = network(rgbs, car_transforms, torch.eye(self.agent_count))
                 current_ss_pred = all_ss_eye[self.agent_index].argmax(dim=0)
-                current_ss_pred_img = our_semantics_to_cityscapes_rgb(current_ss_pred.cpu())
+                current_ss_pred_img = convert_semantics_to_rgb(current_ss_pred.cpu(), self.semantic_classes)
                 current_mask_pred = all_mask_eye[self.agent_index].squeeze().cpu()
                 current_ss_pred_img[current_mask_pred == 0] = 0
                 masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
@@ -270,7 +272,8 @@ class SampleWindow:
                 with torch.no_grad():
                     all_ss_preds, all_mask_preds = network(rgbs, car_transforms, self.adjacency_matrix)
                 current_aggregated_semantics = \
-                    our_semantics_to_cityscapes_rgb(all_ss_preds[self.agent_index].argmax(dim=0).cpu())
+                    convert_semantics_to_rgb(all_ss_preds[self.agent_index].argmax(dim=0).cpu(),
+                                             self.semantic_classes)
 
             full_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_aggregated_semantics), 'RGB')
             exec(f"self.full_pred_panel_{i}.configure(image=full_pred_tk)")
@@ -286,7 +289,7 @@ def main():
     CENTER = (sem_cfg.center_x(NEW_SIZE[1]), sem_cfg.center_y(NEW_SIZE[0]))
     PPM = sem_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
     # gui object
-    gui = SampleWindow(eval_cfg.num_classes, device, NEW_SIZE, CENTER, PPM)
+    gui = SampleWindow(eval_cfg.classes, eval_cfg.num_classes, device, NEW_SIZE, CENTER, PPM)
     # dataloader stuff
     test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
                         hdf5name=eval_cfg.dset_file, size=NEW_SIZE,

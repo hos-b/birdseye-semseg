@@ -12,7 +12,7 @@ matplotlib.use('Agg')
 
 from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig, TrainingConfig
-from data.color_map import __our_classes as segmentation_classes
+import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.logging import init_wandb
 from data.utils import drop_agent_data, squeeze_all
@@ -42,6 +42,7 @@ def train(**kwargs):
     # dataset
     train_loader = kwargs.get('train_loader')
     test_loader = kwargs.get('test_loader')
+    segmentation_classes = kwargs.get('segmentation_classes')
     epochs = train_cfg.epochs
     # starting epoch
     start_ep = kwargs.get('start_ep')
@@ -88,8 +89,8 @@ def train(**kwargs):
             # log batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0 and log_enable:
                 wandb.log({
-                    'batch train mask': batch_train_m_loss,
-                    'batch train seg': batch_train_s_loss
+                    'loss/batch train mask': batch_train_m_loss,
+                    'loss/batch train sseg': batch_train_s_loss
                 })
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
@@ -98,9 +99,9 @@ def train(**kwargs):
         # log train epoch loss
         if log_enable:
             wandb.log({
-                'total train mask loss': total_train_m_loss / sample_count,
-                'total train seg loss': total_train_s_loss / sample_count,
-                'epoch': ep + 1
+                'loss/total train mask': total_train_m_loss / sample_count,
+                'loss/total train sseg': total_train_s_loss / sample_count,
+                'misc/epoch': ep + 1
             })
         print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
               f'{(total_train_s_loss / sample_count)} segmentation')
@@ -124,7 +125,8 @@ def train(**kwargs):
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks).cuda(0)
+            sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
+                                       train_cfg.num_classes).cuda(0)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
@@ -135,8 +137,8 @@ def train(**kwargs):
                 img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool,
                                  'image', title=f'Epoch {ep + 1}, Batch #{batch_no.item()}')
                 wandb.log({
-                    'results': wandb.Image(img, caption='full batch predictions'),
-                    'epoch': ep + 1
+                    'media/results': wandb.Image(img, caption='full batch predictions'),
+                    'misc/epoch': ep + 1
                 })
                 visaulized = True
             # end of batch
@@ -145,29 +147,29 @@ def train(**kwargs):
         elevation_metric = 0.0
         log_dict = {}
         for key, val in segmentation_classes.items():
-            log_dict[f'{val.lower()} iou'] = (sseg_ious[key] / sample_count).item()
+            log_dict[f'iou/{val.lower()}'] = (sseg_ious[key] / sample_count).item()
             if val != 'Misc' and val != 'Water':
                 elevation_metric += sseg_ious[key] / sample_count
         elevation_metric += mask_ious / sample_count
-        log_dict['total validation mask loss'] = (total_valid_m_loss / sample_count).item()
-        log_dict['total validation seg loss'] = (total_valid_s_loss / sample_count).item()
-        log_dict['mask iou'] = (mask_ious / sample_count).item()
-        log_dict['epoch'] = ep + 1
-        log_dict['save'] = 0
+        log_dict['loss/total validation mask'] = (total_valid_m_loss / sample_count).item()
+        log_dict['loss/total validation sseg'] = (total_valid_s_loss / sample_count).item()
+        log_dict['iou/mask'] = (mask_ious / sample_count).item()
+        log_dict['misc/epoch'] = ep + 1
+        log_dict['misc/save'] = 0
         if train_cfg.strategy == 'metric':
-            log_dict['elevation metric'] = (elevation_metric / 6).item()
+            log_dict['curriculum/elevation metric'] = (elevation_metric / 6).item()
         if train_cfg.weight_losses:
-            log_dict['sseg loss weight'] = torch.exp(-sseg_loss_weight).item()
-            log_dict['mask loss weight'] = torch.exp(-mask_loss_weight).item()
+            log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
+            log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
-        if log_dict['total validation seg loss'] < last_snapshot_metric:
+        if log_dict['loss/total validation sseg'] < last_snapshot_metric:
             print(f'best model @ epoch {ep + 1}')
-            last_snapshot_metric = log_dict['total validation seg loss']
+            last_snapshot_metric = log_dict['loss/total validation sseg']
             snapshot_tag = 'best'
-            log_dict['save'] = 1
+            log_dict['misc/save'] = 1
         torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
                     f'/{snapshot_tag}_optimizer')
         torch.save(model.state_dict(), train_cfg.snapshot_dir +
@@ -188,7 +190,7 @@ def train(**kwargs):
                 agent_pool.difficulty = min(agent_pool.difficulty + 1,
                                             agent_pool.maximum_difficulty)
                 print(f'\n=======>> difficulty increased to {agent_pool.difficulty} <<=======')
-        log_dict['difficulty'] = agent_pool.difficulty
+        log_dict['curriculum/difficulty'] = agent_pool.difficulty
         if log_enable:
             wandb.log(log_dict)
 
@@ -226,6 +228,14 @@ def parse_and_execute():
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
                                               shuffle=train_cfg.shuffle_data,
                                               num_workers=train_cfg.loader_workers)
+    if train_cfg.classes == 'carla':
+        segmentation_classes = color_map.__carla_classes
+    elif train_cfg.classes == 'ours':
+        segmentation_classes = color_map.__our_classes
+    elif train_cfg.classes == 'diminished':
+        segmentation_classes = color_map.__diminished_classes
+    else:
+        print(f'unknown segmentation classes: {train_cfg.classes}')
     # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
     if not os.path.exists(train_cfg.snapshot_dir):
@@ -307,10 +317,12 @@ def parse_and_execute():
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.cuda(0)
         mask_loss = mask_loss.cuda(0)
+    # begin -------------------------------------------------------------------------------------
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, test_loader=test_loader,
-          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep)
+          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep,
+          segmentation_classes=segmentation_classes)
 
 if __name__ == '__main__':
     parse_and_execute()
