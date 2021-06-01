@@ -163,10 +163,24 @@ class SampleWindow:
             sample_count += agent_count
             full_adjacency_matrix = torch.ones(agent_count, agent_count)
             for name, network in self.networks.items():
-                with torch.no_grad():
-                    if name == 'baseline':
-                        ss_preds, _ = network(rgbs, car_transforms, torch.eye(agent_count))
-                    else:
+                # manual aggregation for baseline network
+                if name == 'baseline':
+                    with torch.no_grad():
+                        single_ss_preds, single_mask_preds = network(rgbs, car_transforms, torch.eye(agent_count))
+                    # masking of regions outside FoV [for a fair comparison]
+                    single_ss_preds *= single_mask_preds
+                    ss_preds = torch.zeros_like(single_ss_preds)
+                    for i in range(agent_count):
+                        relative_tfs = get_single_relative_img_transform(car_transforms, i, self.ppm,
+                                                                         self.output_h, self.output_w,
+                                                                         self.center_x, self.center_y).to(self.device)
+                        relative_semantics = kornia.warp_affine(single_ss_preds, relative_tfs,
+                                                                dsize=(self.output_h, self.output_w),
+                                                                flags='nearest')
+                        ss_preds[i] = relative_semantics.sum(dim=0)
+                # latent aggregation for others
+                else:
+                    with torch.no_grad():
                         ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
                                                                                 agent_count)))
                 self.mskd_ious[name] += iou_per_class(ss_preds, labels, aggregate_masks).to(self.device)
@@ -218,7 +232,7 @@ class SampleWindow:
         rgb_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(rgb), 'RGB')
 
         # target image
-        ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), )
+        ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), self.semantic_classes)
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         for i, (name, network) in enumerate(self.networks.items()):
@@ -297,10 +311,26 @@ def main():
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset_iterator(iter(loader))
     # baseline stuff
-    baseline_dir = eval_cfg.snapshot_dir.format('baseline')
-    baseline_path = baseline_dir + '/best_model.pth'
-    baseline_model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
-                            sem_cfg, eval_cfg.aggregation_type).to(device)
+    baseline_dir = eval_cfg.snapshot_dir.format(eval_cfg.baseline_run)
+    baseline_path = baseline_dir + f'/{eval_cfg.baseline_model_version}_model.pth'
+    if eval_cfg.baseline_model_name == 'mcnn':
+        baseline_model = MCNN(eval_cfg.num_classes, NEW_SIZE,
+                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
+    elif eval_cfg.baseline_model_name == 'mcnn4':
+        baseline_model = MCNN4(eval_cfg.num_classes, NEW_SIZE,
+                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
+    elif eval_cfg.baseline_model_name == 'mcnnL':
+        baseline_model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
+                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
+    elif eval_cfg.baseline_model_name == 'mcnnLW':
+        baseline_model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
+                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
+    elif eval_cfg.baseline_model_name == 'mcnnT':
+        baseline_model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
+                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
+    else:
+        print(f'unknown baseline network architecture {eval_cfg.baseline_model_name}')
+        exit()
     baseline_model.load_state_dict(torch.load(baseline_path))
     gui.add_network(baseline_model, 'baseline')
     # other network stuff
