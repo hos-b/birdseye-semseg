@@ -5,10 +5,15 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['last-no-avg-66']
-  model-names: ['mcnnLW']
-  model-versions: ['last']
+  runs: ['drop-0.1-full-deconv']
+  model-names: ['mcnnT']
+  model-versions: ['best']
   aggregation-types: ['bilinear']
+
+gui:
+  baseline-run: 'baseline-deconv'
+  baseline-model-name: 'mcnnT'
+  baseline-model-version: 'best'
 
 plot:
   count: 10
@@ -25,7 +30,6 @@ dataset:
   classes: 'ours'
   output-h: 256
   output-w: 205
-  dataset-split: 'test'
   dataset-dir: '/export/home/aiscar4/mass-data'
-  dataset-file: 'dataset_10k.hdf5'
-  dataset-name: 'town-01'
+  dataset-file: 'towns_5.hdf5'
+  dataset-name: 'validation_set'
