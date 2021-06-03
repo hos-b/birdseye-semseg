@@ -34,10 +34,7 @@ class CurriculumPool:
             return
         # no calculations necessary for max number of agents (!= max_difficulty)
         elif self.difficulty == self.max_agent_count:
-            try:
-                self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
-            except:
-                import pdb; pdb.set_trace()
+            self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
             self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.bool, device=self.device)
             return
         # for other cases, need to do some stuff

@@ -5,8 +5,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import kornia
+
 from data.config import SemanticCloudConfig
-from data.mask_warp import get_single_relative_img_transform, get_all_relative_img_transforms
+from data.mask_warp import get_single_relative_img_transform
+from model.se3_attention import SE3Transfomer
 
 class LMCNN(nn.Module):
     """
@@ -120,12 +122,37 @@ class LWMCNN(LMCNN):
 
 class TransposedMCNN(LWMCNN):
     """
-    large and wide MCNN
+    large and wide MCNN with extra deconv layers in the decoder
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(TransposedMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
         self.classifier = TransposedClassifer(128, num_classes)
         self.maskifier = TransposedClassifer(128, 1)
+
+class TransposedAggAtt(TransposedMCNN):
+    """
+    large and wide MCNN with extra deconv layers in the decoder + learned aggregation
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super(TransposedAggAtt, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
+        self.attention = SE3Transfomer(num_heads=3, dim_feedforward=128, dropout=0.1)
+    
+    def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
+        agent_count = transforms.shape[0]
+        aggregated_features = torch.zeros_like(x)
+        attention = self.attention(transforms)
+        for i in range(agent_count):
+            outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+                                                             self.center_x, self.center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
+                                                 flags=self.aggregation_type)
+            # applying the adjacency matrix (difficulty)
+            warped_features[outside_fov] = 0
+            aggregated_features[i] = warped_features.sum(dim=0) * attention[i]
+        return aggregated_features
+
+
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""

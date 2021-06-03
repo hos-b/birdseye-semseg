@@ -19,7 +19,7 @@ from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, TransposedAggAtt
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -259,6 +259,9 @@ def parse_and_execute():
     elif train_cfg.model_name == 'mcnnT':
         model = TransposedMCNN(train_cfg.num_classes, new_size,
                                geom_cfg, train_cfg.aggregation_type).cuda(0)
+    elif train_cfg.model_name == 'mcnnAtt':
+        model = TransposedAggAtt(train_cfg.num_classes, new_size,
+                                 geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()
@@ -304,7 +307,11 @@ def parse_and_execute():
     ret_code = git_diff.wait()
     name += '-dirty' if ret_code != 0 else ''
     log_enable = train_cfg.training_name != 'debug'
-    init_wandb(name, train_cfg) if log_enable else print(f'disabled logging')
+    if log_enable:
+        init_wandb(name, train_cfg)
+    else:
+        torch.autograd.set_detect_anomaly(True)
+        print(f'disabled logging')
     # losses ------------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
