@@ -8,6 +8,7 @@
 
 #include "geometry/semantic_cloud.h"
 #include "mass_agent/sensors.h"
+#include "data_collection.h"
 
 // Eigen stuff
 #include <Eigen/Dense>
@@ -53,14 +54,16 @@ public:
 	void CaptureOnce();
 	void PauseSensorCallbacks();
 	void ResumeSensorCallbacks();
+	std::tuple<carla::geom::Rotation, Eigen::Matrix3d>
+		AddSE3Noise(const Eigen::Matrix3d& initial_rotation);
 
 	template<geom::CloudBackend B>
-	MASSDataType GenerateDataPoint(unsigned int agent_batch_index);
+		MASSDataType GenerateDataPoint(unsigned int agent_batch_index) const;
 	// transform related
 	inline double carla_x() const;
 	inline double carla_y() const;
 	inline double carla_z() const;
-	inline Eigen::Matrix4d transform() {return transform_;}
+	inline Eigen::Matrix4d transform() const {return transform_;}
 	
 	// static stuff
 	static std::unique_ptr<cc::Client>& carla_client();
@@ -89,7 +92,7 @@ private:
 	void SetupSensors(float front_cam_shift);
 	void DestroyAgent();
 	void InitializeKDTree();
-	void AssertSize(size_t size);
+	void AssertSize(size_t size) const;
 
 	std::vector<boost::shared_ptr<carla::client::Waypoint>>
 		ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist);
@@ -101,6 +104,10 @@ private:
 	Eigen::Matrix4d transform_;
 	std::string blueprint_name_;
 	double vehicle_width_, vehicle_length_;
+	// structs used for randomization and noise
+	std::mt19937& random_generator_;
+	std::normal_distribution<float> agent_yaw_noise_dist_;
+	NoiseSetting noise_setting_;
 	// carla stuff
 	boost::shared_ptr<carla::client::Vehicle> vehicle_;
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> kd_points_;

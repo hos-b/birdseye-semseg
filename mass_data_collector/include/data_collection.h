@@ -9,6 +9,31 @@
 #include <algorithm>
 #include <utility>
 
+struct NoiseSetting
+{
+    NoiseSetting(){};
+    NoiseSetting(const YAML::Node& noise_node) {
+        auto agent_yaw_node = noise_node["agent-yaw"];
+        agent_yaw_enable = agent_yaw_node["enable"].as<bool>();
+        agent_yaw_chance = agent_yaw_node["chance"].as<float>();
+        agent_yaw_mean = agent_yaw_node["mean"].as<float>();
+        agent_yaw_std = agent_yaw_node["std"].as<float>();
+        auto front_rgb_pitch_node = noise_node["front-rgb-pitch"];
+        front_rgb_pitch_enable = front_rgb_pitch_node["enable"].as<bool>();
+        front_rgb_pitch_chance = front_rgb_pitch_node["chance"].as<float>();
+        front_rgb_pitch_mean = front_rgb_pitch_node["mean"].as<float>();
+        front_rgb_pitch_std = front_rgb_pitch_node["std"].as<float>();
+    }
+    bool agent_yaw_enable;
+    float agent_yaw_chance;
+    float agent_yaw_mean;
+    float agent_yaw_std;
+    bool front_rgb_pitch_enable;
+    float front_rgb_pitch_chance;
+    float front_rgb_pitch_mean;
+    float front_rgb_pitch_std;
+};
+
 struct CollectionConfig
 {
     std::string dataset_path;
@@ -24,6 +49,7 @@ struct CollectionConfig
     unsigned int hdf5_chunk_size;
     unsigned long random_seed;
     float deadlock_multiplier;
+    NoiseSetting noise_setting;
     // randomized batch sizes with enforced distribution
     std::vector<unsigned int> all_batch_sizes;
 
@@ -39,6 +65,8 @@ struct CollectionConfig
 		    conf.dataset_path = dataset["path"].as<std::string>();
             conf.dataset_name = dataset["name"].as<std::string>();
             conf.append = dataset["append"].as<bool>();
+            // reading noise parameters
+            conf.noise_setting = NoiseSetting(base["noise"]);
             // reading town list
             auto yaml_towns = dataset["towns"];
             if (!yaml_towns.IsSequence()) {

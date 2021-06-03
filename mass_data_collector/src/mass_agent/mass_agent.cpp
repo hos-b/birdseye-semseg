@@ -32,7 +32,12 @@ static auto &RandomChoice(const RangeT &range, RNG &&generator) {
 }
 
 /* constructor */
-MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<int, bool>& restricted_roads) {
+MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<int, bool>& restricted_roads)
+	: random_generator_(random_generator) {
+	// initialize noise distribution
+	noise_setting_ = CollectionConfig::GetConfig().noise_setting;
+	agent_yaw_noise_dist_ = std::normal_distribution<float>(noise_setting_.agent_yaw_mean,
+															noise_setting_.agent_yaw_std);
 	// initialize some stuff & things
 	restricted_roads_ = restricted_roads;
 	waypoint_lambda_ = [this] (auto wp) {
@@ -55,7 +60,7 @@ MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<in
 		auto& all_agents = agents();
 		do {
 			repetitive = false;
-			blueprint_name_	= RandomChoice(car_models, random_generator);
+			blueprint_name_	= RandomChoice(car_models, random_generator_);
 			for (size_t i = 0; i < all_agents.size(); ++i) {
 				if (i != id_ && blueprint_name_ == all_agents[i]->blueprint_name_) {
 					repetitive = true;
@@ -75,7 +80,7 @@ MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<in
 			auto &attribute = blueprint.GetAttribute("color");
 			blueprint.SetAttribute(
 				"color",
-				RandomChoice(attribute.GetRecommendedValues(), random_generator));
+				RandomChoice(attribute.GetRecommendedValues(), random_generator_));
 		}
 		auto initial_pos = spawn_points[id_];
 		Eigen::Matrix3d rot;
@@ -118,10 +123,24 @@ MassAgent::~MassAgent() {
 	DestroyAgent();
 }
 
+std::tuple<carla::geom::Rotation, Eigen::Matrix3d> MassAgent::AddSE3Noise(const Eigen::Matrix3d& initial_rotation) {
+	float yaw_noise = agent_yaw_noise_dist_(random_generator_);
+	Eigen::Matrix3d rot_noise;
+	rot_noise = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX()) *
+		  		Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitY()) *
+		  		Eigen::AngleAxisd(yaw_noise * config::kToRadians, Eigen::Vector3d::UnitZ());
+	Eigen::Matrix3d new_rotation_matrix = initial_rotation * rot_noise;
+	Eigen::Vector3d euler = new_rotation_matrix.eulerAngles(0, 1, 2);
+	// carla is left handed => negative
+	carla::geom::Rotation new_rotation_vector{-euler[1] * config::kToDegrees,
+											  -euler[2] * config::kToDegrees,
+											  -euler[0] * config::kToDegrees};
+	return std::make_tuple(new_rotation_vector, new_rotation_matrix);
+}
+
 /* places the agent on a random point in the map and makes sure it doesn't collide with others [[blocking]] 
    this function should only be called for the first car of the batch, because it does not check for collision
-   with other cars.
-*/
+   with other cars. */
 boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
@@ -138,8 +157,15 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 		  Eigen::AngleAxisd(-tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
 		  Eigen::AngleAxisd(-tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
     Eigen::Vector3d trans(tf.location.x, -tf.location.y, tf.location.z);
-    transform_.block<3, 3>(0, 0) = rot;
-    transform_.block<3, 1>(0, 3) = trans;
+	// creating noise if enabled and "coin toss" is successful
+	if (noise_setting_.agent_yaw_enable &&
+		static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX) <= noise_setting_.agent_yaw_chance) {
+		carla::geom::Rotation noisy_vec;
+		std::tie(noisy_vec, rot) = AddSE3Noise(rot);
+		tf.rotation = noisy_vec;
+	}
+	transform_.block<3, 1>(0, 3) = trans;
+	transform_.block<3, 3>(0, 0) = rot;
 	vehicle_->SetTransform(tf);
 	return initial_wp;
 }
@@ -230,6 +256,13 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 		  Eigen::AngleAxisd(-target_tf.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
 		  Eigen::AngleAxisd(-target_tf.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
     Eigen::Vector3d trans(target_tf.location.x, -target_tf.location.y, target_tf.location.z);
+	// creating noise if enabled and "coin toss" is successful
+	if (noise_setting_.agent_yaw_enable &&
+		static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX) <= noise_setting_.agent_yaw_chance) {
+		carla::geom::Rotation noisy_vec;
+		std::tie(noisy_vec, rot) = AddSE3Noise(rot);
+		target_tf.rotation = noisy_vec;
+	}
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
 	vehicle_->SetTransform(target_tf);
@@ -264,7 +297,7 @@ void MassAgent::DestroyAgent() {
 /* checks the buffers and creates a single data point from all the sensors */
 template <>
 MASSDataType MassAgent::GenerateDataPoint
-		<geom::CloudBackend::KD_TREE>(unsigned int agent_batch_index) {
+		<geom::CloudBackend::KD_TREE>(unsigned int agent_batch_index) const {
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud<geom::CloudBackend::KD_TREE> mask_cloud(sc_settings());
@@ -322,7 +355,7 @@ MASSDataType MassAgent::GenerateDataPoint
 /* checks the buffers and creates a single data point from all the sensors */
 template<>
 MASSDataType MassAgent::GenerateDataPoint
-		<geom::CloudBackend::SURFACE_MAP>(unsigned int agent_batch_index) {
+		<geom::CloudBackend::SURFACE_MAP>(unsigned int agent_batch_index) const {
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud<geom::CloudBackend::SURFACE_MAP> mask_cloud(sc_settings());
@@ -381,7 +414,7 @@ MASSDataType MassAgent::GenerateDataPoint
 /* checks the buffers and creates a single data point from all the sensors */
 template<>
 MASSDataType MassAgent::GenerateDataPoint
-		<geom::CloudBackend::MIXED>(unsigned int agent_batch_index) {
+		<geom::CloudBackend::MIXED>(unsigned int agent_batch_index) const {
 	MASSDataType datapoint{};
 	// ----------------------------------------- creating mask cloud -----------------------------------------
 	geom::SemanticCloud<geom::CloudBackend::MIXED> mixed_cloud(sc_settings());
@@ -642,7 +675,7 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 }
 
 /* asserts that all the sensor data containers have the same size */
-void MassAgent::AssertSize(size_t size) {
+void MassAgent::AssertSize(size_t size) const {
 	for (auto& spc_cam : semantic_pc_cams_) {
 		bool assertion = (spc_cam->depth_image_count() == spc_cam->semantic_image_count() &&
 						  spc_cam->depth_image_count() == size);
