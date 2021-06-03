@@ -2,7 +2,7 @@ import torch
 import matplotlib.pyplot as plt
 import random
 
-from data.color_map import covert_semantics_to_rgb
+from data.color_map import convert_semantics_to_rgb
 from data.dataset import MassHDF5
 from data.mask_warp import get_single_aggregate_mask
 from data.config import SemanticCloudConfig, TrainingConfig
@@ -48,7 +48,7 @@ for idx, (_, rgbs, semsegs, masks, car_transforms, _) in enumerate(loader):
         # semantic BEV image
         ax.append(fig.add_subplot(rows, columns, i * columns + 2))
         ax[-1].set_title(f"semseg_{i}")
-        semantic_img = covert_semantics_to_rgb(semsegs[i, ...], train_cfg.classes)
+        semantic_img = convert_semantics_to_rgb(semsegs[i, ...], train_cfg.classes)
         plt.imshow(semantic_img)
 
         # basic mask
