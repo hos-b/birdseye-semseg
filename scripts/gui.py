@@ -147,9 +147,11 @@ class SampleWindow:
     
     def calculate_ious(self, dataset: MassHDF5, evaluate: bool):
         if not evaluate:
+            print('full dataset evaluation disabled in yaml file')
             for i, (network) in enumerate(self.networks.keys()):
                 exec(f"self.full_iou_label_{i}.configure(text='network not evaluated')")
                 exec(f"self.masked_iou_label_{i}.configure(text='network not evaluated')")
+            return
 
         sample_count = 0
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
