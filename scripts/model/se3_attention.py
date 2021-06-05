@@ -63,10 +63,7 @@ class FlatSE3AttentionHead(nn.Module):
         tr_v = self.v_trans(transforms[:, :3, 3].float())
         tr_attention = get_distance_attention(transforms)
         # batch_size x 9
-        ret = torch.cat([tr_attention @ tr_v, soft_yr_attention @ yr_v, soft_xr_attention @ xr_v], dim=-1)
-        if torch.isnan(ret).any():
-            import pdb; pdb.set_trace()
-        return ret
+        return torch.cat([tr_attention @ tr_v, soft_yr_attention @ yr_v, soft_xr_attention @ xr_v], dim=-1)
 
 class SE3MultiHeadAttention(nn.Module):
     """
