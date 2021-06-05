@@ -85,6 +85,8 @@ class TrainingConfig:
         self.color_jitter = list(conf['hyperparameters']['color-jitter'])
         # validation parameters
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
+        self.visualize_hard_batches = bool(conf['validation']['visualize-hard-batches'])
+        self.hard_batches_indices = list(conf['validation']['hard-batch-indices'])
         # dataloader config
         self.loader_workers = int(conf['dataloader']['dataloder-workers'])
         self.shuffle_data = bool(conf['dataloader']['shuffle-data'])

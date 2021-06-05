@@ -41,7 +41,8 @@ def train(**kwargs):
     last_snapshot_metric = 1e6
     # dataset
     train_loader = kwargs.get('train_loader')
-    test_loader = kwargs.get('test_loader')
+    valid_loader = kwargs.get('valid_loader')
+    valid_set: MassHDF5 = kwargs.get('valid_set')
     segmentation_classes = kwargs.get('segmentation_classes')
     epochs = train_cfg.epochs
     # starting epoch
@@ -96,6 +97,8 @@ def train(**kwargs):
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
             # end of batch
+            if batch_idx == 100:
+                break
 
         # log train epoch loss
         if log_enable:
@@ -108,15 +111,15 @@ def train(**kwargs):
               f'{(total_train_s_loss / sample_count)} segmentation')
         # validation ---------------------------------------------------------------------------
         model.eval()
-        visaulized = False
+        visualized = False
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
         sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(0)
         mask_ious = 0.0
         sample_count = 0
-        for batch_idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(test_loader):
+        for batch_idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
             print(f'\repoch: {ep + 1}/{epochs}, '
-                  f'validation batch: {batch_idx + 1} / {len(test_loader)}', end='')
+                  f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
@@ -133,16 +136,38 @@ def train(**kwargs):
             s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
             total_valid_m_loss += torch.mean(m_loss).detach()
             total_valid_s_loss += torch.mean(s_loss).detach()
-            # visaluize the first agent from the first batch
-            if not visaulized and log_enable:
-                img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, 'image',
-                                 train_cfg.classes, title=f'Epoch {ep + 1}, Batch #{batch_no.item()}')
-                wandb.log({
-                    'media/results': wandb.Image(img, caption='full batch predictions'),
-                    'misc/epoch': ep + 1
-                })
-                visaulized = True
+            # visualize a random batch and all hard batches [if enabled]
+            if not visualized and log_enable:
+                validation_img_log_dict = {'misc/epoch': ep + 1}
+                first_batch_img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool,
+                                             plot_dest='image', semantic_classes=train_cfg.classes,
+                                             title=f'E: {ep + 1}, B#: {batch_no.item()}')
+                validation_img_log_dict['media/results'] = \
+                    wandb.Image(first_batch_img, caption='full batch predictions')
+                if train_cfg.visualize_hard_batches:
+                    for hard_batch_idx in train_cfg.hard_batches_indices:
+                        (hids, hrgbs, hlabels, hmasks, htransforms, _) = \
+                            valid_set.__getitem__(hard_batch_idx)
+                        hagent_count = hrgbs.shape[0]
+                        hrgbs, hlabels, hmasks, htransforms = to_device(hrgbs, hlabels, hmasks,
+                                                                        htransforms, device)
+                        agent_pool.generate_connection_strategy(hids, hmasks, htransforms,
+                                                                PPM, NEW_SIZE[0], NEW_SIZE[1],
+                                                                CENTER[0], CENTER[1])
+                        with torch.no_grad():
+                            hsseg_preds, hmask_preds = \
+                                model(hrgbs, htransforms, agent_pool.adjacency_matrix)
+                        hard_batch_img = plot_batch(hrgbs, hlabels, hsseg_preds, hmask_preds,
+                                                    hmasks, agent_pool, plot_dest='image',
+                                                    semantic_classes=train_cfg.classes,
+                                                    title=f'E: {ep + 1}, B#: {batch_no.item()}')
+                        validation_img_log_dict[f'hard cases/B #{hard_batch_idx}'] = \
+                            wandb.Image(hard_batch_img, caption=f'hard case {hard_batch_idx}')
+                wandb.log(validation_img_log_dict)
+                visualized = True
             # end of batch
+            if batch_idx == 100:
+                break
 
         # more wandb logging -------------------------------------------------------------------
         elevation_metric = 0.0
@@ -220,15 +245,15 @@ def parse_and_execute():
     train_set = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.trainset_file, size=new_size,
                          classes=train_cfg.classes, jitter=train_cfg.color_jitter)
-    test_set = MassHDF5(dataset=train_cfg.validset_name, path=train_cfg.dset_dir,
-                        hdf5name=train_cfg.validset_file, size=new_size,
-                        classes=train_cfg.classes, jitter=[0, 0, 0, 0])
+    valid_set = MassHDF5(dataset=train_cfg.validset_name, path=train_cfg.dset_dir,
+                         hdf5name=train_cfg.validset_file, size=new_size,
+                         classes=train_cfg.classes, jitter=[0, 0, 0, 0])
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
                                                num_workers=train_cfg.loader_workers)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=1,
-                                              shuffle=train_cfg.shuffle_data,
-                                              num_workers=train_cfg.loader_workers)
+    valid_loader = torch.utils.data.DataLoader(valid_set, batch_size=1,
+                                               shuffle=train_cfg.shuffle_data,
+                                               num_workers=train_cfg.loader_workers)
     if train_cfg.classes == 'carla':
         segmentation_classes = color_map.__carla_classes
     elif train_cfg.classes == 'ours':
@@ -237,6 +262,16 @@ def parse_and_execute():
         segmentation_classes = color_map.__diminished_classes
     else:
         print(f'unknown segmentation classes: {train_cfg.classes}')
+    # hard batch visualization -----------------------------------------------------------------
+    vset_length = len(valid_loader)
+    if train_cfg.visualize_hard_batches:
+        if len(train_cfg.hard_batches_indices) > 0:
+            for hard_batch in train_cfg.hard_batches_indices:
+                assert hard_batch < vset_length, \
+                    f'batch index {hard_batch} > validation set length {vset_length}'
+        else:
+            print('no hard batch indices were found')
+            train_cfg.visualize_hard_batches = False
     # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
     if not os.path.exists(train_cfg.snapshot_dir):
@@ -328,9 +363,9 @@ def parse_and_execute():
     # begin -------------------------------------------------------------------------------------
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
-          geom_properties=(new_size, center, ppm), train_loader=train_loader, test_loader=test_loader,
-          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep,
-          segmentation_classes=segmentation_classes)
+          geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,
+          valid_set=valid_set, mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight,
+          start_ep=start_ep, segmentation_classes=segmentation_classes)
 
 if __name__ == '__main__':
     parse_and_execute()
