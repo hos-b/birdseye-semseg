@@ -97,8 +97,6 @@ def train(**kwargs):
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
             # end of batch
-            if batch_idx == 100:
-                break
 
         # log train epoch loss
         if log_enable:
@@ -166,8 +164,6 @@ def train(**kwargs):
                 wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
-            if batch_idx == 100:
-                break
 
         # more wandb logging -------------------------------------------------------------------
         elevation_metric = 0.0
@@ -219,7 +215,7 @@ def train(**kwargs):
         log_dict['curriculum/difficulty'] = agent_pool.difficulty
         if log_enable:
             wandb.log(log_dict)
-
+    # end
     if log_enable:
         wandb.finish()
 
