@@ -114,6 +114,7 @@ class EvaluationConfig:
         self.model_versions = list(conf['models']['model-versions'])
         self.aggregation_types = list(conf['models']['aggregation-types'])
         # gui baseline parameteres
+        self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
         self.baseline_run = str(conf['gui']['baseline-run'])
         self.baseline_model_name = str(conf['gui']['baseline-model-name'])
         self.baseline_model_version = str(conf['gui']['baseline-model-version'])

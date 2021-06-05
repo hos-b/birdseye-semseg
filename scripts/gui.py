@@ -145,8 +145,13 @@ class SampleWindow:
         self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
         self.update_prediction()
     
-    def calculate_ious(self, dataset: MassHDF5):
-        sample_count = 1
+    def calculate_ious(self, dataset: MassHDF5, evaluate: bool):
+        if not evaluate:
+            for i, (network) in enumerate(self.networks.keys()):
+                exec(f"self.full_iou_label_{i}.configure(text='network not evaluated')")
+                exec(f"self.masked_iou_label_{i}.configure(text='network not evaluated')")
+
+        sample_count = 0
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
@@ -369,7 +374,7 @@ def main():
         print(f'loading {snapshot_path}')
         gui.add_network(model, eval_cfg.runs[i])
     # evaluate the added networks
-    gui.calculate_ious(test_set)
+    gui.calculate_ious(test_set, eval_cfg.evaluate_at_start)
     # start the gui
     gui.start()
 

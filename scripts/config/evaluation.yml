@@ -11,6 +11,7 @@ models:
   aggregation-types: ['bilinear']
 
 gui:
+  evalutate-at-start: false
   baseline-run: 'baseline-deconv'
   baseline-model-name: 'mcnnT'
   baseline-model-version: 'best'
