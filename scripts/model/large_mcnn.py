@@ -50,34 +50,28 @@ class LMCNN(nn.Module):
         self.center_x = self.sem_cfg.center_x(self.cf_w) # 40
         self.center_y = self.sem_cfg.center_y(self.cf_h) # 48
 
-    def forward(self, x, transforms, adjacency_matrix, decoder_only = False):
+    def forward(self, x, transforms, adjacency_matrix):
         # B, 3, 480, 640: input size
         # B, 64, 60, 80
         shared = self.learning_to_downsample(x)
         # ------------mask branch------------
         # B, 128, 15, 20
-        x_semantic = self.semantic_global_feature_extractor(shared)
-        # B, 128, 60, 80
-        x_semantic = self.semantic_feature_fusion(shared, x_semantic)
-        # ----------semantic branch----------
-        # B, 128, 15, 20
         x_mask = self.mask_global_feature_extractor(shared)
         # B, 128, 60, 80
         x_mask = self.mask_feature_fusion(shared, x_mask)
+        # ----------semantic branch----------
+        # B, 128, 15, 20
+        x_semantic = self.semantic_global_feature_extractor(shared)
+        # B, 128, 60, 80
+        x_semantic = self.semantic_feature_fusion(shared, x_semantic)
         # --latent masking into aggregation--
         # B, 128, 60, 80
         x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
                                              transforms, adjacency_matrix)
-        if decoder_only:
-            # B, 7, 60, 80
-            x_semantic = self.classifier(x_semantic.detach())
-            # B, 1, 60, 80
-            x_mask = self.maskifier(x_mask).detach()
-        else:
-            # B, 7, 60, 80
-            x_semantic = self.classifier(x_semantic)
-            # B, 1, 60, 80
-            x_mask = self.maskifier(x_mask)
+        # B, 7, 60, 80
+        x_semantic = self.classifier(x_semantic)
+        # B, 1, 60, 80
+        x_mask = self.maskifier(x_mask)
         # ----------- upsampling ------------
         # B, 7, 256, 205
         x_semantic = F.interpolate(x_semantic, self.output_size, mode='bilinear', align_corners=True)
@@ -122,12 +116,57 @@ class LWMCNN(LMCNN):
 
 class TransposedMCNN(LWMCNN):
     """
-    large and wide MCNN with extra deconv layers in the decoder
+    large and wide MCNN with extra deconv layers in the segmentation decoder
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(TransposedMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
         self.classifier = TransposedClassifer(128, num_classes)
-        self.maskifier = TransposedClassifer(128, 1)
+        # self.maskifier = TransposedClassifer(128, 1)
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
+
+class RetroMaskedMCNN(TransposedMCNN):
+    """
+    large and wide MCNN with extra deconv layers in the segmentation decoder.
+    the mask layer is fully computed, then downsampled and used for aggregation attention.
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super(RetroMaskedMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
+
+    def forward(self, x, transforms, adjacency_matrix):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.learning_to_downsample(x)
+        # ------------mask branch------------
+        # B, 128, 15, 20
+        x_mask = self.mask_global_feature_extractor(shared)
+        # B, 128, 80, 108
+        x_mask = self.mask_feature_fusion(shared, x_mask)
+        # B, 1, 80, 108
+        x_mask = self.maskifier(x_mask)
+        # ----------semantic branch----------
+        # B, 128, 15, 20
+        x_semantic = self.semantic_global_feature_extractor(shared)
+        # B, 128, 80, 108
+        x_semantic = self.semantic_feature_fusion(shared, x_semantic)
+        # B, 128, 80, 108
+        # ------- retroactive masking -------
+        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
+                                             transforms, adjacency_matrix)
+        # B, 7, 80, 108
+        x_semantic = self.classifier(x_semantic)
+        # ----------- upsampling ------------
+        # B, 7, 256, 205
+        x_semantic = F.interpolate(x_semantic, self.output_size, mode='bilinear', align_corners=True)
+        # B, 1, 256, 205
+        x_mask = torch.sigmoid(F.interpolate(x_mask, self.output_size, mode='bilinear', align_corners=True))
+        return x_semantic, x_mask
 
 class TransposedAggAtt(TransposedMCNN):
     """
@@ -151,8 +190,6 @@ class TransposedAggAtt(TransposedMCNN):
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0) * attention[i]
         return aggregated_features
-
-
 
 class LearningToDownsample(nn.Module):
     """Learning to downsample module"""
