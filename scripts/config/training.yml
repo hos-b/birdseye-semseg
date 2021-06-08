@@ -18,7 +18,6 @@ network:
 resume:
   flag: false
   tag: 'resume'
-  decoder-only: false
   resume-optimizer-state: true
   starting-epoch: 11
   difficulty: 8

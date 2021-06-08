@@ -30,7 +30,6 @@ def train(**kwargs):
     device = kwargs.get('device')
     model = kwargs.get('model')
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
-    decoder_only = train_cfg.resume_decoder_only & train_cfg.resume_training
     # losses & optimization
     scheduler: lr_scheduler.LambdaLR = kwargs.get('scheduler')
     optimizer: torch.optim.Adam = kwargs.get('optimizer')
@@ -70,8 +69,7 @@ def train(**kwargs):
             # fwd-bwd
             optimizer.zero_grad()
             sseg_preds, mask_preds = model(rgbs, car_transforms,
-                                           agent_pool.adjacency_matrix,
-                                           decoder_only)
+                                           agent_pool.adjacency_matrix)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))

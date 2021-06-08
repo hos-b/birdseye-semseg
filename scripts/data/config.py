@@ -69,7 +69,6 @@ class TrainingConfig:
         self.resume_model_version = str(conf['resume']['model-version'])
         self.resume_starting_epoch = int(conf['resume']['starting-epoch'])
         self.resume_difficulty = int(conf['resume']['difficulty'])
-        self.resume_decoder_only = bool(conf['resume']['decoder-only'])
         self.resume_optimizer_state = bool(conf['resume']['resume-optimizer-state'])
         # curriculum config
         self.curriculum_activate = bool(conf['curriculum']['activate'])
