@@ -15,7 +15,7 @@ from data.color_map import __our_classes as segmentation_classes
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
 from metrics.iou import iou_per_class
-from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, RetroMaskedMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
 from model.mcnn import MCNN, MCNN4
 
 class SampleWindow:
@@ -335,8 +335,8 @@ def main():
     elif eval_cfg.baseline_model_name == 'mcnnT':
         baseline_model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
                     sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnnRetro':
-        baseline_model = RetroMaskedMCNN(eval_cfg.num_classes, NEW_SIZE,
+    elif eval_cfg.baseline_model_name == 'mcnnTMax':
+        baseline_model = MaxoutMCNNT(eval_cfg.num_classes, NEW_SIZE,
                     sem_cfg, eval_cfg.aggregation_types[0]).to(device)
     else:
         print(f'unknown baseline network architecture {eval_cfg.baseline_model_name}')
@@ -369,9 +369,9 @@ def main():
         elif eval_cfg.model_names[i] == 'mcnnT':
             model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
                         sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnnRetro':
-            model = RetroMaskedMCNN(eval_cfg.num_classes, NEW_SIZE,
-                                 sem_cfg, eval_cfg.aggregation_types[i]).cuda(0)
+        elif eval_cfg.model_names[i] == 'mcnnTMax':
+            model = MaxoutMCNNT(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         else:
             print(f'unknown network architecture {eval_cfg.model_names[i]}')
             exit()

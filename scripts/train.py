@@ -19,7 +19,7 @@ from data.utils import drop_agent_data, squeeze_all
 from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, TransposedAggAtt, RetroMaskedMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -232,9 +232,7 @@ def parse_and_execute():
     new_size = (train_cfg.output_h, train_cfg.output_w)
     center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
     ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
-    print(f'new size: {new_size}')
-    print(f'center: {center}')
-    print(f'ppm: {ppm}')
+    print(f'output image size: {new_size}')
     # dataset ----------------------------------------------------------------------------------
     train_set = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.trainset_file, size=new_size,
@@ -275,22 +273,22 @@ def parse_and_execute():
                                         f'unknown aggregation type {train_cfg.aggregation_type}'
     if train_cfg.model_name == 'mcnn':
         model = MCNN(train_cfg.num_classes, new_size,
-                     geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnn4':
         model = MCNN4(train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnL':
         model = LMCNN(train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnLW':
         model = LWMCNN(train_cfg.num_classes, new_size,
-                       geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnT':
         model = TransposedMCNN(train_cfg.num_classes, new_size,
-                               geom_cfg, train_cfg.aggregation_type).cuda(0)
-    elif train_cfg.model_name == 'mcnnRetro':
-        model = RetroMaskedMCNN(train_cfg.num_classes, new_size,
-                                 geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+    elif train_cfg.model_name == 'mcnnTMax':
+        model = MaxoutMCNNT(train_cfg.num_classes, new_size,
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()
