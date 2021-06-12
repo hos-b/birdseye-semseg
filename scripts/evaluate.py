@@ -12,7 +12,7 @@ from data.config import EvaluationConfig, SemanticCloudConfig
 from data.utils import squeeze_all, to_device
 from data.utils import font_dict, newline_dict
 from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, TransposedAggAtt, RetroMaskedMCNN
+from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, RetroMaskedMCNN
 
 
 def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
@@ -185,9 +185,6 @@ def main():
     elif eval_cfg.model_names[0] == 'mcnnT':
         model = TransposedMCNN(eval_cfg.num_classes, new_size,
                        geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
-    elif eval_cfg.model_name == 'mcnnAtt':
-        model = TransposedAggAtt(eval_cfg.num_classes, new_size,
-                                 geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
     elif eval_cfg.model_name == 'mcnnRetro':
         model = RetroMaskedMCNN(eval_cfg.num_classes, new_size,
                                  geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)

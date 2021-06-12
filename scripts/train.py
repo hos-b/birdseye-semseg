@@ -288,9 +288,6 @@ def parse_and_execute():
     elif train_cfg.model_name == 'mcnnT':
         model = TransposedMCNN(train_cfg.num_classes, new_size,
                                geom_cfg, train_cfg.aggregation_type).cuda(0)
-    elif train_cfg.model_name == 'mcnnAtt':
-        model = TransposedAggAtt(train_cfg.num_classes, new_size,
-                                 geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnRetro':
         model = RetroMaskedMCNN(train_cfg.num_classes, new_size,
                                  geom_cfg, train_cfg.aggregation_type).cuda(0)

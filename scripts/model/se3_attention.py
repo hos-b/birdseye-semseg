@@ -25,7 +25,7 @@ def get_distance_attention(transforms: torch.Tensor, max_attention = 2.0):
 class FlatSE3AttentionHead(nn.Module):
     """
     self-attention for transform matrices. x & y rotation
-    alongside tranlsation are considered for calculating
+    alongside translation are considered for calculating
     the attention matrices
     input:  B x 4 x 4
     output: B x 9
@@ -48,17 +48,15 @@ class FlatSE3AttentionHead(nn.Module):
         xr_q = self.q_rotx(xr)
         xr_v = self.v_rotx(xr)
         xr_k = self.k_rotx(xr)
-        xr_attention = (xr_q @ xr_k.transpose(0, 1)) * (1 - torch.eye(agent_count, device=transforms.device))
-        soft_xr_attention = F.softmax(xr_attention / np.sqrt(3), dim=-1) + \
-                            torch.eye(agent_count, device=transforms.device)
+        xr_attention = xr_q @ xr_k.transpose(0, 1)
+        soft_xr_attention = torch.sigmoid(xr_attention / np.sqrt(3), dim=-1)
         # y-rot attention
         yr = transforms[:, :3, 0].float()
         yr_q = self.q_roty(yr)
         yr_v = self.v_roty(yr)
         yr_k = self.k_roty(yr)
-        yr_attention = (yr_q @ yr_k.transpose(0, 1)) * (1 - torch.eye(agent_count, device=transforms.device))
-        soft_yr_attention = F.softmax(yr_attention / np.sqrt(3), dim=-1) + \
-                            torch.eye(agent_count, device=transforms.device)
+        yr_attention = yr_q @ yr_k.transpose(0, 1)
+        soft_yr_attention = torch.sigmoid(yr_attention / np.sqrt(3), dim=-1)
         # translation attention
         tr_v = self.v_trans(transforms[:, :3, 3].float())
         tr_attention = get_distance_attention(transforms)
