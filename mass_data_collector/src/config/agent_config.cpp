@@ -64,7 +64,7 @@ namespace config
     constexpr bool filtered_semantics[] {
         /* kCARLAUnlabeledSemanticID : */       true,  // <-- hopefully empty
         /* kCARLABuildingSemanticID : */        false,
-        /* kCARLAFenceSemanticID : */           true,  // <-- who needs fences? probably very thin 
+        /* kCARLAFenceSemanticID : */           false, // <-- who needs fences? me. probably very thin though
         /* kCARLAOtherSemanticID : */           false,
         /* kCARLAPedestrianSemanticID : */      false,
         /* kCARLAPoleSemanticID : */            true,  // <-- over-hanging structure + kinda irrelevant
@@ -79,17 +79,17 @@ namespace config
         /* kCARLAGroundSemanticID : */          false,
         /* kCARLABridgeSemanticID : */          false,
         /* kCARLARailTrackSemanticID : */       true,  // <-- helps data collection in town3
-        /* kCARLAGuardRailSemanticID : */       true,  // <-- not important for top-down
+        /* kCARLAGuardRailSemanticID : */       false, // <-- not important for top-down but allowing for now
         /* kCARLATrafficLightSemanticID : */    true,  // <-- over-hanging structure
         /* kCARLAStaticSemanticID : */          false,
         /* kCARLADynamicSemanticID : */         false,
         /* kCARLAWaterSemanticID : */           false,
         /* kCARLATerrainSemanticID : */         false
     };
-    const double semantic_weight[23] {
+    constexpr double semantic_weight[23] {
         static_cast<double>(filtered_semantics[kCARLAUnlabeledSemanticID]) * 0.0,
         static_cast<double>(filtered_semantics[kCARLABuildingSemanticID]) * 2.0,
-        static_cast<double>(filtered_semantics[kCARLAFenceSemanticID]) * 0.0, // TODO: allow ?
+        static_cast<double>(filtered_semantics[kCARLAFenceSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLAOtherSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLAPedestrianSemanticID]) * 0.0,
         static_cast<double>(filtered_semantics[kCARLAPoleSemanticID]) * 0.0,
@@ -104,7 +104,7 @@ namespace config
         static_cast<double>(filtered_semantics[kCARLAGroundSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLABridgeSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLARailTrackSemanticID]) * 0.0,
-        static_cast<double>(filtered_semantics[kCARLAGuardRailSemanticID]) * 0.0,
+        static_cast<double>(filtered_semantics[kCARLAGuardRailSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLATrafficLightSemanticID]) * 0.0,
         static_cast<double>(filtered_semantics[kCARLAStaticSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLADynamicSemanticID]) * 1.0,
