@@ -2,15 +2,15 @@
 camera-front:
   type: "sensor.camera.rgb"
   id: "front"
-  x: 2.0
+  x: 0.9
   y: 0.0
-  z: 1.0
+  z: 1.5
   roll: 0.0
   pitch: 0.0
   yaw: 0.0
   image_size_x: 640
   image_size_y: 480
-  fov: 90
+  fov: 60
   gamma: 2.2
   blade_count: 5
   shutter_speed: 200.0
@@ -67,15 +67,15 @@ camera-mass:
 # front facing camera, semantic & depth used for mask generation
 camera-mask:
   id: "front"
-  x: 2.0
+  x: 0.9
   y: 0.0
-  z: 1.0
+  z: 1.5
   roll: 0.0
   pitch: 0.0
   yaw: 0.0
   image_size_x: 1280
   image_size_y: 960
-  fov: 90
+  fov: 60
   gamma: 2.2
   blade_count: 5
   shutter_speed: 200.0
