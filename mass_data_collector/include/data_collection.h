@@ -196,7 +196,7 @@ struct CollectionConfig
                 // shuffling the order
                 std::shuffle(town_batch_sizes.begin(), town_batch_sizes.end(), random_gen);
                 // filling the missing batch sizes [due to removed floating point]
-                std::uniform_int_distribution<unsigned int> distrib(0, town_batch_sizes.size());
+                std::uniform_int_distribution<unsigned int> distrib(0, town_batch_sizes.size() - 1);
                 int missing_batches = conf.town_batch_counts[town_index] - town_batch_sizes.size();
                 for (int j = 0; j < missing_batches; ++j) {
                     town_batch_sizes.emplace_back(town_batch_sizes[distrib(random_gen)]);
