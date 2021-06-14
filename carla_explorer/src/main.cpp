@@ -80,8 +80,9 @@ int main(int argc, char** argv)
               << "R: camera movement\n"
               << "A: print coordinate data\n" << std::endl;
     ros::Subscriber joy_sub = node_handle.subscribe<sensor_msgs::Joy>("joy", 10, JoystickCallback);
+    std::string current_town = "/Game/Carla/Maps/Town05";
     // connect & change town
-    auto spectator = InitCARLA("/Game/Carla/Maps/Town10HD");
+    auto spectator = InitCARLA(current_town);
     /*  Towns
         /Game/Carla/Maps/Town01 small, no exceptions
         /Game/Carla/Maps/Town02 small, no exceptions
@@ -93,6 +94,8 @@ int main(int argc, char** argv)
         /Game/Carla/Maps/Town10HD small very urban
     */
     auto world = carla_client->GetWorld();
+    auto current_weather = world.GetWeather();
+    world.SetWeather(carla::rpc::WeatherParameters::ClearNoon);
     auto map = world.GetMap();
 
     while(ros::ok()) {
