@@ -40,6 +40,7 @@ struct CollectionConfig
     std::string dataset_name;
     bool append;
     std::vector<unsigned int> towns;
+    std::vector<std::string> weathers;
     std::vector<unsigned int> town_batch_counts;
     std::vector<unsigned int> cumulative_batch_counts;
     std::vector<float> batch_size_distribution;
@@ -57,6 +58,26 @@ struct CollectionConfig
         static CollectionConfig conf;
         static std::once_flag once;
         std::call_once(once, []() {
+            std::set<std::string> allowed_weathers = {
+                "Default",
+                "ClearNoon",
+                "CloudyNoon",
+                "WetNoon",
+                "WetCloudyNoon",
+                "MidRainyNoon",
+                "HardRainNoon",
+                "SoftRainNoon",
+                "ClearSunset",
+                "CloudySunset",
+                "WetSunset",
+                "WetCloudySunset",
+                "MidRainSunset",
+                "HardRainSunset",
+                "SoftRainSunset"
+            };
+            std::set<int> allowed_towns = {
+                1, 2, 3, 4, 5
+            };
             std::string yaml_path = ros::package::getPath("mass_data_collector") +
 								    "/param/data_collection.yaml";
 		    YAML::Node base = YAML::LoadFile(yaml_path);
@@ -78,7 +99,30 @@ struct CollectionConfig
                     std::cout << "expected scalars in towns" << std::endl;
                     std::exit(EXIT_FAILURE);
                 }
-                conf.towns.emplace_back(yaml_town.as<size_t>());
+                int town_id = yaml_town.as<int>();
+                if (allowed_towns.find(town_id) == allowed_towns.end()) {
+                    std::cout << town_id << " is not a valid town id" << std::endl;
+                    std::exit(EXIT_FAILURE);
+                }
+                conf.towns.emplace_back(town_id);
+            }
+            // reading towns' weathers
+            auto yaml_weathers = dataset["weathers"];
+            if (!yaml_weathers.IsSequence()) {
+                std::cout << "weathers should be a list" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            if (yaml_weathers.size() != yaml_towns.size()) {
+                std::cout << "weathers list length does not match number of towns" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            for (const auto &yaml_weather : yaml_weathers) {
+                std::string town_weather = yaml_weather.as<std::string>();
+                if (allowed_weathers.find(town_weather) == allowed_weathers.end()) {
+                    std::cout << town_weather << " is not a valid weather condition" << std::endl;
+                    std::exit(EXIT_FAILURE);
+                }
+                conf.weathers.emplace_back(town_weather);
             }
             // min/max agent count in the scenes
             conf.maximum_cars = collection["maximum-cars"].as<unsigned int>();
@@ -176,16 +220,16 @@ struct CollectionConfig
         return str;
     }
     /* returns whether it's time to change towns given the index */
-    std::tuple<bool, int> GetNewTown(size_t batch_index) const {
+    std::tuple<bool, int, std::string> GetNewTown(size_t batch_index) const {
         if (batch_index == 0) {
-            return std::make_tuple(true, towns[0]);
+            return std::make_tuple(true, towns[0], weathers[0]);
         }
         for (size_t i = 1; i < cumulative_batch_counts.size(); ++i) {
             if (batch_index == cumulative_batch_counts[i - 1]) {
-                return std::make_tuple(true, towns[i]);
+                return std::make_tuple(true, towns[i], weathers[i]);
             }
         }
-        return std::make_tuple(false, -1);
+        return std::make_tuple(false, -1, "null");
     }
     /* returns the batch size given the index */
     unsigned int GetBatchSize(size_t batch_index) const {

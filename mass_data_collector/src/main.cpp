@@ -17,7 +17,7 @@ using agent::MassAgent;
 void SIGINT_handler(int signo);
 void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
 void AssertConfiguration();
-bool SwitchTown(size_t, std::mt19937&);
+bool SwitchTown(size_t, const std::string& weather, std::mt19937&);
 std::string SecondsToString(uint32);
 bool EnableSyncMode();
 
@@ -74,9 +74,9 @@ int main(int argc, char **argv)
 			break;
 		}
 		state = 'i';
-		auto [switch_flag, town_index] = config.GetNewTown(batch_count);
+		auto [switch_flag, town_index, town_weather] = config.GetNewTown(batch_count);
 		// exit if town switch was unsuccessful
-		if (switch_flag && !SwitchTown(town_index, random_gen)) {
+		if (switch_flag && !SwitchTown(town_index, town_weather, random_gen)) {
 			break;
 		}
 		// timing
@@ -310,7 +310,24 @@ void AssertConfiguration() {
 }
 
 /* switch town based on the batch number */
-bool SwitchTown(size_t town_index, std::mt19937& random_gen) {
+bool SwitchTown(size_t town_index, const std::string& weather, std::mt19937& random_gen) {
+	static const std::map<std::string, carla::rpc::WeatherParameters> weather_map = {
+		{"Default", carla::rpc::WeatherParameters::Default},
+		{"ClearNoon", carla::rpc::WeatherParameters::ClearNoon},
+		{"CloudyNoon", carla::rpc::WeatherParameters::CloudyNoon},
+		{"WetNoon", carla::rpc::WeatherParameters::WetNoon},
+		{"WetCloudyNoon", carla::rpc::WeatherParameters::WetCloudyNoon},
+		{"MidRainyNoon", carla::rpc::WeatherParameters::MidRainyNoon},
+		{"HardRainNoon", carla::rpc::WeatherParameters::HardRainNoon},
+		{"SoftRainNoon", carla::rpc::WeatherParameters::SoftRainNoon},
+		{"ClearSunset", carla::rpc::WeatherParameters::ClearSunset},
+		{"CloudySunset", carla::rpc::WeatherParameters::CloudySunset},
+		{"WetSunset", carla::rpc::WeatherParameters::WetSunset},
+		{"WetCloudySunset", carla::rpc::WeatherParameters::WetCloudySunset},
+		{"MidRainSunset", carla::rpc::WeatherParameters::MidRainSunset},
+		{"HardRainSunset", carla::rpc::WeatherParameters::HardRainSunset},
+		{"SoftRainSunset", carla::rpc::WeatherParameters::SoftRainSunset}
+	};
 	auto& col_conf = CollectionConfig::GetConfig();
 	auto& agents = MassAgent::agents();
 	auto number_of_agents = col_conf.maximum_cars;
@@ -338,8 +355,7 @@ bool SwitchTown(size_t town_index, std::mt19937& random_gen) {
 				MassAgent::carla_client()->GetWorld().Tick(5s);
 				break;
 			} catch(carla::client::TimeoutException& e) {
-				std::cout << "retry failed (" << timeout_count << ")" << std::endl;
-				timeout_count += 1;
+				std::cout << "retry failed (" << timeout_count++ << ")" << std::endl;
 			}
 		}
 		if (timeout_count == 10) {
@@ -349,6 +365,25 @@ bool SwitchTown(size_t town_index, std::mt19937& random_gen) {
 	}
 	for (size_t i = 0; i < number_of_agents; ++i) {
 		new MassAgent(random_gen, config::GetRestrictedRoads(town_index));
+	}
+	// setting weather & retrying if disconnected
+	std::cout << "setting weather to " << weather << std::endl;
+	size_t timeout_count = 0;
+	try {
+			MassAgent::carla_client()->GetWorld().SetWeather(weather_map.at(weather));
+			MassAgent::carla_client()->GetWorld().Tick(5s);
+		} catch(carla::client::TimeoutException& e) {
+			timeout_count = 1;
+			std::cout << "connection to simulator timed out. reconnecting ..." << std::endl;
+		}
+	while (timeout_count > 0 && timeout_count < 10) {
+		try {
+			MassAgent::carla_client().reset(new cc::Client("127.0.0.1", 2000));
+			MassAgent::carla_client()->GetWorld().Tick(5s);
+			break;
+		} catch(carla::client::TimeoutException& e) {
+			std::cout << "retry failed (" << timeout_count++ << ")" << std::endl;
+		}
 	}
 	std::cout << "town switch complete" << std::endl;
 	return true;
