@@ -196,22 +196,22 @@ MassAgent::ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double m
    the indices of the other agents must be given and only up until `max_index will be considered */
 boost::shared_ptr<carla::client::Waypoint>
 MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-						 size_t knn_pts, const bool* deadlock,
-				  		 std::vector<unsigned int> indices, unsigned int max_index) {
-	// last agent in queue has hit a deadlock, forwarding nullptr
+						 size_t knn_pts, std::vector<unsigned int> agent_indices,
+						 unsigned int max_index) {
+	// last agent in queue failed placement, forwarding nullptr to others
 	if (initial_wp == nullptr) {
 		return nullptr;
 	}
 	// getting candidates around the given waypoints
 	std::vector<boost::shared_ptr<carla::client::Waypoint>> candidates =
 		ExpandWayoint(initial_wp, vehicle_length_ * config::kMinDistCoeff);
-	// in the old code this would've caused a deadlock, now it's empty
+	// if there are not candidates, signal placement failure
 	if (candidates.size() == 0) {
 		return nullptr;
 	}
 	if (knn_pts > 0) {
 		auto query_tfm = initial_wp->GetTransform();
-		double query[3] = {query_tfm.location.x, query_tfm.location.y, query_tfm.location.y};
+		double query[3] = {query_tfm.location.x, query_tfm.location.y, query_tfm.location.z};
 		std::vector<size_t> knn_ret_indices(knn_pts);
 		std::vector<double> knn_sqrd_dist(knn_pts);
 		knn_pts = kd_tree_->knnSearch(&query[0], knn_pts, &knn_ret_indices[0], &knn_sqrd_dist[0]);
@@ -221,20 +221,20 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 			candidates.insert(candidates.end(), expansion.begin(), expansion.end());
 		}
 	}
-	boost::shared_ptr<carla::client::Waypoint> next_wp;
+	// shuffling and iterating candidates, choosing first good match
+	boost::shared_ptr<carla::client::Waypoint> random_candidate_wp;
 	carla::geom::Transform target_tf;
-	bool admissable = false;
-	while (!admissable) {
-		// it is possible to hit a deadlock when the batch size is high
-		// and the randomed waypoints don't suffice to fit them all in.
-		if (*deadlock) {
-			return nullptr;
-		}
+	std::vector<unsigned int> shuffled_candidates(candidates.size());
+    std::iota(shuffled_candidates.begin(), shuffled_candidates.end(), 0);
+	std::shuffle(shuffled_candidates.begin(), shuffled_candidates.end(), random_generator_);
+	bool admissable;
+	// we assume the placement is admissable until proven otherwise
+	for (unsigned int candidate_idx : shuffled_candidates) {
+		random_candidate_wp = candidates[candidate_idx];
+		target_tf = random_candidate_wp->GetTransform();
 		admissable = true;
-		next_wp = candidates[std::rand() % candidates.size()];
-		target_tf = next_wp->GetTransform();
 		for (unsigned int i = 0; i < max_index; ++i) {
-			const MassAgent* agent = agents()[indices[i]];
+			const MassAgent* agent = agents()[agent_indices[i]];
 			// technically impossible to hit this if
 			if (agent->id_ == id_) {
 				continue;
@@ -250,6 +250,13 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
 				break;
 			}
 		}
+		if (admissable) {
+			break;
+		}
+	}
+	// if no good matches are found, return nullptr to signal failure
+	if (!admissable) {
+		return nullptr;
 	}
 	Eigen::Matrix3d rot;
 	rot = Eigen::AngleAxisd(-target_tf.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
@@ -266,7 +273,7 @@ MassAgent::SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
     transform_.block<3, 3>(0, 0) = rot;
     transform_.block<3, 1>(0, 3) = trans;
 	vehicle_->SetTransform(target_tf);
-	return next_wp;
+	return random_candidate_wp;
 }
 
 /* caputres one frame for all sensors [[blocking]] */

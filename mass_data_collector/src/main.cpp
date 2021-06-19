@@ -15,7 +15,7 @@ using namespace std::chrono_literals;
 using agent::MassAgent;
 
 void SIGINT_handler(int signo);
-void WatchdogThreadCallback(size_t*, size_t, char*, unsigned int*, unsigned int*, float*, bool*, bool*);
+void WatchdogThreadCallback(size_t*, char*, unsigned int*, unsigned int*, float*, bool*);
 void AssertConfiguration();
 bool SwitchTown(size_t, const std::string& weather, std::mt19937&);
 std::string SecondsToString(uint32);
@@ -58,9 +58,8 @@ int main(int argc, char **argv)
 	char state = 'i';
 	unsigned int batch_size = 0;
 	unsigned int agents_done = 0;
-	bool deadlock = false;
-	std::thread time_thread(WatchdogThreadCallback, &batch_count, config.cumulative_batch_counts.back(),
-							&state, &agents_done, &batch_size, &avg_batch_time, &batch_finished, &deadlock);
+	std::thread time_thread(WatchdogThreadCallback, &batch_count, &state, &agents_done,
+							&batch_size, &avg_batch_time, &batch_finished);
 	// random distribution & shuffling necessities --------------------------------------------------------------
 	std::mt19937 random_gen(config.random_seed);
 	std::vector<unsigned int> shuffled(number_of_agents);
@@ -86,18 +85,20 @@ int main(int argc, char **argv)
 		batch_size = config.GetBatchSize(batch_count);
 		stats.AddNewBatch(batch_size);
     	std::shuffle(shuffled.begin(), shuffled.end(), random_gen);
-		// chain randoming poses for the chosen ones, reset on deadlock
-		state = 'p';
+		state = 'r';
+		// hiding peasants
+		for (size_t i = batch_size; i < number_of_agents; ++i) {
+			agents[shuffled[i]]->HideAgent();
+		}
+		// chain randoming poses for the chosen ones, reset if placement fails
 		do {
-			deadlock = false;
 			random_pose = agents[shuffled[0]]->SetRandomPose();
 			agents_done = 1;
 			for (size_t i = 1; i < batch_size; ++i) {
 				agents_done += 1;
-				random_pose = agents[shuffled[i]]->SetRandomPose(random_pose, 32, &deadlock,
-																 shuffled, i);
+				random_pose = agents[shuffled[i]]->SetRandomPose(random_pose, 32, shuffled, i);
 			}
-		} while (deadlock);
+		} while (random_pose == nullptr);
 		// Ticking() the simulator
 		try {
 			MassAgent::carla_client()->GetWorld().Tick(5s);
@@ -190,16 +191,14 @@ void SIGINT_handler(int signo) {
 }
 
 /* prints the status of data collection, detects deadlocks */
-void WatchdogThreadCallback(size_t* batch_count, size_t max_batch_count, char* state,
-							unsigned int* done, unsigned int* batch_size, float* avg_batch_time,
-							bool* batch_finished, bool* deadlock) {
+void WatchdogThreadCallback(size_t* batch_count, char* state, unsigned int* done,
+							unsigned int* batch_size, float* avg_batch_time, bool* batch_finished) {
 	uint32 remaining_s = 0;
 	uint32 elapsed_s = 0;
-	uint32 batch_s = 0;
-	auto deadlock_multiplier = CollectionConfig::GetConfig().deadlock_multiplier;
 	std::string msg;
+	size_t max_batch_count = CollectionConfig::GetConfig().cumulative_batch_counts.back();
 	while (ros::ok()) {
-		// do nothing while in initialization phase
+		// do nothing while in initialization phase (very beginning and during town switches)
 		while (*state == 'i') {
 			std::this_thread::sleep_for(1s);
 		}
@@ -216,20 +215,12 @@ void WatchdogThreadCallback(size_t* batch_count, size_t max_batch_count, char* s
 		std::cout << msg + "    " << std::flush;
 		std::this_thread::sleep_for(1s);
 		elapsed_s += 1;
-		batch_s += 1;
 		if (*batch_finished) {
 			if (*batch_count == max_batch_count) {
 				break;
 			}
 			*batch_finished = false;
 			remaining_s = (*avg_batch_time) * (max_batch_count - (*batch_count));
-			batch_s = 0;
-		// deadlock detection
-		} else if (*batch_count > 0 && batch_s >= (*avg_batch_time) * deadlock_multiplier) {
-			*deadlock = true;
-			std::cout << "\ndeadlock detected at batch #" << *batch_count + 1
-					  << ", retrying ..." << std::endl;
-			batch_s = 0;
 		}
 	}
 }

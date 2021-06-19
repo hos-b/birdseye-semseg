@@ -1,19 +1,17 @@
 dataset:
   path: '/home/mass/data/noise_test.hdf5'
   name: 'training_set'
-  towns: [1, 2, 3]
-  weathers: ['ClearNoon', 'ClearNoon', 'ClearNoon']
+  towns: [1]
+  weathers: ['ClearNoon']
   append: false
 
 collection:
-  random-seed: 515
+  random-seed: 2312
   maximum-cars: 8
   batch-size-distribution: [0.05, 0.05, 0.1, 0.1, 0.1, 0.2, 0.2, 0.2]
   maximum-batch-count: 10000
-  town-batch-counts: [10, 10, 10]
+  town-batch-counts: [50]
   hdf5-chunk-size: 5
-  # avg. batch time x multiplier = deadlock
-  deadlock-multiplier: 5.0
 
 noise:
   agent-yaw:

@@ -48,8 +48,8 @@ public:
 	boost::shared_ptr<carla::client::Waypoint> SetRandomPose();
 	boost::shared_ptr<carla::client::Waypoint>
 	SetRandomPose(boost::shared_ptr<carla::client::Waypoint> initial_wp,
-				  size_t knn_pts, const bool* deadlock,
-				  std::vector<unsigned int> indices, unsigned int max_index);
+				  size_t knn_pts, std::vector<unsigned int> indices,
+				  unsigned int max_index);
 	void HideAgent();
 	void CaptureOnce();
 	void PauseSensorCallbacks();

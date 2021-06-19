@@ -49,7 +49,6 @@ struct CollectionConfig
     unsigned int max_batch_count;
     unsigned int hdf5_chunk_size;
     unsigned long random_seed;
-    float deadlock_multiplier;
     NoiseSetting noise_setting;
     // randomized batch sizes with enforced distribution
     std::vector<unsigned int> all_batch_sizes;
@@ -179,7 +178,6 @@ struct CollectionConfig
             // misc. settings
             conf.hdf5_chunk_size = collection["hdf5-chunk-size"].as<unsigned int>();
             conf.random_seed = collection["random-seed"].as<unsigned long>();
-            conf.deadlock_multiplier = collection["deadlock-multiplier"].as<float>();
             // calculate "random" batch sizes for all towns while enforcing distribution
             conf.all_batch_sizes.reserve(conf.cumulative_batch_counts.back());
             std::mt19937 random_gen(conf.random_seed);

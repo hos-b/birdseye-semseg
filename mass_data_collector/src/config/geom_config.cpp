@@ -20,7 +20,7 @@ namespace config
 	constexpr unsigned int kWaypointKDTreeBins = 30;
 
 	// agent positioning
-	constexpr float kMinDistCoeff = 1.35f;
+	constexpr float kMinDistCoeff = 1.45f;
 
 
 } // namespace config
