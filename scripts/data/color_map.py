@@ -84,8 +84,9 @@ __diminished_classes = {
 }
 # CARLA Semantic IDs to Subset IDs ------------------------------------------------
 __carla_to_our_ids = {
-    # 0, 2, 4, 5, 12, 13 & 17 are assumed to be absent in the dataset
+    # 0, 4, 5, 12, 13 are assumed to be absent in the dataset
     1 : 0,  # Buildings   -> Buildings
+    2 : 0,  # Fences      -> Buildings
     3 : 1,  # Other       -> Misc
     6 : 2,  # RoadLine    -> Road (for now)
     7 : 2,  # Road        -> Road
@@ -97,14 +98,16 @@ __carla_to_our_ids = {
     14 : 3, # Ground      -> SideWalk
     15 : 0, # Bridge      -> Buildings
     16 : 1, # RailTrack   -> Misc
+    17 : 1, # GuardRail   -> Misc
     19 : 1, # Static      -> Misc
     20 : 1, # Dynamic     -> Misc
     21 : 6, # Water       -> Water
     22 : 4  # Terrain     -> Vegetation
 }
 __carla_to_diminished_ids = {
-    # 0, 2, 4, 5, 12, 13 & 17 are assumed to be absent in the dataset
+    # 0, 4, 5, 12, 13 are assumed to be absent in the dataset
     1 : 2,  # Buildings   -> Non-drivable
+    2 : 2,  # Fences      -> Non-drivable
     3 : 2,  # Other       -> Non-drivable
     6 : 1,  # RoadLine    -> Drivable
     7 : 1,  # Road        -> Drivable
@@ -116,6 +119,7 @@ __carla_to_diminished_ids = {
     14 : 2, # Ground      -> Non-drivable
     15 : 2, # Bridge      -> Non-drivable
     16 : 2, # RailTrack   -> Non-drivable
+    17 : 2, # GuardRail   -> Non-drivable
     19 : 2, # Static      -> Non-drivable
     20 : 2, # Dynamic     -> Non-drivable
     21 : 2, # Water       -> Non-drivable
