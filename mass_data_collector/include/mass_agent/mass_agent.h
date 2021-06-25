@@ -57,8 +57,7 @@ public:
 	std::tuple<carla::geom::Rotation, Eigen::Matrix3d>
 		AddSE3Noise(const Eigen::Matrix3d& initial_rotation);
 
-	template<geom::CloudBackend B>
-		MASSDataType GenerateDataPoint(unsigned int agent_batch_index) const;
+	MASSDataType GenerateDataPoint(unsigned int agent_batch_index) const;
 	// transform related
 	inline double carla_x() const;
 	inline double carla_y() const;
@@ -98,7 +97,7 @@ private:
 		ExpandWayoint(boost::shared_ptr<carla::client::Waypoint> wp, double min_dist);
 
 	static std::vector<std::string> GetBlueprintNames();
-	static geom::base_members::Settings& sc_settings();
+	static geom::SemanticCloud::Settings& sc_settings();
 	// state
 	uint16 id_;
 	Eigen::Matrix4d transform_;
