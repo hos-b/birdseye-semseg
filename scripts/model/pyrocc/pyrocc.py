@@ -40,16 +40,26 @@ class PyramidOccupancyNetwork(nn.Module):
     
 
     def forward(self, image, calib, *args):
+        # image: [B, 3, 600, 800]
+        # calib: [B, 3, 3]
 
         # Extract multiscale feature maps
+        # 0: [B, 256, 75, 100]
+        # 1: [B, 256, 38,  50]
+        # 2: [B, 256, 19,  25]
+        # 3: [B, 256, 10,  13]
+        # 4: [B, 256,  5,   7]
         feature_maps = self.frontend(image)
 
         # Transform image features to birds-eye-view
+        # [B, 64, 98, 100]
         bev_feats = self.transformer(feature_maps, calib)
 
         # Apply topdown network
+        # [B, 256, 196, 200]
         td_feats = self.topdown(bev_feats)
 
         # Predict individual class log-probabilities
+        # [B, class_count, 196, 200]
         logits = self.classifier(td_feats)
         return logits
