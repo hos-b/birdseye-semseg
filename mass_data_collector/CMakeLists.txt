@@ -102,3 +102,27 @@ target_link_libraries(${PROJECT_NAME}
 	hdf5_dataset
 	yaml-cpp
 )
+
+# sample viz executable -----------------------------------------------------
+add_executable(testviz
+	src/visualizer/mviz.cpp
+	src/geometry/camera_geometry.cpp
+	src/geometry/semantic_cloud.cpp
+	src/mass_agent/mass_agent.cpp
+	src/mass_agent/sensors.cpp
+	src/config/geom_config.cpp
+	src/config/agent_config.cpp
+)
+target_link_libraries(testviz
+	$ENV{CARLA_910_CXX_API}/lib/libDetourCrowd.a
+	$ENV{CARLA_910_CXX_API}/lib/libDetour.a
+	$ENV{CARLA_910_CXX_API}/lib/librpc.a
+	${catkin_LIBRARIES}
+	${CARLA_LIBRARIES}
+	${PCL_LIBRARIES}
+	${OpenCV_LIBS}
+	nanoflann::nanoflann
+	OpenMP::OpenMP_CXX
+	Eigen3::Eigen
+	yaml-cpp
+)

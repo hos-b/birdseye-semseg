@@ -9,7 +9,6 @@
 namespace geom
 {
 /* ------- KD-Tree template specialization ----------------------------------------------------- */
-#pragma region KD_TREE
 /* constructor */
 SemanticCloud::SemanticCloud(geom::SemanticCloud::Settings& settings) {
 	cfg_ = settings;
@@ -218,8 +217,6 @@ void SemanticCloud::SaveMaskedCloud(std::shared_ptr<geom::CameraGeometry> rgb_ge
 	pcl::io::savePCDFile(path, visible_cloud);
 }
 
-#pragma endregion
-
 /* converts the smenatic mat to an RGB image */
 cv::Mat SemanticCloud::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 	cv::Mat rgb_mat(semantic_ids.rows, semantic_ids.cols, CV_8UC3);
@@ -234,8 +231,30 @@ cv::Mat SemanticCloud::ConvertToCityScapesPallete(cv::Mat semantic_ids) {
 	return rgb_mat;
 }
 
+/* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
+void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
+										  cv::Mat semantic,
+										  cv::Mat depth,
+										  Eigen::Matrix4d& transform) {
+	size_t old_size = target_cloud_.points.size();
+	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
+	// # pragma omp parallel for collapse(2)
+	for (int i = 0; i < semantic.rows; ++i) {
+		uchar* pixel_label = semantic.ptr<uchar>(i);
+		float* pixel_depth = depth.ptr<float>(i);
+		for (int j = 0; j < semantic.cols; ++j) {
+			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]);
+			pcl::PointXYZL point;
+			point.label = pixel_label[j];
+			point.x = pixel_3d_loc.x();
+			point.y = pixel_3d_loc.y();
+			point.z = pixel_3d_loc.z();
+			target_cloud_.points.emplace_back(point);
+		}
+	}
+	target_cloud_.width = target_cloud_.points.size();
+}
 /* ------- Deprecated functions ---------------------------------------------------------------- */
-#pragma region deprecated
 /* returns the boundaries of the car (calculated from filtered point cloud) */
 [[deprecated("deprecated function")]]
 std::tuple<double, double, double, double> SemanticCloud::GetVehicleBoundary() const {
@@ -308,29 +327,4 @@ std::tuple<double, double, double, double> SemanticCloud::GetBoundaries() const 
 	}
 	return std::make_tuple(minx, maxx, miny, maxy);
 }
-
-/* converts a semantic|depth image into 3D points [in the global transform] and adds them to the point cloud  */
-void SemanticCloud::AddSemanticDepthImage(std::shared_ptr<geom::CameraGeometry> geometry,
-										  cv::Mat semantic,
-										  cv::Mat depth,
-										  Eigen::Matrix4d& transform) {
-	size_t old_size = target_cloud_.points.size();
-	target_cloud_.points.reserve(old_size + (semantic.rows * semantic.cols));
-	// # pragma omp parallel for collapse(2)
-	for (int i = 0; i < semantic.rows; ++i) {
-		uchar* pixel_label = semantic.ptr<uchar>(i);
-		float* pixel_depth = depth.ptr<float>(i);
-		for (int j = 0; j < semantic.cols; ++j) {
-			Eigen::Vector3d pixel_3d_loc = geometry->ReprojectToGlobal(Eigen::Vector2d(i, j), transform, pixel_depth[j]);
-			pcl::PointXYZL point;
-			point.label = pixel_label[j];
-			point.x = pixel_3d_loc.x();
-			point.y = pixel_3d_loc.y();
-			point.z = pixel_3d_loc.z();
-			target_cloud_.points.emplace_back(point);
-		}
-	}
-	target_cloud_.width = target_cloud_.points.size();
-}
-#pragma endregion
 } // namespace geom

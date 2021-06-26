@@ -97,7 +97,7 @@ namespace config
         static_cast<double>(filtered_semantics[kCARLARoadSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLASideWalkSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLAVegetationSemanticID]) * 1.0,
-        static_cast<double>(filtered_semantics[kCARLAVehiclesSemanticID]) * 6.0,
+        static_cast<double>(filtered_semantics[kCARLAVehiclesSemanticID]) * 20.0,
         static_cast<double>(filtered_semantics[kCARLAWallSemanticID]) * 1.0,
         static_cast<double>(filtered_semantics[kCARLATrafficSignSemanticID]) * 0.0,
         static_cast<double>(filtered_semantics[kCARLASkySemanticID]) * 0.0,

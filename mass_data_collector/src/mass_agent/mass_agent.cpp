@@ -145,7 +145,7 @@ boost::shared_ptr<carla::client::Waypoint> MassAgent::SetRandomPose() {
 	boost::shared_ptr<carla::client::Waypoint> initial_wp;
 	carla::geom::Transform tf;
 	while (true) {
-		initial_wp = kd_points_[std::rand() % kd_points_.size()];
+		initial_wp = kd_points_[random_generator_() % kd_points_.size()];
 		// if not in a restricted area
 		if (restricted_roads_.find(initial_wp->GetRoadId()) == restricted_roads_.end()) {
 			tf = initial_wp->GetTransform();
@@ -563,6 +563,54 @@ std::unique_ptr<cc::Client>& MassAgent::carla_client() {
 	return carla_client;
 }
 
+/* returns the RGB image, semantic mask and FoV mask */
+std::tuple<cv::Mat, cv::Mat, cv::Mat> MassAgent::GetBEVSample() {
+	geom::SemanticCloud mask_cloud(sc_settings());
+	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
+	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
+	mask_cloud.BuildKDTree();
+	cv::Mat fov_mask = mask_cloud.GetFOVMask();
+	// ---------------------------------------- creating target cloud ----------------------------------------
+	geom::SemanticCloud target_cloud(sc_settings());
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+	}
+	target_cloud.BuildKDTree();
+	auto[semantic_bev, vehicle_mask] = target_cloud.GetBEVData(vehicle_width_, vehicle_length_);
+	semantic_bev = geom::SemanticCloud::ConvertToCityScapesPallete(semantic_bev);
+	// ------------------------------------------ getting rgb image ------------------------------------------
+	fov_mask += vehicle_mask;
+	auto[success, rgb_image] = front_rgb_->pop();
+	return std::make_tuple(rgb_image, semantic_bev, fov_mask);
+}
+
+/* saves the cloud generated from front view cam and the full cloud that is masked using camera geometry*/
+void MassAgent::SaveMaskedClouds(const std::string& front_view, const std::string& full_view) {
+	geom::SemanticCloud mask_cloud(sc_settings());
+	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
+	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
+	mask_cloud.BuildKDTree();
+	mask_cloud.SaveCloud(front_view);
+	// ---------------------------------------- creating target cloud ----------------------------------------
+	geom::SemanticCloud target_cloud(sc_settings());
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+	}
+	target_cloud.BuildKDTree();
+	target_cloud.SaveMaskedCloud(front_rgb_->geometry(), full_view, 0.5);
+}
+
+void MassAgent::SaveFullCloud(const std::string& full_view) {
+	geom::SemanticCloud target_cloud(sc_settings());
+	for (auto& semantic_depth_cam : semantic_pc_cams_) {
+		auto[success, semantic, depth] = semantic_depth_cam->pop();
+		target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth);
+	}
+	target_cloud.SaveCloud(full_view);
+}
+
 /* asserts that all the sensor data containers have the same size */
 void MassAgent::AssertSize(size_t size) const {
 	for (auto& spc_cam : semantic_pc_cams_) {
@@ -584,8 +632,8 @@ void MassAgent::AssertSize(size_t size) const {
 	}
 }
 
-/* create a single cloud using all cameras of all agents */
-void MassAgent::DebugMultiAgentCloud(const std::string& path) {
+/* create a single cloud using all top-down cameras of all agents */
+void MassAgent::SaveMultiAgentCloud(const std::string& path, size_t agent_index) {
 	geom::SemanticCloud::Settings semantic_conf{1000, -1000, 1000, -1000, 0.1, 0, 0, 7, 32, 128};
 	geom::SemanticCloud target_cloud(semantic_conf);
 	for (size_t i = 0; i < agents().size(); ++i) {
@@ -593,7 +641,7 @@ void MassAgent::DebugMultiAgentCloud(const std::string& path) {
 		for (auto& semantic_depth_cam : agents()[i]->semantic_pc_cams_) {
 			auto[success, semantic, depth] = semantic_depth_cam->pop();
 			if (success) {
-				Eigen::Matrix4d tf = agents()[0]->transform_.inverse() * agents()[i]->transform_;
+				Eigen::Matrix4d tf = agents()[agent_index]->transform_.inverse() * agents()[i]->transform_;
 				target_cloud.AddSemanticDepthImage(semantic_depth_cam->geometry(), semantic, depth, tf);
 			} else {
 				std::cout << "ERROR: agent " + std::to_string(agents()[i]->id_)

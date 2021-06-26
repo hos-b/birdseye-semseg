@@ -58,6 +58,10 @@ public:
 		AddSE3Noise(const Eigen::Matrix3d& initial_rotation);
 
 	MASSDataType GenerateDataPoint(unsigned int agent_batch_index) const;
+
+	std::tuple<cv::Mat, cv::Mat, cv::Mat> GetBEVSample();
+	void SaveMaskedClouds(const std::string& front_view, const std::string& full_view);
+	void SaveFullCloud(const std::string& full_view);
 	// transform related
 	inline double carla_x() const;
 	inline double carla_y() const;
@@ -67,7 +71,7 @@ public:
 	// static stuff
 	static std::unique_ptr<cc::Client>& carla_client();
 	static std::vector<MassAgent*>& agents();
-	static void DebugMultiAgentCloud(const std::string& path);
+	static void SaveMultiAgentCloud(const std::string& path, size_t agent_index);
 
 	// debug functions
 	cv::Mat GetMap();
