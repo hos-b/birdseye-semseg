@@ -20,9 +20,9 @@ void viewerOneOff (pcl::visualization::PCLVisualizer& viewer) {
 void viewerPsycho (pcl::visualization::PCLVisualizer& viewer) {
     static unsigned count = 0;
     std::stringstream ss;
-    ss << "Once per viewer loop: " << count++;
+    // ss << "Once per viewer loop: " << count++;
     viewer.removeShape ("text", 0);
-    viewer.addText (ss.str(), 200, 300, "text", 0); // NOLINT
+    // viewer.addText (ss.str(), 200, 300, "text", 0); // NOLINT
     
     //FIXME: possible race condition here:
     user_data++;
@@ -30,9 +30,12 @@ void viewerPsycho (pcl::visualization::PCLVisualizer& viewer) {
     
 int main (int argc, char** argv)
 {
-    std::string path = "/home/hosein/scloud.pcl";
+    std::string path;
     if (argc == 2) {
         path  = std::string(argv[1]); // NOLINT
+    } else {
+        std::cout << "no point cloud given as argument\n";
+        std::exit(EXIT_FAILURE);
     }
     std::cout << "opening " << path << std::endl;
     pcl::PointCloud<pcl::PointXYZRGBA>::Ptr cloud(new pcl::PointCloud<pcl::PointXYZRGBA>);
