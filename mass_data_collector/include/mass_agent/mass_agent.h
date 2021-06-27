@@ -60,7 +60,7 @@ public:
 	MASSDataType GenerateDataPoint(unsigned int agent_batch_index) const;
 
 	std::tuple<cv::Mat, cv::Mat, cv::Mat> GetBEVSample();
-	void SaveMaskedClouds(const std::string& front_view, const std::string& full_view);
+	cv::Mat SaveMaskedClouds(const std::string& front_view, const std::string& full_view);
 	void SaveFullCloud(const std::string& full_view);
 	// transform related
 	inline double carla_x() const;

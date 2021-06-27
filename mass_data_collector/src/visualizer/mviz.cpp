@@ -68,13 +68,14 @@ int main(int argc, char **argv)
 	std::string dir = "/home/mass/data/";
 	auto map = agents[0]->GetMap();
 	agents[0]->SaveFullCloud(dir + "full_cloud.pcl");
-	agents[0]->SaveMaskedClouds(dir + "front_mask.pcl", dir + "full_mask.pcl");
+	auto front_sem = agents[0]->SaveMaskedClouds(dir + "front_mask.pcl", dir + "full_mask.pcl");
 	MassAgent::SaveMultiAgentCloud(dir + "multiagent_cloud.pcl", 0);
 	auto [rgb, semantic, mask] = agents[0]->GetBEVSample();
 	cv::imwrite(dir + "front_rgb.png", rgb);
 	cv::imwrite(dir + "bev_semantics.png", semantic);
 	cv::imwrite(dir + "bev_mask.png", mask);
 	cv::imwrite(dir + "map.png", map);
+	cv::imwrite(dir + "front_semantic.png", front_sem);
 
 	std::cout << "exiting" << std::endl;
 	for (size_t i = 0; i < agents.size(); ++i) {

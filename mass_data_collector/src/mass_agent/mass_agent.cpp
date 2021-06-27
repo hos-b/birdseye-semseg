@@ -586,7 +586,7 @@ std::tuple<cv::Mat, cv::Mat, cv::Mat> MassAgent::GetBEVSample() {
 }
 
 /* saves the cloud generated from front view cam and the full cloud that is masked using camera geometry*/
-void MassAgent::SaveMaskedClouds(const std::string& front_view, const std::string& full_view) {
+cv::Mat MassAgent::SaveMaskedClouds(const std::string& front_view, const std::string& full_view) {
 	geom::SemanticCloud mask_cloud(sc_settings());
 	auto[succ, front_semantic, front_depth] = front_mask_pc_->pop();
 	mask_cloud.AddSemanticDepthImage(front_mask_pc_->geometry(), front_semantic, front_depth);
@@ -600,6 +600,7 @@ void MassAgent::SaveMaskedClouds(const std::string& front_view, const std::strin
 	}
 	target_cloud.BuildKDTree();
 	target_cloud.SaveMaskedCloud(front_rgb_->geometry(), full_view, 0.5);
+	return geom::SemanticCloud::ConvertToCityScapesPallete(front_semantic);
 }
 
 void MassAgent::SaveFullCloud(const std::string& full_view) {
