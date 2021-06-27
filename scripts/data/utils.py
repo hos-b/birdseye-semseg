@@ -1,4 +1,5 @@
 import cv2
+from numpy.core.fromnumeric import size
 import torch
 import numpy as np
 from typing import Tuple
@@ -63,12 +64,18 @@ def get_noisy_transforms(transforms: torch.Tensor, dx_std, dy_std, th_std) -> to
     rand_x = torch.normal(mean=0.0, std=dx_std, size=(batch_size,))
     rand_y = torch.normal(mean=0.0, std=dy_std, size=(batch_size,))
     rand_t = torch.normal(mean=0.0, std=th_std, size=(batch_size,)) * (np.pi / 180.0)
-    se3_noise[:, 0, 0] = torch.cos(rand_t)
-    se3_noise[:, 0, 1] = -torch.sin(rand_t)
-    se3_noise[:, 1, 0] = torch.sin(rand_t)
-    se3_noise[:, 1, 1] = torch.cos(rand_t)
-    se3_noise[:, 0, 3] = rand_x
-    se3_noise[:, 1, 3] = rand_y
+    if th_std != 0.0:
+        se3_noise[:, 0, 0] = torch.cos(rand_t)
+        se3_noise[:, 0, 1] = -torch.sin(rand_t)
+        se3_noise[:, 1, 0] = torch.sin(rand_t)
+        se3_noise[:, 1, 1] = torch.cos(rand_t)
+    else:
+        se3_noise[:, 0, 0] = 1
+        se3_noise[:, 1, 1] = 1
+    if dx_std != 0.0:
+        se3_noise[:, 0, 3] = rand_x
+    if dy_std != 0.0:
+        se3_noise[:, 1, 3] = rand_y
     se3_noise[:, 2, 2] = 1
     se3_noise[:, 3, 3] = 1
     return transforms @ se3_noise
