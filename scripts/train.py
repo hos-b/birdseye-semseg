@@ -20,6 +20,7 @@ from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
 from model.mcnn import MCNN, MCNN4
 from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
+from model.noisy_mcnn import NoisyMCNN
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -288,6 +289,9 @@ def parse_and_execute():
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnTMax':
         model = MaxoutMCNNT(train_cfg.num_classes, new_size,
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+    elif train_cfg.model_name == 'mcnnNoisy':
+        model = NoisyMCNN(train_cfg.num_classes, new_size,
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
