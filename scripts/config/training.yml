@@ -25,7 +25,7 @@ network:
 curriculum:
   activate: false
   initial-difficulty: 1
-  maximum-difficulty: 8
+  maximum-difficulty: 1
   maximum-agent-count: 8
   strategy: 'metric'
   strategy-parameter: 0.66
@@ -34,7 +34,7 @@ hyperparameters:
   learning-rate: 5e-3
   epochs: 500
   # probability that an agent stops transmitting
-  drop-prob: 0.1
+  drop-prob: 0.0
   # brightness, contrast, saturation, hue
   color-jitter: [0.1, 0.1, 0.1, 0.1]
 
