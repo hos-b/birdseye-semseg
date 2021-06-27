@@ -13,6 +13,7 @@ training:
 
 # only available for mcnnNoisy and onwards
 se3-noise:
+  enable: false
   se3-noise-theta-std: 2.0 # degrees
   se3-noise-dx-std: 0.5    # meters
   se3-noise-dy-std: 0.5    # meters
@@ -22,7 +23,7 @@ network:
   aggregation-type: 'bilinear' # or 'nearest'
 
 curriculum:
-  activate: true
+  activate: false
   initial-difficulty: 1
   maximum-difficulty: 8
   maximum-agent-count: 8

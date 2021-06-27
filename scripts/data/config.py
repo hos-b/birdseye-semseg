@@ -64,6 +64,10 @@ class TrainingConfig:
         self.se3_noise_th_std = float(conf['se3-noise']['se3-noise-theta-std'])
         self.se3_noise_dx_std = float(conf['se3-noise']['se3-noise-dx-std'])
         self.se3_noise_dy_std = float(conf['se3-noise']['se3-noise-dy-std'])
+        if not bool(conf['se3-noise']['enable']):
+            self.se3_noise_th_std = 0.0
+            self.se3_noise_dx_std = 0.0
+            self.se3_noise_dy_std = 0.0
         # network
         self.model_name = str(conf['network']['model-name'])
         self.aggregation_type = str(conf['network']['aggregation-type'])
@@ -97,12 +101,57 @@ class TrainingConfig:
         self.trainset_name = str(conf['dataset']['trainset-name'])
         self.validset_name = str(conf['dataset']['validset-name'])
         # resume
-        self.resume_tag = str(conf['resume']['tag'])
         self.resume_training = bool(conf['resume']['flag'])
+        self.resume_tag = str(conf['resume']['tag'])
         self.resume_model_version = str(conf['resume']['model-version'])
         self.resume_starting_epoch = int(conf['resume']['starting-epoch'])
         self.resume_difficulty = int(conf['resume']['difficulty'])
         self.resume_optimizer_state = bool(conf['resume']['resume-optimizer-state'])
+        self.perform_sanity_check()
+
+    def perform_sanity_check(self):
+        """
+        performs a sanity check to make sure the given parameters are not
+        absolutely wrong
+        """
+        if self.log_every < 10:
+            print(f'sanity-check-warning: logging every {self.log_every} batches is suboptimal.')
+        if self.device != 'cuda' and self.device != 'cpu':
+            print(f'sanity-check-error: unknown device {self.device}.')
+            exit()
+        if self.loss_function != 'cross-entropy' and self.loss_function != 'focal':
+            print(f'sanity-check-error: unkown loss function {self.loss_function}.')
+            exit()
+        if self.initial_difficulty < 1 or self.initial_difficulty > self.max_agent_count:
+            print(f'sanity-check-error: invalid initial difficulty {self.initial_difficulty}.')
+            exit()
+        if self.maximum_difficulty < 1 or self.maximum_difficulty > self.max_agent_count:
+            print(f'sanity-check-error: invalid maximum difficulty {self.maximum_difficulty}.')
+            exit()
+        if self.maximum_difficulty < self.initial_difficulty:
+            print(f'sanity-check-error: maximum difficulty cannot be smaller than initial difficulty.')
+            exit()
+        if self.strategy != 'metric' and self.strategy != 'every-x-epoch':
+            print(f'sanity-check-error: unknown curriculum strategy {self.strategy}.')
+            exit()
+        if self.drop_prob < 0.0 or self.drop_prob > 1:
+            print(f'sanity-check-error: connection drop probability must be between 0 and 1.')
+            exit()
+        if len(self.color_jitter) != 4:
+            print(f'sanity-check-error: color jitter list must include 4 elements.')
+            exit()
+        if self.mask_detection_thresh < 0.0 or self.mask_detection_thresh > 1.0:
+            print(f'sanity-check-error: mask detection threshold must be between 0 and 1.')
+            exit()
+        if self.classes != 'ours' and self.classes != 'carla' and self.classes != 'diminished':
+            print(f'sanity-check-error: unknown segmentation classes {self.classes}.')
+            exit()
+        if self.resume_training and self.resume_tag == '':
+            print(f'sanity-check-error: resuming a run requires a resume-tag.')
+            exit()
+        if self.output_h > 500 or self.output_w > 400:
+            print(f'sanity-check-error: output size {self.output_h}x{self.output_w} is invalid.')
+            exit()
 
 class EvaluationConfig:
     def __init__(self, file_path: str):
@@ -127,6 +176,10 @@ class EvaluationConfig:
         self.se3_noise_th_std = float(conf['se3-noise']['se3-noise-theta-std'])
         self.se3_noise_dx_std = float(conf['se3-noise']['se3-noise-dx-std'])
         self.se3_noise_dy_std = float(conf['se3-noise']['se3-noise-dy-std'])
+        if not bool(conf['se3-noise']['enable']):
+            self.se3_noise_th_std = 0.0
+            self.se3_noise_dx_std = 0.0
+            self.se3_noise_dy_std = 0.0
         # plotting parameters
         self.plot_count = int(conf['plot']['count'])
         self.plot_type = str(conf['plot']['plot-type'])
@@ -144,3 +197,19 @@ class EvaluationConfig:
         # curriculum parameters
         self.difficulty = int(conf['curriculum']['difficulty'])
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
+        self.perform_sanity_check()
+    
+    def perform_sanity_check(self):
+        """
+        performs a sanity check to make sure the given parameters are not
+        absolutely wrong
+        """
+        if self.device != 'cuda' and self.device != 'cpu':
+            print(f'sanity-check-error: unknown device {self.device}.')
+            exit()
+        if self.difficulty < 1 or self.difficulty > self.max_agent_count:
+            print(f'sanity-check-error: invalid difficulty {self.initial_difficulty}.')
+            exit()
+        if self.output_h > 500 or self.output_w > 400:
+            print(f'sanity-check-error: output size {self.output_h}x{self.output_w} is invalid.')
+            exit()

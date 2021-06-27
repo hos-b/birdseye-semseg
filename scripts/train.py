@@ -253,8 +253,6 @@ def parse_and_execute():
         segmentation_classes = color_map.__our_classes
     elif train_cfg.classes == 'diminished':
         segmentation_classes = color_map.__diminished_classes
-    else:
-        print(f'unknown segmentation classes: {train_cfg.classes}')
     # hard batch visualization -----------------------------------------------------------------
     vset_length = len(valid_loader)
     if train_cfg.visualize_hard_batches:
@@ -351,9 +349,6 @@ def parse_and_execute():
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
-    else:
-        print(f'unknown loss function: {train_cfg.loss_function}')
-        exit()
     mask_loss = nn.L1Loss(reduction='mean')
     # send to gpu
     if train_cfg.device == 'cuda':
