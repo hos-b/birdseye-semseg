@@ -100,21 +100,6 @@ def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, 
         warped_mask[warped_mask < 1] = 0
     return warped_mask
 
-def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
-    """
-    input: masks & transforms of all agents, target agent id, extra info
-    output: accumulative mask for all agents
-    deprecated. for loop replaced with big brain version
-    """
-    assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
-    agent_count = masks.shape[0]
-    all_masks = torch.zeros_like(masks)
-    for i in range(agent_count):
-        relative_tfs = get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
-        warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags=flags)
-        all_masks[i] = warped_mask.sum(dim=0)
-    return all_masks
-
 def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
     """
     input:
@@ -132,7 +117,26 @@ def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x,
     warped_masks = warped_masks.reshape(agent_count, agent_count, h, w)
     return warped_masks.sum(dim=1)
 
+def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
+    """
+    input: masks & transforms of all agents, target agent id, extra info
+    output: accumulative mask for all agents
+    deprecated. for loop replaced with big brain version
+    """
+    assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
+    agent_count = masks.shape[0]
+    all_masks = torch.zeros_like(masks)
+    for i in range(agent_count):
+        relative_tfs = get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
+        warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), flags=flags)
+        all_masks[i] = warped_mask.sum(dim=0)
+    return all_masks
+
 def test_transforms(transforms, pixels_per_meter, h, w, center_x, center_y):
+    """
+    debug function to test whether get_all_relative_img_transforms
+    performs the same task as get_single_relative_img_transform
+    """
     agent_count = transforms.shape[0]
     relative_tfs_2 = get_all_relative_img_transforms(transforms, pixels_per_meter, h, w, center_x, center_y)
     relative_tfs_1 = torch.zeros_like(relative_tfs_2)

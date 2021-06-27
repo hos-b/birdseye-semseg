@@ -60,16 +60,13 @@ class TrainingConfig:
         self.torch_seed = int(conf['training']['torch-seed'])
         self.loss_function = str(conf['training']['loss'])
         self.weight_losses = bool(conf['training']['weight-losses'])
+        # noise parameters
+        self.se3_noise_th_std = float(conf['se3-noise']['se3-noise-theta-std'])
+        self.se3_noise_dx_std = float(conf['se3-noise']['se3-noise-dx-std'])
+        self.se3_noise_dy_std = float(conf['se3-noise']['se3-noise-dy-std'])
         # network
         self.model_name = str(conf['network']['model-name'])
         self.aggregation_type = str(conf['network']['aggregation-type'])
-        # resume
-        self.resume_tag = str(conf['resume']['tag'])
-        self.resume_training = bool(conf['resume']['flag'])
-        self.resume_model_version = str(conf['resume']['model-version'])
-        self.resume_starting_epoch = int(conf['resume']['starting-epoch'])
-        self.resume_difficulty = int(conf['resume']['difficulty'])
-        self.resume_optimizer_state = bool(conf['resume']['resume-optimizer-state'])
         # curriculum config
         self.curriculum_activate = bool(conf['curriculum']['activate'])
         self.initial_difficulty = int(conf['curriculum']['initial-difficulty'])
@@ -99,6 +96,13 @@ class TrainingConfig:
         self.validset_file = str(conf['dataset']['validset-file'])
         self.trainset_name = str(conf['dataset']['trainset-name'])
         self.validset_name = str(conf['dataset']['validset-name'])
+        # resume
+        self.resume_tag = str(conf['resume']['tag'])
+        self.resume_training = bool(conf['resume']['flag'])
+        self.resume_model_version = str(conf['resume']['model-version'])
+        self.resume_starting_epoch = int(conf['resume']['starting-epoch'])
+        self.resume_difficulty = int(conf['resume']['difficulty'])
+        self.resume_optimizer_state = bool(conf['resume']['resume-optimizer-state'])
 
 class EvaluationConfig:
     def __init__(self, file_path: str):
@@ -119,6 +123,10 @@ class EvaluationConfig:
         self.baseline_run = str(conf['gui']['baseline-run'])
         self.baseline_model_name = str(conf['gui']['baseline-model-name'])
         self.baseline_model_version = str(conf['gui']['baseline-model-version'])
+        # noise parameters
+        self.se3_noise_th_std = float(conf['se3-noise']['se3-noise-theta-std'])
+        self.se3_noise_dx_std = float(conf['se3-noise']['se3-noise-dx-std'])
+        self.se3_noise_dy_std = float(conf['se3-noise']['se3-noise-dy-std'])
         # plotting parameters
         self.plot_count = int(conf['plot']['count'])
         self.plot_type = str(conf['plot']['plot-type'])

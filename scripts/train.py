@@ -292,7 +292,10 @@ def parse_and_execute():
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnNoisy':
         model = NoisyMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type,
+                    train_cfg.se3_noise_dx_std,
+                    train_cfg.se3_noise_dy_std,
+                    train_cfg.se3_noise_th_std).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()

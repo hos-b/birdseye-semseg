@@ -1,5 +1,5 @@
 logging:
-  name: 'maxout-0.1drop'
+  name: 'debug'
   group: 'moderate'
   log-dir: './log'
   log-every: 10 # batch
@@ -7,21 +7,19 @@ logging:
 
 training:
   device: 'cuda'
-  torch-seed: 0
+  torch-seed: 20
   loss: 'cross-entropy' # or 'cross-entropy'
   weight-losses: true
 
-network:
-  model-name: 'mcnnTMax'
-  aggregation-type: 'bilinear' # or 'nearest'
+# only available for mcnnNoisy and onwards
+se3-noise:
+  se3-noise-theta-std: 2.0 # degrees
+  se3-noise-dx-std: 0.5    # meters
+  se3-noise-dy-std: 0.5    # meters
 
-resume:
-  flag: false
-  tag: 'resume'
-  resume-optimizer-state: true
-  starting-epoch: 11
-  difficulty: 8
-  model-version: 'best'
+network:
+  model-name: 'mcnnNoisy'
+  aggregation-type: 'bilinear' # or 'nearest'
 
 curriculum:
   activate: true
@@ -53,8 +51,16 @@ dataset:
   output-h: 256
   output-w: 205
   classes: 'ours' # carla, ours, diminished
-  dataset-dir: '/export/home/bahadorm/mass-data'
-  trainset-file: 'noisy_towns2345.hdf5'
-  trainset-name: 'training_set'
+  dataset-dir: '/export/home/aiscar4/mass-data'
+  trainset-file: 'noisy_towns1.hdf5'
+  trainset-name: 'validation_set'
   validset-file: 'noisy_towns1.hdf5'
   validset-name: 'validation_set'
+
+resume:
+  flag: false
+  tag: 'resume'
+  resume-optimizer-state: true
+  starting-epoch: 11
+  difficulty: 8
+  model-version: 'best'

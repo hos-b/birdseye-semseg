@@ -16,6 +16,13 @@ gui:
   baseline-model-name: 'mcnnT'
   baseline-model-version: 'best'
 
+# only available for mcnnNoisy and onwards
+se3-noise:
+  enable: false
+  se3-noise-theta-std: 2.0 # degrees
+  se3-noise-dx-std: 0.5    # meters
+  se3-noise-dy-std: 0.5    # meters
+
 plot:
   count: 10
   plot-type: 'disk' # 'show' || 'image' for getting rgb

@@ -3,21 +3,28 @@ import kornia
 from torch import nn
 from torch.nn import functional as F
 from data.mask_warp import get_single_relative_img_transform
+from data.utils import get_noisy_transforms
 from data.config import SemanticCloudConfig
 from model.large_mcnn import TransposedMCNN
 
 
 class NoisyMCNN(TransposedMCNN):
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str,
+                 noise_dx_std, noise_dy_std, noise_th_std):
         super(NoisyMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
         self.center_x = self.sem_cfg.center_x(self.cf_w)
         self.center_y = self.sem_cfg.center_y(self.cf_h)
 
+        self.se3_dx_std = noise_dx_std
+        self.se3_dy_std = noise_dy_std
+        self.se3_th_std = noise_th_std
         self.matching_net = LatentFeatureMatcher(self.ppm)
 
     def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
+        # add se3 noise to the transforms
+        transforms = get_noisy_transforms(transforms, self.se3_dx_std, self.se3_dy_std, self.se3_th_std)
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
