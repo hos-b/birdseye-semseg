@@ -288,19 +288,7 @@ def parse_and_execute():
     # network stuff ----------------------------------------------------------------------------
     assert train_cfg.aggregation_type == 'bilinear' or train_cfg.aggregation_type == 'nearest', \
                                         f'unknown aggregation type {train_cfg.aggregation_type}'
-    if train_cfg.model_name == 'mcnn':
-        model = MCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
-    elif train_cfg.model_name == 'mcnn4':
-        model = MCNN4(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
-    elif train_cfg.model_name == 'mcnnL':
-        model = LMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
-    elif train_cfg.model_name == 'mcnnLW':
-        model = LWMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
-    elif train_cfg.model_name == 'mcnnT':
+    if train_cfg.model_name == 'mcnnT':
         model = TransposedMCNN(train_cfg.num_classes, new_size,
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnTMax':

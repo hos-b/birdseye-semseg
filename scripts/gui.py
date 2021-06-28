@@ -16,8 +16,8 @@ from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_
 from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms
 from metrics.iou import iou_per_class
-from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
-from model.mcnn import MCNN, MCNN4
+from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
+from model.noisy_mcnn import NoisyMCNN
 
 class SampleWindow:
     def __init__(self, semantic_classes: str, num_classes: int, device: torch.device, new_size, center, ppm):
@@ -326,24 +326,15 @@ def main():
     # baseline stuff
     baseline_dir = eval_cfg.snapshot_dir.format(eval_cfg.baseline_run)
     baseline_path = baseline_dir + f'/{eval_cfg.baseline_model_version}_model.pth'
-    if eval_cfg.baseline_model_name == 'mcnn':
-        baseline_model = MCNN(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnn4':
-        baseline_model = MCNN4(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnnL':
-        baseline_model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnnLW':
-        baseline_model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnnT':
+    if eval_cfg.baseline_model_name == 'mcnnT':
         baseline_model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
                     sem_cfg, eval_cfg.aggregation_types[0]).to(device)
     elif eval_cfg.baseline_model_name == 'mcnnTMax':
         baseline_model = MaxoutMCNNT(eval_cfg.num_classes, NEW_SIZE,
                     sem_cfg, eval_cfg.aggregation_types[0]).to(device)
+    elif eval_cfg.baseline_model_name == 'mcnnNoisy':
+        baseline_model = NoisyMCNN(eval_cfg.num_classes, NEW_SIZE,
+                    sem_cfg, eval_cfg.aggregation_types[0]).cuda(0)
     else:
         print(f'unknown baseline network architecture {eval_cfg.baseline_model_name}')
         exit()
@@ -357,23 +348,14 @@ def main():
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
             exit()
-        if eval_cfg.model_names[i] == 'mcnn':
-            model = MCNN(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnn4':
-            model = MCNN4(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnnL':
-            model = LMCNN(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnnLW':
-            model = LWMCNN(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnnT':
+        if eval_cfg.model_names[i] == 'mcnnT':
             model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
                         sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         elif eval_cfg.model_names[i] == 'mcnnTMax':
             model = MaxoutMCNNT(eval_cfg.num_classes, NEW_SIZE,
+                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        elif eval_cfg.model_names[i] == 'mcnnNoisy':
+            model = NoisyMCNN(eval_cfg.num_classes, NEW_SIZE,
                         sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         else:
             print(f'unknown network architecture {eval_cfg.model_names[i]}')

@@ -5,8 +5,8 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['maxout-0.1-full-final', 'mcnnt-0.1-full-final']
-  model-names: ['mcnnTMax', 'mcnnT']
+  runs: ['mcnnt-0.1-full-final', 'noisy-se3-full-0.1drop']
+  model-names: ['mcnnT', 'mcnnNoisy']
   model-versions: ['best', 'best']
   aggregation-types: ['bilinear', 'bilinear']
 
