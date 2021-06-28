@@ -157,7 +157,7 @@ class SampleWindow:
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
-        for idx, (_, rgbs, labels, masks, car_transforms, _) in enumerate(dloader):
+        for idx, (rgbs, labels, masks, car_transforms, _) in enumerate(dloader):
             print(f'\r{idx + 1}/{total_length}', end='')
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                             masks, car_transforms,
@@ -203,7 +203,7 @@ class SampleWindow:
             exec(f"self.masked_iou_label_{i}.configure(text='{mskd_iou_txt}')")
 
     def change_sample(self):
-        (_, rgbs, labels, masks, car_transforms, batch_index) = next(self.dset_iterator)
+        (rgbs, labels, masks, car_transforms, batch_index) = next(self.dset_iterator)
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
                                                         self.device)

@@ -52,7 +52,6 @@ class MassHDF5(torch.utils.data.Dataset):
             self.hdf5 = h5py.File(self.full_path, 'r')
             self.dataset = self.hdf5[self.dset_name]
 
-        ids = []
         rgbs = []
         semsegs = []
         masks = []
@@ -60,8 +59,6 @@ class MassHDF5(torch.utils.data.Dataset):
         b_agent_count = self.batch_sizes[idx]
         b_start_idx = self.batch_indices[idx]
         for i in range(b_agent_count):
-            # Agent ID
-            ids.append(torch.tensor([self.dataset[b_start_idx + i, "agent_id"]], dtype=torch.long))
             # RGB Image: H, W, C
             rgbs.append(self.rgb_transform(self.dataset[b_start_idx + i, "front_rgb"]
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
@@ -78,7 +75,7 @@ class MassHDF5(torch.utils.data.Dataset):
             # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, "transform"]
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
-        return torch.stack(ids), torch.stack(rgbs), torch.stack(semsegs), torch.stack(masks), \
+        return torch.stack(rgbs), torch.stack(semsegs), torch.stack(masks), \
                torch.stack(car_transforms), torch.LongTensor([idx])
 
     def __len__(self):

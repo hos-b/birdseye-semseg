@@ -54,7 +54,7 @@ def train(**kwargs):
         sample_count = 0
         # training
         model.train()
-        for batch_idx, (ids, rgbs, labels, masks, car_transforms, _) in enumerate(train_loader):
+        for batch_idx, (rgbs, labels, masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
                                                             car_transforms, device)
@@ -62,11 +62,10 @@ def train(**kwargs):
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
-            import pdb; pdb.set_trace()
             # semseg & mask batch loss
             batch_train_m_loss = 0.0
             batch_train_s_loss = 0.0
-            agent_pool.generate_connection_strategy(ids, masks, car_transforms,
+            agent_pool.generate_connection_strategy(masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # fwd-bwd
@@ -122,14 +121,14 @@ def train(**kwargs):
         sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(0)
         mask_ious = 0.0
         sample_count = 0
-        for batch_idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
+        for batch_idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
             print(f'\repoch: {ep + 1}/{epochs}, '
                   f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
                                                             car_transforms, device)
-            agent_pool.generate_connection_strategy(ids, masks, car_transforms,
+            agent_pool.generate_connection_strategy(masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # add se2 noise to transforms
@@ -157,12 +156,12 @@ def train(**kwargs):
                     wandb.Image(first_batch_img, caption='full batch predictions')
                 if train_cfg.visualize_hard_batches:
                     for hard_batch_idx in train_cfg.hard_batches_indices:
-                        (hids, hrgbs, hlabels, hmasks, htransforms, _) = \
+                        (hrgbs, hlabels, hmasks, htransforms, _) = \
                             valid_set.__getitem__(hard_batch_idx)
                         
                         hrgbs, hlabels, hmasks, htransforms = to_device(hrgbs, hlabels, hmasks,
                                                                         htransforms, device)
-                        agent_pool.generate_connection_strategy(hids, hmasks, htransforms,
+                        agent_pool.generate_connection_strategy(hmasks, htransforms,
                                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                                 CENTER[0], CENTER[1])
                         if train_cfg.se2_noise_enable:

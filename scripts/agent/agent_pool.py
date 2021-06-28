@@ -21,7 +21,7 @@ class CurriculumPool:
         self.adjacency_matrix = None
         self.max_agent_count = maximum_agent_count
 
-    def generate_connection_strategy(self, ids, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
+    def generate_connection_strategy(self, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
         """
         combines all masks, find the best masks for each agent &
         create adjacency matrix based on current difficulty
@@ -41,8 +41,8 @@ class CurriculumPool:
         self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
         # identifying the masks (giving them ids)
         new_masks = masks.clone()
-        for i in range(ids.shape[1]):
-            new_masks[i] *= 1 << ids[0, i, 0].item()
+        for i in range(self.agent_count):
+            new_masks[i] *= 1 << i
         self.combined_masks = get_all_aggregate_masks(new_masks, transforms, pixels_per_meter, h, w,
                                                       center_x, center_y, 'nearest').long()
         # using the unique ids of the masks to find biggest 

@@ -108,12 +108,12 @@ def evaluate(**kwargs):
     probs = [1 - sample_plot_prob, sample_plot_prob] 
     # plot stuff
     columns = 6
-    for idx, (ids, rgbs, labels, masks, car_transforms, batch_no) in enumerate(loader):
+    for idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(loader):
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
                                                         device)
         rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-        agent_pool.generate_connection_strategy(ids, masks, car_transforms,
+        agent_pool.generate_connection_strategy(masks, car_transforms,
                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                 CENTER[0], CENTER[1])
         print(f"index {idx + 1}/{len(loader)}")
