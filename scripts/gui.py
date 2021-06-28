@@ -14,6 +14,7 @@ from data.color_map import convert_semantics_to_rgb
 from data.color_map import __our_classes as segmentation_classes
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
+from data.utils import get_noisy_transforms
 from metrics.iou import iou_per_class
 from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
 from model.mcnn import MCNN, MCNN4
@@ -145,8 +146,8 @@ class SampleWindow:
         self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
         self.update_prediction()
     
-    def calculate_ious(self, dataset: MassHDF5, evaluate: bool):
-        if not evaluate:
+    def calculate_ious(self, dataset: MassHDF5, eval_cfg: EvaluationConfig):
+        if not eval_cfg.evaluate_at_start:
             print('full dataset evaluation disabled in yaml file')
             for i, (network) in enumerate(self.networks.keys()):
                 exec(f"self.full_iou_label_{i}.configure(text='network not evaluated')")
@@ -163,9 +164,14 @@ class SampleWindow:
                                                             masks, car_transforms,
                                                             self.device)
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            aggregate_masks = get_all_aggregate_masks(masks, car_transforms, self.ppm,
+            gt_aggregate_masks = get_all_aggregate_masks(masks, car_transforms, self.ppm,
                                                       self.output_h, self.output_w,
                                                       self.center_x, self.center_y)
+            if eval_cfg.se2_noise_enable:
+                car_transforms = get_noisy_transforms(car_transforms,
+                                                      eval_cfg.se2_noise_dx_std,
+                                                      eval_cfg.se2_noise_dy_std,
+                                                      eval_cfg.se2_noise_th_std)
             agent_count = rgbs.shape[0]
             sample_count += agent_count
             full_adjacency_matrix = torch.ones(agent_count, agent_count)
@@ -190,8 +196,8 @@ class SampleWindow:
                     with torch.no_grad():
                         ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
                                                                                 agent_count)))
-                self.mskd_ious[name] += iou_per_class(ss_preds, labels, aggregate_masks).to(self.device)
-                self.full_ious[name] += iou_per_class(ss_preds, labels, torch.ones_like(aggregate_masks)).to(self.device)
+                self.mskd_ious[name] += iou_per_class(ss_preds, labels, gt_aggregate_masks).to(self.device)
+                self.full_ious[name] += iou_per_class(ss_preds, labels, torch.ones_like(gt_aggregate_masks)).to(self.device)
 
         for i, (network) in enumerate(self.networks.keys()):
             full_iou_txt = 'full IoU  '
@@ -376,7 +382,7 @@ def main():
         print(f'loading {snapshot_path}')
         gui.add_network(model, eval_cfg.runs[i])
     # evaluate the added networks
-    gui.calculate_ious(test_set, eval_cfg.evaluate_at_start)
+    gui.calculate_ious(test_set, eval_cfg)
     # start the gui
     gui.start()
 
