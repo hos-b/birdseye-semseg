@@ -8,7 +8,6 @@ import kornia
 
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
-from model.se3_attention import SE3Transfomer
 
 class LMCNN(nn.Module):
     """

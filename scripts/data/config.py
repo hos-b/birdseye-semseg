@@ -61,15 +61,15 @@ class TrainingConfig:
         self.loss_function = str(conf['training']['loss'])
         self.weight_losses = bool(conf['training']['weight-losses'])
         # noise parameters
-        self.se3_noise_enable = conf['se3-noise']['enable']
-        if self.se3_noise_enable:
-            self.se3_noise_th_std = float(conf['se3-noise']['se3-noise-theta-std'])
-            self.se3_noise_dx_std = float(conf['se3-noise']['se3-noise-dx-std'])
-            self.se3_noise_dy_std = float(conf['se3-noise']['se3-noise-dy-std'])
+        self.se2_noise_enable = conf['se2-noise']['enable']
+        if self.se2_noise_enable:
+            self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
+            self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
+            self.se2_noise_dy_std = float(conf['se2-noise']['se2-noise-dy-std'])
         else:
-            self.se3_noise_th_std = 0.0
-            self.se3_noise_dx_std = 0.0
-            self.se3_noise_dy_std = 0.0
+            self.se2_noise_th_std = 0.0
+            self.se2_noise_dx_std = 0.0
+            self.se2_noise_dy_std = 0.0
         # network
         self.model_name = str(conf['network']['model-name'])
         self.aggregation_type = str(conf['network']['aggregation-type'])
@@ -127,9 +127,9 @@ class TrainingConfig:
         if self.aggregation_type != 'bilinear' and self.aggregation_type != 'nearest':
             print(f'sanity-check-error: unkown aggregation type {self.aggregation_type}.')
             exit()
-        if self.se3_noise_enable:
-            if self.se3_noise_dx_std == 0 and self.se3_noise_dy_std == 0 and self.se3_noise_th_std == 0:
-                print(f'sanity-check-error: noise std cannot be 0 if se3 noise is enabled.')
+        if self.se2_noise_enable:
+            if self.se2_noise_dx_std == 0 and self.se2_noise_dy_std == 0 and self.se2_noise_th_std == 0:
+                print(f'sanity-check-error: noise std cannot be 0 if se2 noise is enabled.')
                 exit()
         if self.initial_difficulty < 1 or self.initial_difficulty > self.max_agent_count:
             print(f'sanity-check-error: invalid initial difficulty {self.initial_difficulty}.')
@@ -182,15 +182,15 @@ class EvaluationConfig:
         self.baseline_model_name = str(conf['gui']['baseline-model-name'])
         self.baseline_model_version = str(conf['gui']['baseline-model-version'])
         # noise parameters
-        self.se3_noise_enable = conf['se3-noise']['enable']
-        if self.se3_noise_enable:
-            self.se3_noise_th_std = float(conf['se3-noise']['se3-noise-theta-std'])
-            self.se3_noise_dx_std = float(conf['se3-noise']['se3-noise-dx-std'])
-            self.se3_noise_dy_std = float(conf['se3-noise']['se3-noise-dy-std'])
+        self.se2_noise_enable = conf['se2-noise']['enable']
+        if self.se2_noise_enable:
+            self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
+            self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
+            self.se2_noise_dy_std = float(conf['se2-noise']['se2-noise-dy-std'])
         else:
-            self.se3_noise_th_std = 0.0
-            self.se3_noise_dx_std = 0.0
-            self.se3_noise_dy_std = 0.0
+            self.se2_noise_th_std = 0.0
+            self.se2_noise_dx_std = 0.0
+            self.se2_noise_dy_std = 0.0
         # plotting parameters
         self.plot_count = int(conf['plot']['count'])
         self.plot_type = str(conf['plot']['plot-type'])
@@ -218,9 +218,9 @@ class EvaluationConfig:
         if self.device != 'cuda' and self.device != 'cpu':
             print(f'sanity-check-error: unknown device {self.device}.')
             exit()
-        if self.se3_noise_enable:
-            if self.se3_noise_dx_std == 0 and self.se3_noise_dy_std == 0 and self.se3_noise_th_std == 0:
-                print(f'sanity-check-error: noise std cannot be 0 if se3 noise is enabled.')
+        if self.se2_noise_enable:
+            if self.se2_noise_dx_std == 0 and self.se2_noise_dy_std == 0 and self.se2_noise_th_std == 0:
+                print(f'sanity-check-error: noise std cannot be 0 if se2 noise is enabled.')
                 exit() 
         if self.difficulty < 1 or self.difficulty > self.max_agent_count:
             print(f'sanity-check-error: invalid difficulty {self.difficulty}.')
@@ -228,3 +228,14 @@ class EvaluationConfig:
         if self.output_h > 500 or self.output_w > 400:
             print(f'sanity-check-error: output size {self.output_h}x{self.output_w} is invalid.')
             exit()
+        for i in range(len(self.model_versions)):
+            if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':
+                print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version')
+                exit()
+        if self.baseline_model_version != 'best' and self.baseline_model_version != 'last':
+            print(f'sanity-check-error: {self.baseline_model_version} is not a valid model version')
+            exit()
+        for i in range(len(self.aggregation_types)):
+            if self.aggregation_types[i] != 'bilinear' and self.aggregation_types[i] != 'nearest':
+                print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type')
+                exit()

@@ -345,12 +345,9 @@ def main():
     gui.add_network(baseline_model, 'baseline')
     # other network stuff
     for i in range(len(eval_cfg.runs)):
-        if eval_cfg.model_versions[i] != 'best' and eval_cfg.model_versions[i] != 'last':
-            print("valid model version are 'best' and 'last'")
-            exit()
-        eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[i])
+        snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[i])
         snapshot_path = f'{eval_cfg.model_versions[i]}_model.pth'
-        snapshot_path = eval_cfg.snapshot_dir + '/' + snapshot_path
+        snapshot_path = snapshot_dir + '/' + snapshot_path
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
             exit()

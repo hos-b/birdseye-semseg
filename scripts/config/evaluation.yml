@@ -5,23 +5,23 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['drop-0.1-full-deconv']
-  model-names: ['mcnnT']
-  model-versions: ['best']
-  aggregation-types: ['bilinear']
+  runs: ['maxout-0.1-full-final', 'mcnnt-0.1-full-final']
+  model-names: ['mcnnTMax', 'mcnnT']
+  model-versions: ['best', 'best']
+  aggregation-types: ['bilinear', 'bilinear']
 
 gui:
-  evalutate-at-start: false
-  baseline-run: 'baseline-deconv'
+  evalutate-at-start: true
+  baseline-run: 'mcnnt-baseline-final2'
   baseline-model-name: 'mcnnT'
   baseline-model-version: 'best'
 
 # only available for mcnnNoisy and onwards
-se3-noise:
+se2-noise:
   enable: false
-  se3-noise-theta-std: 2.0 # degrees
-  se3-noise-dx-std: 0.5    # meters
-  se3-noise-dy-std: 0.5    # meters
+  se2-noise-theta-std: 2.0 # degrees
+  se2-noise-dx-std: 0.5    # meters
+  se2-noise-dy-std: 0.5    # meters
 
 plot:
   count: 10
@@ -39,5 +39,5 @@ dataset:
   output-h: 256
   output-w: 205
   dataset-dir: '/export/home/aiscar4/mass-data'
-  dataset-file: 'towns_5.hdf5'
+  dataset-file: 'noisy_towns1.hdf5'
   dataset-name: 'validation_set'

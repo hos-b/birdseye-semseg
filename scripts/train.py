@@ -15,9 +15,10 @@ from data.config import SemanticCloudConfig, TrainingConfig
 import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.logging import init_wandb
-from data.utils import drop_agent_data, squeeze_all
-from data.utils import to_device
 from metrics.iou import iou_per_class, mask_iou
+from data.utils import drop_agent_data, squeeze_all
+from data.utils import get_noisy_transforms
+from data.utils import to_device
 from model.mcnn import MCNN, MCNN4
 from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
@@ -61,6 +62,7 @@ def train(**kwargs):
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
+            import pdb; pdb.set_trace()
             # semseg & mask batch loss
             batch_train_m_loss = 0.0
             batch_train_s_loss = 0.0
@@ -69,6 +71,12 @@ def train(**kwargs):
                                                     CENTER[0], CENTER[1])
             # fwd-bwd
             optimizer.zero_grad()
+            # add se2 noise
+            if train_cfg.se2_noise_enable:
+                car_transforms = get_noisy_transforms(car_transforms,
+                                                      train_cfg.se2_noise_dx_std,
+                                                      train_cfg.se2_noise_dy_std,
+                                                      train_cfg.se2_noise_th_std)
             sseg_preds, mask_preds = model(rgbs, car_transforms,
                                            agent_pool.adjacency_matrix)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
@@ -124,6 +132,12 @@ def train(**kwargs):
             agent_pool.generate_connection_strategy(ids, masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
+            # add se2 noise to transforms
+            if train_cfg.se2_noise_enable:
+                car_transforms = get_noisy_transforms(car_transforms,
+                                                      train_cfg.se2_noise_dx_std,
+                                                      train_cfg.se2_noise_dy_std,
+                                                      train_cfg.se2_noise_th_std)
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
@@ -145,12 +159,17 @@ def train(**kwargs):
                     for hard_batch_idx in train_cfg.hard_batches_indices:
                         (hids, hrgbs, hlabels, hmasks, htransforms, _) = \
                             valid_set.__getitem__(hard_batch_idx)
-                        hagent_count = hrgbs.shape[0]
+                        
                         hrgbs, hlabels, hmasks, htransforms = to_device(hrgbs, hlabels, hmasks,
                                                                         htransforms, device)
                         agent_pool.generate_connection_strategy(hids, hmasks, htransforms,
                                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                                 CENTER[0], CENTER[1])
+                        if train_cfg.se2_noise_enable:
+                            htransforms = get_noisy_transforms(htransforms,
+                                                      train_cfg.se2_noise_dx_std,
+                                                      train_cfg.se2_noise_dy_std,
+                                                      train_cfg.se2_noise_th_std)
                         with torch.no_grad():
                             hsseg_preds, hmask_preds = \
                                 model(hrgbs, htransforms, agent_pool.adjacency_matrix)
@@ -290,10 +309,7 @@ def parse_and_execute():
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnNoisy':
         model = NoisyMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type,
-                    train_cfg.se3_noise_dx_std,
-                    train_cfg.se3_noise_dy_std,
-                    train_cfg.se3_noise_th_std).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()
