@@ -19,8 +19,7 @@ from metrics.iou import iou_per_class, mask_iou
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_noisy_transforms
 from data.utils import to_device
-from model.mcnn import MCNN, MCNN4
-from model.large_mcnn import LMCNN, LWMCNN, TransposedMCNN, MaxoutMCNNT
+from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
 from evaluate import plot_batch
 
