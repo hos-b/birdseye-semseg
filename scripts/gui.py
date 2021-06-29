@@ -1,5 +1,4 @@
 import os
-from tkinter.constants import HORIZONTAL
 import cv2
 import torch
 import kornia
@@ -62,6 +61,27 @@ class SampleWindow:
         self.agent_label. grid(column=22, row=0, columnspan=4)
         self.smask_button.grid(column=22, row=3, columnspan=4)
         self.next_sample. grid(column=22, row=4, columnspan=4)
+        # noise parameters
+        self.noise_label     = tkinter.Label(self.window, text=f'noise parameters')
+        self.noise_label.    grid(column=22, row=5, columnspan=4)
+        self.dx_noise_label  = tkinter.Label(self.window, text=f'std-x:')
+        self.dx_noise_label. grid(column=22, row=6, columnspan=2)
+        self.dx_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dx_std}')
+        self.dx_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dx_noise_text)
+        self.dx_noise_entry. grid(column=24, row=6, columnspan=2)
+        self.dy_noise_label  = tkinter.Label(self.window, text=f'std-y:')
+        self.dy_noise_label. grid(column=22, row=7, columnspan=2)
+        self.dy_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dy_std}')
+        self.dy_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dy_noise_text)
+        self.dy_noise_entry. grid(column=24, row=7, columnspan=2)
+        self.th_noise_label  = tkinter.Label(self.window, text=f'std-yaw:')
+        self.th_noise_label. grid(column=22, row=8, columnspan=2)
+        self.th_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_th_std}')
+        self.th_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.th_noise_text)
+        self.th_noise_entry. grid(column=24, row=8, columnspan=2)
+        self.apply_noise     = tkinter.Button(self.window, command=self.apply_noise_params, text='undertaker')
+        self.apply_noise.    grid(column=22, row=9, columnspan=4)
+
         # adjacency matrix buttons
         self.sep_2 = tkinter.Label(self.window, text='  ')
         self.sep_2.grid(row=0, rowspan=10, column=26)
@@ -147,6 +167,30 @@ class SampleWindow:
         self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
         self.update_prediction()
     
+    def apply_noise_params(self):
+        th_std = self.eval_cfg.se2_noise_th_std
+        dy_std = self.eval_cfg.se2_noise_dx_std
+        dx_std = self.eval_cfg.se2_noise_dy_std
+        try:
+            th_std = float(self.th_noise_text.get())
+        except ValueError:
+            print(f'invalid noise parameter {self.th_noise_text.get()}')
+            self.th_noise_text.set(f'{self.eval_cfg.se2_noise_th_std}')
+        try:
+            dx_std = float(self.dx_noise_text.get())
+        except ValueError:
+            print(f'invalid noise parameter {self.dx_noise_text.get()}')
+            self.dx_noise_text.set(f'{self.eval_cfg.se2_noise_dx_std}')
+        try:
+            dy_std = float(self.dy_noise_text.get())
+        except ValueError:
+            print(f'invalid noise parameter {self.dy_noise_text.get()}')
+            self.dy_noise_text.set(f'{self.eval_cfg.se2_noise_dy_std}')
+        self.eval_cfg.se2_noise_th_std = th_std
+        self.eval_cfg.se2_noise_dx_std = dx_std
+        self.eval_cfg.se2_noise_dy_std = dy_std
+        self.update_prediction()
+
     def calculate_ious(self, dataset: MassHDF5):
         if not self.eval_cfg.evaluate_at_start:
             print('full dataset evaluation disabled in yaml file')
@@ -240,11 +284,10 @@ class SampleWindow:
     def update_prediction(self):
         (rgbs, labels, _, car_transforms) = self.current_data
         
-        if self.eval_cfg.se2_noise_enable:
-            car_transforms = get_noisy_transforms(car_transforms,
-                                                  self.eval_cfg.se2_noise_dx_std,
-                                                  self.eval_cfg.se2_noise_dy_std,
-                                                  self.eval_cfg.se2_noise_th_std)
+        car_transforms = get_noisy_transforms(car_transforms,
+                                                self.eval_cfg.se2_noise_dx_std,
+                                                self.eval_cfg.se2_noise_dy_std,
+                                                self.eval_cfg.se2_noise_th_std)
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
@@ -371,7 +414,7 @@ def main():
         print(f'loading {snapshot_path}')
         gui.add_network(model, eval_cfg.runs[i])
     # evaluate the added networks
-    gui.calculate_ious(test_set, eval_cfg)
+    gui.calculate_ious(test_set)
     # start the gui
     gui.start()
 
