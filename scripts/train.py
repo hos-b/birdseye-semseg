@@ -155,6 +155,7 @@ def train(**kwargs):
                     wandb.Image(first_batch_img, caption='full batch predictions')
                 if train_cfg.visualize_hard_batches:
                     for hard_batch_idx in train_cfg.hard_batches_indices:
+                        # no need to squeeze with __getitem__
                         (hrgbs, hlabels, hmasks, htransforms, _) = \
                             valid_set.__getitem__(hard_batch_idx)
                         

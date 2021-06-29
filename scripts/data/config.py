@@ -239,3 +239,74 @@ class EvaluationConfig:
             if self.aggregation_types[i] != 'bilinear' and self.aggregation_types[i] != 'nearest':
                 print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type')
                 exit()
+
+
+class ReportConfig:
+    def __init__(self, file_path: str):
+        yaml_file = open(file_path)
+        conf = yaml.load(yaml_file, Loader=yaml.FullLoader)
+        yaml_file.close()
+        # evaluation parameters
+        self.report_name = str(conf['report-name'])
+        self.device = str(conf['device'])
+        self.torch_seed = int(conf['torch-seed'])
+        self.snapshot_dir = str(conf['snapshot-dir'])
+        self.log_dir = str(conf['log-dir'])
+        # model parameters
+        self.runs = list(conf['models']['runs'])
+        self.model_names = list(conf['models']['model-names'])
+        self.model_versions = list(conf['models']['model-versions'])
+        self.aggregation_types = list(conf['models']['aggregation-types'])
+        # noise parameters
+        self.se2_noise_enable = conf['se2-noise']['enable']
+        if self.se2_noise_enable:
+            self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
+            self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
+            self.se2_noise_dy_std = float(conf['se2-noise']['se2-noise-dy-std'])
+        else:
+            self.se2_noise_th_std = 0.0
+            self.se2_noise_dx_std = 0.0
+            self.se2_noise_dy_std = 0.0
+        # hard batches
+        self.hard_batch_indices = list(conf['hard-batch']['indices'])
+        self.hard_batch_labels = list(conf['hard-batch']['labels'])
+        # curriculum parameters
+        self.difficulty = int(conf['curriculum']['difficulty'])
+        self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
+        # dataset parameters
+        self.random_samples = bool(conf['dataset']['random-samples'])
+        self.dset_dir = str(conf['dataset']['dataset-dir'])
+        self.dset_file = str(conf['dataset']['dataset-file'])
+        self.dset_name = str(conf['dataset']['dataset-name'])
+        self.output_h = int(conf['dataset']['output-h'])
+        self.output_w = int(conf['dataset']['output-w'])
+        self.classes = str(conf['dataset']['classes'])
+        self.num_classes = num_classes_dict[self.classes]
+        self.perform_sanity_check()
+    
+    def perform_sanity_check(self):
+        """
+        performs a sanity check to make sure the given parameters are not
+        absolutely wrong
+        """
+        if self.device != 'cuda' and self.device != 'cpu':
+            print(f'sanity-check-error: unknown device {self.device}.')
+            exit()
+        if self.difficulty < 1 or self.difficulty > self.max_agent_count:
+            print(f'sanity-check-error: invalid difficulty {self.difficulty}.')
+            exit()
+        if self.output_h > 500 or self.output_w > 400:
+            print(f'sanity-check-error: output size {self.output_h}x{self.output_w} is invalid.')
+            exit()
+        for i in range(len(self.model_versions)):
+            if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':
+                print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version')
+                exit()
+        for i in range(len(self.aggregation_types)):
+            if self.aggregation_types[i] != 'bilinear' and self.aggregation_types[i] != 'nearest':
+                print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type')
+                exit()
+        if self.se2_noise_enable:
+            if self.se2_noise_dx_std == 0 and self.se2_noise_dy_std == 0 and self.se2_noise_th_std == 0:
+                print(f'sanity-check-error: noise std cannot be 0 if se2 noise is enabled.')
+                exit()

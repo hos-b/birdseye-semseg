@@ -1,0 +1,34 @@
+report-name: 'initial-report'
+device: 'cuda'
+torch-seed: 0
+snapshot-dir: './runs/{}/snapshots'
+log-dir: './log'
+
+models:
+  runs: ['mcnnt-0.1-full-final', 'noisy-se3-full-0.1drop']
+  model-names: ['mcnnT', 'mcnnNoisy']
+  model-versions: ['best', 'best']
+  aggregation-types: ['bilinear', 'bilinear']
+
+se2-noise:
+  enable: false
+  se2-noise-theta-std: 3.0 # degrees
+  se2-noise-dx-std: 0.4    # meters
+  se2-noise-dy-std: 0.4    # meters
+
+hard-batch:
+  indices: [246,           377,      566,         711,       840,          852]
+  labels: ['street-hole', 'busy-T', 'very-yawy', 'crowded', 'T-junction', 'sharp-turns']
+
+curriculum:
+  difficulty: 8
+  maximum-agent-count: 8
+
+dataset:
+  random-samples: false
+  classes: 'ours'
+  output-h: 256
+  output-w: 205
+  dataset-dir: '/export/home/aiscar4/mass-data'
+  dataset-file: 'noisy_towns1.hdf5'
+  dataset-name: 'validation_set'
