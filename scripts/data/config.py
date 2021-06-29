@@ -102,6 +102,11 @@ class TrainingConfig:
         self.validset_file = str(conf['dataset']['validset-file'])
         self.trainset_name = str(conf['dataset']['trainset-name'])
         self.validset_name = str(conf['dataset']['validset-name'])
+        # cross entropy weights
+        if self.loss_function == 'weighted-cross-entropy':
+            self.ce_weights = list(conf['training']['ce-weights'])
+        else:
+            self.ce_weights = [1.0] * self.num_classes
         # resume
         self.resume_training = bool(conf['resume']['flag'])
         self.resume_tag = str(conf['resume']['tag'])
@@ -121,7 +126,8 @@ class TrainingConfig:
         if self.device != 'cuda' and self.device != 'cpu':
             print(f'sanity-check-error: unknown device {self.device}.')
             exit()
-        if self.loss_function != 'cross-entropy' and self.loss_function != 'focal':
+        if self.loss_function != 'cross-entropy' and self.loss_function != 'focal' \
+                and self.loss_function != 'weighted-cross-entropy':
             print(f'sanity-check-error: unkown loss function {self.loss_function}.')
             exit()
         if self.aggregation_type != 'bilinear' and self.aggregation_type != 'nearest':

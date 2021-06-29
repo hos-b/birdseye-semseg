@@ -57,7 +57,7 @@ def train(**kwargs):
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
                                                             car_transforms, device)
-            # simulate connection drops [disabled for now]
+            # simulate connection drops
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
@@ -350,6 +350,8 @@ def parse_and_execute():
     # losses ------------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
+    elif train_cfg.loss_function == 'weighted-cross-entropy':
+        semseg_loss = nn.CrossEntropyLoss(weight=torch.tensor(train_cfg.ce_weights), reduction='none')
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')

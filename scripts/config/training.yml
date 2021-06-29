@@ -7,16 +7,17 @@ logging:
 
 training:
   device: 'cuda'
-  torch-seed: 20
-  loss: 'cross-entropy' # or 'cross-entropy'
+  torch-seed: 0
+  loss: 'weighted-cross-entropy'
   weight-losses: true
+  ce-weights: [2.2784e-02, 1.6350e-02, 1.0, 6.5967e-01, 1.4175e-01, 1.5866e-01, 4.1686e-04]
 
 # only available for mcnnNoisy and onwards
 se2-noise:
   enable: false
-  se2-noise-theta-std: 2.0 # degrees
-  se2-noise-dx-std: 0.5    # meters
-  se2-noise-dy-std: 0.5    # meters
+  se2-noise-theta-std: 4.0 # degrees
+  se2-noise-dx-std: 0.6    # meters
+  se2-noise-dy-std: 0.6    # meters
 
 network:
   model-name: 'mcnnNoisy'
