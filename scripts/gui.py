@@ -20,7 +20,7 @@ from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
 
 class SampleWindow:
-    def __init__(self, semantic_classes: str, num_classes: int, device: torch.device, new_size, center, ppm):
+    def __init__(self, eval_cfg: EvaluationConfig, device: torch.device, new_size, center, ppm):
         # network stuff
         self.networks = {}
         self.output_h = new_size[0]
@@ -28,8 +28,9 @@ class SampleWindow:
         self.center_x = center[0]
         self.center_y = center[1]
         self.ppm = ppm
-        self.semantic_classes = semantic_classes
-        self.class_count = num_classes
+        self.eval_cfg = eval_cfg
+        self.semantic_classes = eval_cfg.classes
+        self.class_count = eval_cfg.num_classes
         self.device = device
         self.current_data = None
         self.adjacency_matrix = None
@@ -146,8 +147,8 @@ class SampleWindow:
         self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
         self.update_prediction()
     
-    def calculate_ious(self, dataset: MassHDF5, eval_cfg: EvaluationConfig):
-        if not eval_cfg.evaluate_at_start:
+    def calculate_ious(self, dataset: MassHDF5):
+        if not self.eval_cfg.evaluate_at_start:
             print('full dataset evaluation disabled in yaml file')
             for i, (network) in enumerate(self.networks.keys()):
                 exec(f"self.full_iou_label_{i}.configure(text='network not evaluated')")
@@ -167,11 +168,11 @@ class SampleWindow:
             gt_aggregate_masks = get_all_aggregate_masks(masks, car_transforms, self.ppm,
                                                       self.output_h, self.output_w,
                                                       self.center_x, self.center_y)
-            if eval_cfg.se2_noise_enable:
+            if self.eval_cfg.se2_noise_enable:
                 car_transforms = get_noisy_transforms(car_transforms,
-                                                      eval_cfg.se2_noise_dx_std,
-                                                      eval_cfg.se2_noise_dy_std,
-                                                      eval_cfg.se2_noise_th_std)
+                                                      self.eval_cfg.se2_noise_dx_std,
+                                                      self.eval_cfg.se2_noise_dy_std,
+                                                      self.eval_cfg.se2_noise_th_std)
             agent_count = rgbs.shape[0]
             sample_count += agent_count
             full_adjacency_matrix = torch.ones(agent_count, agent_count)
@@ -238,6 +239,12 @@ class SampleWindow:
 
     def update_prediction(self):
         (rgbs, labels, _, car_transforms) = self.current_data
+        
+        if self.eval_cfg.se2_noise_enable:
+            car_transforms = get_noisy_transforms(car_transforms,
+                                                  self.eval_cfg.se2_noise_dx_std,
+                                                  self.eval_cfg.se2_noise_dy_std,
+                                                  self.eval_cfg.se2_noise_th_std)
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
@@ -316,7 +323,7 @@ def main():
     CENTER = (sem_cfg.center_x(NEW_SIZE[1]), sem_cfg.center_y(NEW_SIZE[0]))
     PPM = sem_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
     # gui object
-    gui = SampleWindow(eval_cfg.classes, eval_cfg.num_classes, device, NEW_SIZE, CENTER, PPM)
+    gui = SampleWindow(eval_cfg, device, NEW_SIZE, CENTER, PPM)
     # dataloader stuff
     test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
                         hdf5name=eval_cfg.dset_file, size=NEW_SIZE,
