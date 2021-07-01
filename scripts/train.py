@@ -61,9 +61,6 @@ def train(**kwargs):
             rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
                                                                   masks, car_transforms,
                                                                   train_cfg.drop_prob)
-            # semseg & mask batch loss
-            batch_train_m_loss = 0.0
-            batch_train_s_loss = 0.0
             agent_pool.generate_connection_strategy(masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
@@ -80,8 +77,9 @@ def train(**kwargs):
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))
-            batch_train_m_loss += m_loss.item()
-            batch_train_s_loss += s_loss.item()
+            # semseg & mask batch loss
+            batch_train_m_loss = m_loss.item()
+            batch_train_s_loss = s_loss.item()
             # weighted losses
             if train_cfg.weight_losses:
                 (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
@@ -141,10 +139,9 @@ def train(**kwargs):
             sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
                                        train_cfg.num_classes).cuda(0)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
-            m_loss = mask_loss(mask_preds.squeeze(1), masks)
-            s_loss = semseg_loss(sseg_preds, labels) * agent_pool.combined_masks
-            total_valid_m_loss += torch.mean(m_loss).detach()
-            total_valid_s_loss += torch.mean(s_loss).detach()
+            # sum up losses
+            total_valid_m_loss += mask_loss(mask_preds.squeeze(1), masks).item()
+            total_valid_s_loss += (semseg_loss(sseg_preds, labels) * agent_pool.combined_masks).item()
             # visualize a random batch and all hard batches [if enabled]
             if not visualized and log_enable:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
@@ -190,8 +187,8 @@ def train(**kwargs):
             if val != 'Misc' and val != 'Water':
                 elevation_metric += sseg_ious[key] / sample_count
         elevation_metric += mask_ious / sample_count
-        log_dict['loss/total validation mask'] = (total_valid_m_loss / sample_count).item()
-        log_dict['loss/total validation sseg'] = (total_valid_s_loss / sample_count).item()
+        log_dict['loss/total validation mask'] = (total_valid_m_loss / sample_count)
+        log_dict['loss/total validation sseg'] = (total_valid_s_loss / sample_count)
         log_dict['iou/mask'] = (mask_ious / sample_count).item()
         log_dict['misc/epoch'] = ep + 1
         log_dict['misc/save'] = 0
