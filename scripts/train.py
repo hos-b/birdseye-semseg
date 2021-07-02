@@ -141,7 +141,8 @@ def train(**kwargs):
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             # sum up losses
             total_valid_m_loss += mask_loss(mask_preds.squeeze(1), masks).item()
-            total_valid_s_loss += (semseg_loss(sseg_preds, labels) * agent_pool.combined_masks).item()
+            total_valid_s_loss += torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
+                                             dim=(0, 1, 2)).item()
             # visualize a random batch and all hard batches [if enabled]
             if not visualized and log_enable:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
