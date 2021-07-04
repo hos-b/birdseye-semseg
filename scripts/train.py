@@ -202,9 +202,9 @@ def train(**kwargs):
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
-        if log_dict['loss/total validation sseg'] < last_snapshot_metric:
+        if log_dict['curriculum/elevation metric'] < last_snapshot_metric:
             print(f'best model @ epoch {ep + 1}')
-            last_snapshot_metric = log_dict['loss/total validation sseg']
+            last_snapshot_metric = log_dict['curriculum/elevation metric']
             snapshot_tag = 'best'
             log_dict['misc/save'] = 1
         torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
