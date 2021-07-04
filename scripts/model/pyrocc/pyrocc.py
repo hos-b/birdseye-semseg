@@ -8,12 +8,14 @@ from model.pyrocc.classifier import LinearClassifier, BayesianClassifier
 from operator import mul
 from functools import reduce
 
+# map_resolution: spacing between adjacent grid cells in the map (m)
+
 class PyramidOccupancyNetwork(nn.Module):
     def __init__(self, map_resolution = 0.25, tfm_channels = 64, bayesian_classifer = False,
                  map_extents = [-25.0, 1.0, 25.0, 50.0], ymin = -2, ymax = 4,
                  focal_length = 630, topdown_channels = 128,
                  topdown_strides = [1, 2], topdown_layers = [4, 4],
-                 topdown_blocktype = 'blocktype', num_classes = 7, prior = None):
+                 topdown_blocktype = 'bottleneck', num_classes = 7, prior = None):
         super().__init__()
 
         # Build frontend
@@ -23,8 +25,8 @@ class PyramidOccupancyNetwork(nn.Module):
         # 0.5 = 0.25 * mul([1, 2])
         tfm_resolution = map_resolution * reduce(mul, topdown_strides)
         transformer = TransformerPyramid(256, tfm_channels, tfm_resolution,
-                                        map_extents, ymin, 
-                                        ymax, focal_length)
+                                         map_extents, ymin,
+                                         ymax, focal_length)
 
         # Build topdown network
         topdown = TopdownNetwork(tfm_channels, topdown_channels,
@@ -52,7 +54,12 @@ class PyramidOccupancyNetwork(nn.Module):
         feature_maps = self.frontend(image)
 
         # Transform image features to birds-eye-view
-        # [B, 64, 98, 100]
+        # [B, 64, 98, 100] from:
+        #   -- [1, 64, 22, 100]
+        #   -- [1, 64, 39, 100]
+        #   -- [1, 64, 20, 100]
+        #   -- [1, 64, 10, 100]
+        #   -- [1, 64,  7, 100]
         bev_feats = self.transformer(feature_maps, calib)
 
         # Apply topdown network

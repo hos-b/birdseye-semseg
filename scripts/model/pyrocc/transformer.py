@@ -33,11 +33,10 @@ class DenseTransformer(nn.Module):
         self.out_channels = channels
     
 
-    def forward(self, features, calib, *args):
+    def forward(self, features, calib):
 
         # Crop feature maps to a fixed input height
-        features = torch.stack([self._crop_feature_map(fmap, cal) 
-                                for fmap, cal in zip(features, calib)])
+        features = self._crop_feature_map(features[0], calib[0])
         
         # Reduce feature dimension to minimize memory usage
         features = F.relu(self.bn(self.conv(features)))
