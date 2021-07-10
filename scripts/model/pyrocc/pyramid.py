@@ -34,10 +34,8 @@ class TransformerPyramid(nn.Module):
             # Scale calibration matrix to account for downsampling
             scale = 8 * 2 ** i
             calib_downsamp = calib.clone()
-            calib_downsamp[:, :2] = calib[:, :2] / scale
-
+            calib_downsamp[:2] = calib[:2] / scale
             # Apply orthographic transformation to each feature map separately
             bev_feats.append(self.transformers[i](fmap, calib_downsamp))
-        
         # Combine birds-eye-view feature maps along the depth axis
         return torch.cat(bev_feats[::-1], dim=-2)

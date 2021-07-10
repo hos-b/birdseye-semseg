@@ -6,11 +6,9 @@ import torch.nn.functional as F
 from .resampler import Resampler
 
 class DenseTransformer(nn.Module):
-
     def __init__(self, in_channels, channels, resolution, grid_extents, 
                  ymin, ymax, focal_length, groups=1):
         super().__init__()
-
         # Initial convolution to reduce feature dimensions
         self.conv = nn.Conv2d(in_channels, channels, 1)
         self.bn = nn.GroupNorm(16, channels)
@@ -34,10 +32,10 @@ class DenseTransformer(nn.Module):
     
 
     def forward(self, features, calib):
-
         # Crop feature maps to a fixed input height
-        features = self._crop_feature_map(features[0], calib[0])
-        
+        features = torch.stack([self._crop_feature_map(fmap, calib) 
+                                for fmap in features])
+    
         # Reduce feature dimension to minimize memory usage
         features = F.relu(self.bn(self.conv(features)))
 
@@ -51,7 +49,6 @@ class DenseTransformer(nn.Module):
 
 
     def _crop_feature_map(self, fmap, calib):
-        
         # Compute upper and lower bounds of visible region
         focal_length, img_offset = calib[1, 1:]
         vmid = self.ymid * focal_length / self.zmin + img_offset

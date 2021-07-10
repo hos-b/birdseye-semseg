@@ -23,6 +23,7 @@ class Resampler(nn.Module):
         
         # We ignore the image v-coordinate, and assume the world Y-coordinate
         # is zero, so we only need a 2x2 submatrix of the original 3x3 matrix
+        calib = calib.unsqueeze(0).repeat(features.shape[0], 1, 1)
         calib = calib[:, [0, 2]][..., [0, 2]].view(-1, 1, 1, 2, 2)
 
         # Transform grid center locations into image u-coordinates
