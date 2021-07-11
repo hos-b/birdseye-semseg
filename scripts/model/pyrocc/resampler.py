@@ -4,7 +4,6 @@ import torch.nn.functional as F
 
 
 class Resampler(nn.Module):
-
     def __init__(self, resolution, extents):
         super().__init__()
 
@@ -17,7 +16,6 @@ class Resampler(nn.Module):
 
 
     def forward(self, features, calib):
-
         # Copy grid to the correct device
         self.grid = self.grid.to(features)
         

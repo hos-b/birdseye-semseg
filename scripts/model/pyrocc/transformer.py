@@ -12,18 +12,14 @@ class DenseTransformer(nn.Module):
         # Initial convolution to reduce feature dimensions
         self.conv = nn.Conv2d(in_channels, channels, 1)
         self.bn = nn.GroupNorm(16, channels)
-
         # Resampler transforms perspective features to BEV
         self.resampler = Resampler(resolution, grid_extents)
-
         # Compute input height based on region of image covered by grid
         self.zmin, zmax = grid_extents[1], grid_extents[3]
         self.in_height = math.ceil(focal_length * (ymax - ymin) / self.zmin)
         self.ymid = (ymin + ymax) / 2
-
         # Compute number of output cells required
         self.out_depth = math.ceil((zmax - self.zmin) / resolution)
-
         # Dense layer which maps UV features to UZ
         self.fc = nn.Conv1d(
             channels * self.in_height, channels * self.out_depth, 1, groups=groups
@@ -35,18 +31,14 @@ class DenseTransformer(nn.Module):
         # Crop feature maps to a fixed input height
         features = torch.stack([self._crop_feature_map(fmap, calib) 
                                 for fmap in features])
-    
         # Reduce feature dimension to minimize memory usage
         features = F.relu(self.bn(self.conv(features)))
-
         # Flatten height and channel dimensions
         B, C, _, W = features.shape
         flat_feats = features.flatten(1, 2)
         bev_feats = self.fc(flat_feats).view(B, C, -1, W)
-
         # Resample to orthographic grid
         return self.resampler(bev_feats, calib)
-
 
     def _crop_feature_map(self, fmap, calib):
         # Compute upper and lower bounds of visible region
@@ -54,6 +46,5 @@ class DenseTransformer(nn.Module):
         vmid = self.ymid * focal_length / self.zmin + img_offset
         vmin = math.floor(vmid - self.in_height / 2)
         vmax = math.floor(vmid + self.in_height / 2)
-
         # Pad or crop input tensor to match dimensions
         return F.pad(fmap, [0, 0, -vmin, vmax - fmap.shape[-2]])
