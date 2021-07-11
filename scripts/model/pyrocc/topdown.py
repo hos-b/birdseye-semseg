@@ -4,9 +4,8 @@ from model.pyrocc.resnet import ResNetLayer
 
 class TopdownNetwork(nn.Sequential):
 
-    def __init__(self, in_channels, channels, layers=[6, 1, 1], 
-                 strides=[1, 2, 2], blocktype='basic'):
-        
+    def __init__(self, in_channels, channels, output_size, layers=[6, 1, 1], 
+                 strides=[1, 2, 2], blocktype='basic'):        
         modules = list()
         self.downsample = 1
         for nblocks, stride in zip(layers, strides):
@@ -22,6 +21,5 @@ class TopdownNetwork(nn.Sequential):
             self.downsample *= stride
         
         self.out_channels = in_channels
-
-        
+        modules.append(nn.Upsample(size=output_size , mode='bilinear'))
         super().__init__(*modules)
