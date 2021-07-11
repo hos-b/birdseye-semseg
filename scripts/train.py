@@ -4,6 +4,10 @@ import torch.nn as nn
 from torch.optim import lr_scheduler
 from kornia.losses.focal import FocalLoss
 
+# just for random seed
+import random
+import numpy as np
+
 import wandb
 import subprocess
 
@@ -21,6 +25,7 @@ from data.utils import get_noisy_transforms
 from data.utils import to_device
 from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
+from model.pyrocc.pyrocc import PyramidOccupancyNetwork
 from evaluate import plot_batch
 
 def train(**kwargs):
@@ -245,11 +250,13 @@ def parse_and_execute():
         device_str += f':{0}'
     device = torch.device(device_str)
     torch.manual_seed(train_cfg.torch_seed)
+    random.seed(train_cfg.torch_seed)
+    np.random.seed(train_cfg.torch_seed)
     # image size and center coordinates --------------------------------------------------------
     new_size = (train_cfg.output_h, train_cfg.output_w)
     center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
     ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
-    print(f'output image size: {new_size}')
+    print(f'output image size: {new_size}, vehicle center {center}')
     # dataset ----------------------------------------------------------------------------------
     train_set = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.trainset_file, size=new_size,
@@ -294,6 +301,9 @@ def parse_and_execute():
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     elif train_cfg.model_name == 'mcnnNoisy':
         model = NoisyMCNN(train_cfg.num_classes, new_size,
+                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+    elif train_cfg.model_name == 'pyrocc':
+        model = PyramidOccupancyNetwork(train_cfg.num_classes, new_size,
                     geom_cfg, train_cfg.aggregation_type).cuda(0)
     else:
         print('unknown network architecture {train_cfg.model_name}')
