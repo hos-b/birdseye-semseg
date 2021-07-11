@@ -78,7 +78,7 @@ class FPN(nn.Module):
     def forward(self, x):
 
         # Normalize image
-        x = (x - self.mean.view(-1, 1, 1)) / self.std.view(-1, 1, 1)
+        # x = (x - self.mean.view(-1, 1, 1)) / self.std.view(-1, 1, 1)
 
         # Bottom-up
         c1 = F.relu(self.bn1(self.conv1(x)))
