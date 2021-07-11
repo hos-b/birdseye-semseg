@@ -77,8 +77,7 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dx_std,
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
-            sseg_preds, mask_preds = model(rgbs, car_transforms,
-                                           agent_pool.adjacency_matrix)
+            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))
@@ -86,11 +85,9 @@ def train(**kwargs):
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
             # weighted losses
-            if train_cfg.weight_losses:
-                (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
-                 s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight).backward()
-            else:
-                (m_loss + s_loss).backward()
+            (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
+             s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight).backward()
+
             optimizer.step()
 
             # log batch loss
@@ -200,9 +197,8 @@ def train(**kwargs):
         log_dict['misc/save'] = 0
         if train_cfg.strategy == 'metric':
             log_dict['curriculum/elevation metric'] = (elevation_metric / 6).item()
-        if train_cfg.weight_losses:
-            log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
-            log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
+        log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
+        log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
@@ -313,12 +309,9 @@ def parse_and_execute():
     start_ep = train_cfg.resume_starting_epoch if train_cfg.resume_training else 0
     lr_lambda = lambda epoch: pow((1 - (((epoch + start_ep) - 1) / train_cfg.epochs)), 0.9)
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-    if train_cfg.weight_losses:
-        mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
-        sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
-        optimizer.add_param_group({"params": [mask_loss_weight, sseg_loss_weight]})
-    else:
-        mask_loss_weight, sseg_loss_weight = None, None
+    mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
+    sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
+    optimizer.add_param_group({"params": [mask_loss_weight, sseg_loss_weight]})
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
                                 train_cfg.max_agent_count, device)
     # loading the network parameters/optimizer state -------------------------------------------

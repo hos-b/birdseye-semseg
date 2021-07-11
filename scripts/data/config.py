@@ -59,7 +59,6 @@ class TrainingConfig:
         self.device = str(conf['training']['device'])
         self.torch_seed = int(conf['training']['torch-seed'])
         self.loss_function = str(conf['training']['loss'])
-        self.weight_losses = bool(conf['training']['weight-losses'])
         # noise parameters
         self.se2_noise_enable = conf['se2-noise']['enable']
         if self.se2_noise_enable:
