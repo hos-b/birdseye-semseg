@@ -11,6 +11,7 @@ class TransformerPyramid(nn.Module):
                  focal_length):
         super().__init__()
         self.transformers = nn.ModuleList()
+        print('transformer extents:')
         for i in range(3):
             # Scaled focal length for each transformer
             focal = focal_length / pow(2, i + 3)
@@ -18,13 +19,13 @@ class TransformerPyramid(nn.Module):
             zmax = min(math.floor(focal * 2) * resolution, extents[3])
             zmin = math.floor(focal) * resolution if i < 4 else extents[1]
             subset_extents = [extents[0], zmin, extents[2], zmax]
-            print(subset_extents)
+            print(f'x: [{extents[0]}, {extents[2]}], z: [{zmin:.2f}, {zmax:.2f}]')
             # Build transformers
             tfm = DenseTransformer(in_channels, channels, resolution,
                                    subset_extents, ymin, ymax, focal)
             self.transformers.append(tfm)
-            # Shallow layer for out-of-view regions
-            self.horus = nn.ConvTranspose2d(in_channels, channels, 7)
+        # Shallow layer for out-of-view regions
+        self.horus = nn.ConvTranspose2d(in_channels, channels, 7)
 
     def forward(self, feature_maps, calib, oov_depth):
         bev_feats = list()

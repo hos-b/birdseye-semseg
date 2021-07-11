@@ -23,9 +23,9 @@ class PyramidOccupancyNetwork(nn.Module):
                  # our args
                  num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str,
                  # original pyrocc args
-                 tfm_channels = 64, bayesian_classifer = False,
+                 tfm_channels = 32, bayesian_classifer = False,
                  map_extents = [-10.0, 3.1, 10.0, 20.0], ymin = -2, ymax = 4,
-                 topdown_channels = 128, topdown_strides = [1, 2], topdown_layers = [4, 4],
+                 topdown_channels = 64, topdown_strides = [1, 2], topdown_layers = [4, 4],
                  topdown_blocktype = 'bottleneck', prior = None):
         super().__init__()
 
