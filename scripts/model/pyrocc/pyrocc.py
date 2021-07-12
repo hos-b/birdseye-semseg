@@ -80,7 +80,8 @@ class PyramidOccupancyNetwork(nn.Module):
         # -- [B, 64, 17, 103] <- inside FoV
         # -- [B, 64, 48, 103] <- outside FoV
         bev_feats = self.transformer(feature_maps, self.calib, 48)
-        mask_pred = F.interpolate(self.maskifier(bev_feats), size=self.output_size)
+        # detach bev features
+        mask_pred = F.interpolate(self.maskifier(bev_feats.detach()), size=self.output_size)
         # [B, 64, 134, 103]
         bev_feats = self.aggregate_features(bev_feats, transforms, adjacency_matrix)
         # Apply topdown network

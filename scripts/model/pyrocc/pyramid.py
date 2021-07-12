@@ -29,6 +29,7 @@ class TransformerPyramid(nn.Module):
 
     def forward(self, feature_maps, calib, oov_depth):
         bev_feats = list()
+        # use the bottom 3 pyramid layers for in view regions
         for i, transformer in enumerate(self.transformers):
             # Scale calibration matrix to account for downsampling
             scale = 8 * 2 ** i
@@ -37,8 +38,8 @@ class TransformerPyramid(nn.Module):
             # Apply orthographic transformation to each feature map separately
             bev_feats.append(transformer(feature_maps[i], calib_downsamp))
         
-        # combine top two pyramid features
+        # combine top two pyramid layers for out-of-view regions
         combo = self.horus(F.interpolate(feature_maps[4], size=feature_maps[3].shape[-2:]) + feature_maps[3])
         bev_feats.append(F.interpolate(combo, size=(oov_depth, bev_feats[0].shape[-1])))
         # combine birds-eye-view & oov feature maps along the depth axis
-        return torch.cat(bev_feats[::-1], dim=-2)
+        return torch.cat(bev_feats[::-1], dim=-2).flip([2])
