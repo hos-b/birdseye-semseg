@@ -189,21 +189,19 @@ def train(**kwargs):
             log_dict[f'iou/{val.lower()}'] = (sseg_ious[key] / sample_count).item()
             if val != 'Misc' and val != 'Water':
                 elevation_metric += sseg_ious[key] / sample_count
-        elevation_metric += mask_ious / sample_count
         log_dict['loss/total validation mask'] = (total_valid_m_loss / sample_count)
         log_dict['loss/total validation sseg'] = (total_valid_s_loss / sample_count)
         log_dict['iou/mask'] = (mask_ious / sample_count).item()
         log_dict['misc/epoch'] = ep + 1
         log_dict['misc/save'] = 0
-        if train_cfg.strategy == 'metric':
-            log_dict['curriculum/elevation metric'] = (elevation_metric / 6).item()
+        log_dict['curriculum/elevation metric'] = (elevation_metric / 5).item()
         log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
         log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
         print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
-        if log_dict['curriculum/elevation metric'] < last_snapshot_metric:
+        if log_dict['curriculum/elevation metric'] > last_snapshot_metric:
             print(f'best model @ epoch {ep + 1}')
             last_snapshot_metric = log_dict['curriculum/elevation metric']
             snapshot_tag = 'best'
