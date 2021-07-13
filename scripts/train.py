@@ -19,7 +19,7 @@ from data.config import SemanticCloudConfig, TrainingConfig
 import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.logging import init_wandb
-from metrics.iou import iou_per_class, mask_iou
+from metrics.iou import get_iou_per_class, get_mask_iou
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_noisy_transforms
 from data.utils import to_device
@@ -138,9 +138,9 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_th_std)
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
+            sseg_ious += get_iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
                                        train_cfg.num_classes).to(device)
-            mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
+            mask_ious += get_mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             # sum up losses
             total_valid_m_loss += mask_loss(mask_preds.squeeze(1), masks).item()
             total_valid_s_loss += torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,

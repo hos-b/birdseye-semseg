@@ -1,6 +1,6 @@
 import torch
 
-def iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, target_sseg_mask: torch.Tensor, num_classes=7) -> torch.Tensor:
+def get_iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, target_sseg_mask: torch.Tensor, num_classes=7) -> torch.Tensor:
     """
     returns a [num_classes x 1] tensor containing the sum iou of each class for all images.
     in the end, the aggregated ious should be devided by the number of images, skipped here
@@ -24,7 +24,7 @@ def iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, target_sseg_m
         ious[i] = iou.sum()
     return ious
 
-def mask_iou(predictions: torch.Tensor, gt_masks: torch.Tensor, detection_tresh):
+def get_mask_iou(predictions: torch.Tensor, gt_masks: torch.Tensor, detection_tresh):
     assert len(predictions.shape) == len(gt_masks.shape), \
            f"dimensions of predictions {predictions.shape} != ground truth {gt_masks.shape}"
     preds = predictions.clone()
