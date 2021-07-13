@@ -117,7 +117,7 @@ def train(**kwargs):
         visualized = False
         total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
-        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).cuda(0)
+        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).to(device)
         mask_ious = 0.0
         sample_count = 0
         for batch_idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
@@ -139,7 +139,7 @@ def train(**kwargs):
             with torch.no_grad():
                 sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
             sseg_ious += iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
-                                       train_cfg.num_classes).cuda(0)
+                                       train_cfg.num_classes).to(device)
             mask_ious += mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
             # sum up losses
             total_valid_m_loss += mask_loss(mask_preds.squeeze(1), masks).item()
@@ -197,7 +197,7 @@ def train(**kwargs):
         log_dict['curriculum/elevation metric'] = (elevation_metric / 5).item()
         log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
         log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
-        print(f'\nepoch validation loss: {total_valid_s_loss / sample_count} mask, '
+        print(f'\nepoch validation loss: {total_valid_m_loss / sample_count} mask, '
               f'{total_valid_s_loss / sample_count} segmentation')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
@@ -285,20 +285,18 @@ def parse_and_execute():
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
-    assert train_cfg.aggregation_type == 'bilinear' or train_cfg.aggregation_type == 'nearest', \
-                                        f'unknown aggregation type {train_cfg.aggregation_type}'
     if train_cfg.model_name == 'mcnnT':
         model = TransposedMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).to(device)
     elif train_cfg.model_name == 'mcnnTMax':
         model = MaxoutMCNNT(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).to(device)
     elif train_cfg.model_name == 'mcnnNoisy':
         model = NoisyMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).to(device)
     elif train_cfg.model_name == 'pyrocc':
         model = PyramidOccupancyNetwork(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).cuda(0)
+                    geom_cfg, train_cfg.aggregation_type).to(device)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()
@@ -356,8 +354,8 @@ def parse_and_execute():
     mask_loss = nn.L1Loss(reduction='mean')
     # send to gpu
     if train_cfg.device == 'cuda':
-        semseg_loss = semseg_loss.cuda(0)
-        mask_loss = mask_loss.cuda(0)
+        semseg_loss = semseg_loss.to(device)
+        mask_loss = mask_loss.to(device)
     # begin -------------------------------------------------------------------------------------
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,

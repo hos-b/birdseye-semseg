@@ -1,4 +1,3 @@
-from train import train
 import torch
 
 from data.config import SemanticCloudConfig, TrainingConfig
