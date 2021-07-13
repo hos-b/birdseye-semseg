@@ -41,7 +41,8 @@ def main():
     
     print('done')
     print(f'counts: \n{class_counts}')
-    print(f'weights: \n{class_counts.double() / class_counts.max()}')
+    print(f'max weights: \n{class_counts.max() / class_counts.double()}')
+    print(f'median weights: \n{class_counts.median() / class_counts.double()}')
 
 
 if __name__ == '__main__':
