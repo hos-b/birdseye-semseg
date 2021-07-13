@@ -26,7 +26,7 @@ from data.utils import to_device
 from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
-from evaluate import plot_batch
+from evaluate import plot_full_batch
 
 def train(**kwargs):
     train_cfg: TrainingConfig = kwargs.get('train_cfg')
@@ -148,36 +148,12 @@ def train(**kwargs):
             # visualize a random batch and all hard batches [if enabled]
             if not visualized and log_enable:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
-                first_batch_img = plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool,
-                                             plot_dest='image', semantic_classes=train_cfg.classes,
-                                             title=f'E: {ep + 1}, B#: {batch_no.item()}')
+                first_batch_img = plot_full_batch(rgbs, labels, sseg_preds, mask_preds, masks,
+                                                  agent_pool, plot_dest='image',
+                                                  semantic_classes=train_cfg.classes,
+                                                  title=f'E: {ep + 1}, B#: {batch_no.item()}')
                 validation_img_log_dict['media/results'] = \
                     wandb.Image(first_batch_img, caption='full batch predictions')
-                if train_cfg.visualize_hard_batches:
-                    for hard_batch_idx in train_cfg.hard_batches_indices:
-                        # no need to squeeze with __getitem__
-                        (hrgbs, hlabels, hmasks, htransforms, _) = \
-                            valid_set.__getitem__(hard_batch_idx)
-                        
-                        hrgbs, hlabels, hmasks, htransforms = to_device(hrgbs, hlabels, hmasks,
-                                                                        htransforms, device)
-                        agent_pool.generate_connection_strategy(hmasks, htransforms,
-                                                                PPM, NEW_SIZE[0], NEW_SIZE[1],
-                                                                CENTER[0], CENTER[1])
-                        if train_cfg.se2_noise_enable:
-                            htransforms = get_noisy_transforms(htransforms,
-                                                      train_cfg.se2_noise_dx_std,
-                                                      train_cfg.se2_noise_dy_std,
-                                                      train_cfg.se2_noise_th_std)
-                        with torch.no_grad():
-                            hsseg_preds, hmask_preds = \
-                                model(hrgbs, htransforms, agent_pool.adjacency_matrix)
-                        hard_batch_img = plot_batch(hrgbs, hlabels, hsseg_preds, hmask_preds,
-                                                    hmasks, agent_pool, plot_dest='image',
-                                                    semantic_classes=train_cfg.classes,
-                                                    title=f'E: {ep + 1}, B#: {batch_no.item()}')
-                        validation_img_log_dict[f'hard cases/B #{hard_batch_idx}'] = \
-                            wandb.Image(hard_batch_img, caption=f'hard case {hard_batch_idx}')
                 wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
@@ -270,16 +246,6 @@ def parse_and_execute():
         segmentation_classes = color_map.__our_classes
     elif train_cfg.classes == 'diminished':
         segmentation_classes = color_map.__diminished_classes
-    # hard batch visualization -----------------------------------------------------------------
-    vset_length = len(valid_loader)
-    if train_cfg.visualize_hard_batches:
-        if len(train_cfg.hard_batches_indices) > 0:
-            for hard_batch in train_cfg.hard_batches_indices:
-                assert hard_batch < vset_length, \
-                    f'batch index {hard_batch} > validation set length {vset_length}'
-        else:
-            print('no hard batch indices were found')
-            train_cfg.visualize_hard_batches = False
     # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
     if not os.path.exists(train_cfg.snapshot_dir):

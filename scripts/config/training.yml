@@ -41,8 +41,6 @@ hyperparameters:
 validation:
   # threshold for counting the mask pixel as detected
   mask-det-threshold: 0.6
-  visualize-hard-batches: false
-  hard-batch-indices: []
 
 dataloader:
   dataloder-workers: 1
