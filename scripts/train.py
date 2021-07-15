@@ -47,7 +47,6 @@ def train(**kwargs):
     # dataset
     train_loader = kwargs.get('train_loader')
     valid_loader = kwargs.get('valid_loader')
-    valid_set: MassHDF5 = kwargs.get('valid_set')
     segmentation_classes = kwargs.get('segmentation_classes')
     epochs = train_cfg.epochs
     # starting epoch
@@ -326,8 +325,8 @@ def parse_and_execute():
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,
-          valid_set=valid_set, mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight,
-          start_ep=start_ep, segmentation_classes=segmentation_classes)
+          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep,
+          segmentation_classes=segmentation_classes)
 
 if __name__ == '__main__':
     parse_and_execute()
