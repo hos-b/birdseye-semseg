@@ -29,7 +29,7 @@ class LMCNN(nn.Module):
                                                            lowres_in_channels=128,
                                                            out_channels=128,
                                                            scale_factor=4)
-        self.classifier = Classifer(128, num_classes)
+        self.classifier = Classifier(128, num_classes)
         # none of the pyramid stages can be 1 due to instance norm issue
         # https://github.com/pytorch/pytorch/issues/45687
         self.mask_global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
@@ -41,7 +41,7 @@ class LMCNN(nn.Module):
                                                        lowres_in_channels=128,
                                                        out_channels=128,
                                                        scale_factor=4)
-        self.maskifier = Classifer(128, 1)
+        self.maskifier = Classifier(128, 1)
         # set aggregation parameters
         self.aggregation_type = aggr_type
         self.cf_h, self.cf_w = 60, 80
@@ -119,8 +119,8 @@ class TransposedMCNN(LWMCNN):
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(TransposedMCNN, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
-        self.classifier = TransposedClassifer(128, num_classes)
-        # self.maskifier = TransposedClassifer(128, 1)
+        self.classifier = TransposedClassifier(128, num_classes)
+        # self.maskifier = TransposedClassifier(128, 1)
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
         self.center_x = self.sem_cfg.center_x(self.cf_w)
@@ -304,11 +304,11 @@ class FeatureFusionModule(nn.Module):
         out = higher_res_feature + lower_res_feature
         return self.relu(out)
 
-class Classifer(nn.Module):
-    """Classifer"""
+class Classifier(nn.Module):
+    """Classifier"""
 
     def __init__(self, dw_channels, num_classes, stride=1):
-        super(Classifer, self).__init__()
+        super(Classifier, self).__init__()
         self.dsconv1 = _DSConv(dw_channels, dw_channels, stride)
         self.dsconv2 = _DSConv(dw_channels, dw_channels, stride)
         self.conv = nn.Sequential(
@@ -322,12 +322,12 @@ class Classifer(nn.Module):
         x = self.conv(x)
         return x
 
-class TransposedClassifer(nn.Module):
+class TransposedClassifier(nn.Module):
     """
-    Classifer + transposed convolution for upsampling
+    Classifier + transposed convolution for upsampling
     """
     def __init__(self, dw_channels, num_classes, stride=1):
-        super(TransposedClassifer, self).__init__()
+        super(TransposedClassifier, self).__init__()
         self.tconv1 = nn.ConvTranspose2d(dw_channels, dw_channels, kernel_size=(25, 1))
         self.tconv2 = nn.ConvTranspose2d(dw_channels, dw_channels, kernel_size=(25, 1))
         self.dsconv1 = _DSConv(dw_channels, dw_channels, stride)
