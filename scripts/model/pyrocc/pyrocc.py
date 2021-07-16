@@ -65,7 +65,7 @@ class PyramidOccupancyNetwork(nn.Module):
         self.center_x = sem_cfg.center_x(self.cf_w) # 51
         self.center_y = sem_cfg.center_y(self.cf_h) # 107
 
-    def forward(self, image, transforms, adjacency_matrix, masks = None):
+    def forward(self, image, transforms, adjacency_matrix, masks):
         # image: [B, 3, 640, 480]
         # Extract multiscale feature maps
         # 0: [B, 256, 60, 80]
@@ -81,7 +81,6 @@ class PyramidOccupancyNetwork(nn.Module):
         # -- [B, 32, 17, 103] <- inside FoV
         # -- [B, 32, 48, 103] <- outside FoV [currently zeroed out]
         bev_feats = self.transformer(feature_maps, self.calib, 48)
-        import pdb; pdb.set_trace()
         vmasks = get_vehicle_masks(masks).unsqueeze(1)
         vmasks = F.interpolate(vmasks, size=(134, 103))
         bev_feats += vmasks
