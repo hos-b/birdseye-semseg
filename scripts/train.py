@@ -76,7 +76,7 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dx_std,
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
-            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, masks)
             m_loss = mask_loss(mask_preds.squeeze(1), masks)
             s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
                                 dim=(0, 1, 2))

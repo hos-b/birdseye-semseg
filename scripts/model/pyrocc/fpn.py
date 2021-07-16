@@ -87,15 +87,15 @@ class FPN(nn.Module):
         c3 = self.layer2(c2)
         c4 = self.layer3(c3)
         c5 = self.layer4(c4)
-        p6 = self.conv6(c5)
-        p7 = self.conv7(F.relu(p6))
+        # p6 = self.conv6(c5)
+        # p7 = self.conv7(F.relu(p6))
         # Top-down
         p5 = self.latlayer1(c5)
         p4 = self._upsample_add(p5, self.latlayer2(c4))
         p4 = self.toplayer1(p4)
         p3 = self._upsample_add(p4, self.latlayer3(c3))
         p3 = self.toplayer2(p3)
-        return p3, p4, p5, p6, p7
+        return p3, p4, p5 # , p6, p7
 
 
 def FPN50():

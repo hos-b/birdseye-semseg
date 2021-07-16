@@ -24,8 +24,6 @@ class TransformerPyramid(nn.Module):
             tfm = DenseTransformer(in_channels, channels, resolution,
                                    subset_extents, ymin, ymax, focal)
             self.transformers.append(tfm)
-        # Shallow layer for out-of-view regions
-        self.horus = nn.ConvTranspose2d(in_channels, channels, 7)
 
     def forward(self, feature_maps, calib, oov_depth):
         bev_feats = list()
@@ -37,9 +35,9 @@ class TransformerPyramid(nn.Module):
             calib_downsamp[:2] = calib[:2] / scale
             # Apply orthographic transformation to each feature map separately
             bev_feats.append(transformer(feature_maps[i], calib_downsamp))
-        
-        # combine top two pyramid layers for out-of-view regions
-        combo = self.horus(F.interpolate(feature_maps[4], size=feature_maps[3].shape[-2:]) + feature_maps[3])
-        bev_feats.append(F.interpolate(combo, size=(oov_depth, bev_feats[0].shape[-1])))
+        B, C, _, W = bev_feats[0].shape
+        bev_feats.append(torch.zeros((B, C, oov_depth, W),
+                                     dtype=torch.float32,
+                                     device=calib.device))
         # combine birds-eye-view & oov feature maps along the depth axis
         return torch.cat(bev_feats[::-1], dim=-2).flip([2])

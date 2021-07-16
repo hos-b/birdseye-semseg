@@ -31,23 +31,6 @@ def squeeze_all(rgbs, labels, masks, transforms) -> Tuple[torch.Tensor]:
     """
     return rgbs.squeeze(0), labels.squeeze(0), masks.squeeze(0), transforms.squeeze(0)
 
-def get_matplotlib_image(tensor_img: torch.Tensor, figsize=(4, 5)) -> np.ndarray:
-    """
-    returns the plot of a mask as an image
-    """
-    org_h, org_w = tensor_img.shape
-    fig = plt.figure(figsize=figsize)
-    fig.subplots_adjust(left=0.0, right=1.0, bottom=0.0, top=1.0)
-    width, height = fig.get_size_inches() * fig.get_dpi()
-    width, height = int(width), int(height)
-    plt.imshow(tensor_img)
-    fig.canvas.draw()
-    image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-    image = cv2.resize(image, dsize=(org_w, org_h), interpolation=cv2.INTER_NEAREST)
-    fig.clear()
-    plt.close(fig)
-    return image
-
 def to_device(rgbs, labels, masks, car_transforms, device) -> Tuple[torch.Tensor]:
     """
     sends the tensors to the given device
@@ -77,6 +60,16 @@ def get_noisy_transforms(transforms: torch.Tensor, dx_std, dy_std, th_std) -> to
     se2_noise[:, 2, 2] = 1
     se2_noise[:, 3, 3] = 1
     return transforms @ se2_noise
+
+def get_vehicle_masks(masks: torch.Tensor, starting_pixel: int = 171):
+    """
+    zero out the FoV parts, leaving only the vehicle in each mask.
+    if there is a vehicle right in front of the current one, the starting
+    pixel is violated. less that 5% ? who cares. masks size: Bx256x205
+    """
+    vehicle_masks = masks.clone()
+    vehicle_masks[:, :starting_pixel + 1] = 0
+    return vehicle_masks
 
 # dicts for plotting batches based on agent count
 newline_dict = {

@@ -8,6 +8,7 @@ from model.pyrocc.fpn import FPN50
 from model.pyrocc.pyramid import TransformerPyramid
 from model.pyrocc.topdown import TopdownNetwork
 from model.pyrocc.classifier import LinearClassifier, BayesianClassifier
+from data.utils import get_vehicle_masks
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
 from operator import mul
@@ -22,7 +23,7 @@ class PyramidOccupancyNetwork(nn.Module):
     def __init__(self,
                  # our args
                  num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str,
-                 # original pyrocc args
+                 # pyrocc args
                  tfm_channels = 32, bayesian_classifer = False,
                  map_extents = [-10.0, 3.1, 10.0, 20.0], ymin = -2, ymax = 4,
                  topdown_channels = 64, topdown_strides = [1, 2], topdown_layers = [4, 4],
@@ -64,28 +65,32 @@ class PyramidOccupancyNetwork(nn.Module):
         self.center_x = sem_cfg.center_x(self.cf_w) # 51
         self.center_y = sem_cfg.center_y(self.cf_h) # 107
 
-    def forward(self, image, transforms, adjacency_matrix):
+    def forward(self, image, transforms, adjacency_matrix, masks = None):
         # image: [B, 3, 640, 480]
         # Extract multiscale feature maps
         # 0: [B, 256, 60, 80]
         # 1: [B, 256, 30, 40]
         # 2: [B, 256, 15, 20]
-        # 3: [B, 256, 8 , 10]
-        # 4: [B, 256, 4 ,  5]
+        # 3: [B, 256, 8 , 10] [currently disabled]
+        # 4: [B, 256, 4 ,  5] [currently disabled]
         feature_maps = self.frontend(image)
         # Transform image features to birds-eye-view
-        # [B, 64, 134, 103] from:
-        # -- [B, 64, 34, 103] <- inside FoV
-        # -- [B, 64, 35, 103] <- inside FoV
-        # -- [B, 64, 17, 103] <- inside FoV
-        # -- [B, 64, 48, 103] <- outside FoV
+        # [B, 32, 134, 103] from:
+        # -- [B, 32, 34, 103] <- inside FoV
+        # -- [B, 32, 35, 103] <- inside FoV
+        # -- [B, 32, 17, 103] <- inside FoV
+        # -- [B, 32, 48, 103] <- outside FoV [currently zeroed out]
         bev_feats = self.transformer(feature_maps, self.calib, 48)
+        import pdb; pdb.set_trace()
+        vmasks = get_vehicle_masks(masks).unsqueeze(1)
+        vmasks = F.interpolate(vmasks, size=(134, 103))
+        bev_feats += vmasks
         # detach bev features
         mask_pred = F.interpolate(self.maskifier(bev_feats.detach()), size=self.output_size)
-        # [B, 64, 134, 103]
+        # [B, 32, 134, 103]
         bev_feats = self.aggregate_features(bev_feats, transforms, adjacency_matrix)
         # Apply topdown network
-        # [B, 256, 256, 205]
+        # [B, 128, 256, 205]
         td_feats = self.topdown(bev_feats)
         # Predict individual class log-probabilities
         # [B, class_count, 256, 205]
