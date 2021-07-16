@@ -14,10 +14,86 @@ from data.utils import font_dict, newline_dict
 from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
 
+def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: torch.Tensor,
+                    aggr_mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
+                    plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
+    """
+    plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
+    full output, masked output, full target and masked target for all agents in the batch.
+    """
+    agent_count = rgbs.shape[0]
+    columns = 6
+    fig = plt.figure(figsize=(20, agent_count * 4))
+    fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
+    # plt.axis('off')
+    for i in range(agent_count):
+        rgb = rgbs[i, ...].permute(1, 2, 0)
+        rgb = (rgb + 1) / 2
+        single_gt_mask = gt_masks[i].cpu()
+        single_pred_mask = solo_mask_preds[i].cpu().squeeze()
+        aggr_gt_mask = agent_pool.combined_masks[i].cpu()
+        aggr_pred_mask = aggr_mask_preds[i].cpu().squeeze()
+        ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
+        # create subplot and append to ax
+        ax = []
+        # target solo mask
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
+        ax[-1].set_title(f"target solo mask {i}")
+        plt.imshow(single_gt_mask)
 
-def plot_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
-               mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
-               plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
+        # predicted solo mask
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
+        ax[-1].set_title(f"pred solo mask {i}")
+        plt.imshow(single_pred_mask)
+
+        # target aggregated mask
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
+        ax[-1].set_title(f"target aggr mask {i}")
+        plt.imshow(aggr_gt_mask)
+
+        # predicted aggregated mask
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
+        ax[-1].set_title(f"pred aggr mask {i}")
+        plt.imshow(aggr_pred_mask)
+
+        # target mask & BEV image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
+        ax[-1].set_title(f"target masked BEV {i}")
+        ss_gt_img_cp = ss_gt_img.copy()
+        ss_gt_img_cp[aggr_gt_mask == 0] = 0
+        plt.imshow(ss_gt_img_cp)
+
+        # predicted mask & BEV image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
+        ax[-1].set_title(f"pred masked BEV {i}")
+        ss_gt_img[aggr_pred_mask < 0.5] = 0
+        plt.imshow(ss_gt_img)
+
+    if plot_dest == 'disk':
+        matplotlib.use('Agg')
+        fig.canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+        fig.clear()
+        plt.close(fig)
+        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    elif plot_dest == 'image':
+        matplotlib.use('Agg')
+        fig.canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+        fig.clear()
+        plt.close(fig)
+        return image
+    elif plot_dest == 'show':
+        plt.show()
+
+
+def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
+                    mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
+                    plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
     """
     plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
     full output, masked output, full target and masked target for all agents in the batch.
@@ -122,9 +198,9 @@ def evaluate(**kwargs):
         # network output
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-        plot_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
-                   eval_cfg.classes, f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png',
-                   f'Batch #{batch_no.item()}')
+        plot_full_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
+                        eval_cfg.classes, f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png',
+                        f'Batch #{batch_no.item()}')
         
         eval_cfg.plot_count -= 1
         if eval_cfg.plot_count == 0:
