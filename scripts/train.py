@@ -43,7 +43,8 @@ def train(**kwargs):
     semseg_loss = kwargs.get('semseg_loss')
     mask_loss_weight = kwargs.get('mask_loss_weight')
     sseg_loss_weight = kwargs.get('sseg_loss_weight')
-    last_snapshot_metric = 1e6
+    # avg iou metric
+    last_snapshot_metric = 0.0
     # dataset
     train_loader = kwargs.get('train_loader')
     valid_loader = kwargs.get('valid_loader')
@@ -136,7 +137,7 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
             with torch.no_grad():
-                sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
+                sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, masks)
             sseg_ious += get_iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
                                        train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
