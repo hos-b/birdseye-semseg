@@ -43,8 +43,7 @@ class MaskCNN(torch.nn.Module):
         # B, 128, 80, 108
         x = self.feature_fusion(shared, x)
         # add ego car masks
-        x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w),
-                              mode='bilinear', align_corners=True)
+        x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear')
         # B, 128, 80, 108
         aggr_x = self.aggregate_features(x, transforms, adjacency_matrix)
         aggr_x = torch.sigmoid(self.mask_prediction(aggr_x))
