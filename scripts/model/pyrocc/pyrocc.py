@@ -8,7 +8,6 @@ from model.pyrocc.fpn import FPN50
 from model.pyrocc.pyramid import TransformerPyramid
 from model.pyrocc.topdown import TopdownNetwork
 from model.pyrocc.classifier import LinearClassifier, BayesianClassifier
-from data.utils import get_vehicle_masks
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
 from operator import mul
@@ -84,13 +83,14 @@ class PyramidOccupancyNetwork(nn.Module):
         bev_feats += F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w),
                                    mode='bilinear')
         # [B, 32, 134, 103]
-        bev_feats = self.aggregate_features(bev_feats, transforms, adjacency_matrix)
+        aggr_bev_feats = self.aggregate_features(bev_feats, transforms, adjacency_matrix)
         # apply topdown network
         # [B, 128, 256, 205]
-        td_feats = self.topdown(bev_feats)
+        aggr_td_feats = self.topdown(aggr_bev_feats)
+        # solo_td_feats = self.topdown(bev_feats)
         # predict individual class log-probabilities
         # [B, class_count, 256, 205]
-        return self.classifier(td_feats)
+        return None, self.classifier(aggr_td_feats)
 
     def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
         """
