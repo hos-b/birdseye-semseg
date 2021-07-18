@@ -181,9 +181,6 @@ def evaluate(**kwargs):
     model.eval()
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
     sample_plot_prob = 1.0 / eval_cfg.plot_count
-    probs = [1 - sample_plot_prob, sample_plot_prob] 
-    # plot stuff
-    columns = 6
     for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(loader):
         masks = car_masks + fov_masks
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
@@ -194,15 +191,12 @@ def evaluate(**kwargs):
                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                 CENTER[0], CENTER[1])
         print(f"index {idx + 1}/{len(loader)}")
-        agent_count = rgbs.shape[0]
-        
         # network output
         with torch.no_grad():
             sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
         plot_full_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
                         eval_cfg.classes, f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png',
                         f'Batch #{batch_no.item()}')
-        
         eval_cfg.plot_count -= 1
         if eval_cfg.plot_count == 0:
             print('\ndone!')

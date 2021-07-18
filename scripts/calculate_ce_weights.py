@@ -27,7 +27,8 @@ def main():
     # start counting -----------------------------------------------------------------
     class_counts = torch.Tensor(size=(train_cfg.num_classes,)).long().to(device)
     loader_length = len(train_loader)
-    for batch_idx, (rgbs, labels, masks, tfs, _) in enumerate(train_loader):
+    for batch_idx, (rgbs, labels, car_masks, fov_masks, tfs, _) in enumerate(train_loader):
+        masks = car_masks + fov_masks
         print(f'\rprocessing batch {batch_idx}/{loader_length}', end='', flush=True)
         batch_size = rgbs.shape[1]
         _, labels, masks, _ = to_device(rgbs, labels, masks, tfs, device)
@@ -37,7 +38,7 @@ def main():
             uniq_indices, uniq_counts = semantics[mask == 1].unique(sorted=True, return_counts=True)
             for uidx, ucount in zip(uniq_indices, uniq_counts):
                 class_counts[uidx] += ucount
-    
+
     print('done')
     print(f'counts: \n{class_counts}')
     print(f'max weights: \n{class_counts.max() / class_counts.double()}')
