@@ -25,18 +25,17 @@ def drop_agent_data(rgbs, labels, masks, transforms, drop_probability) -> Tuple[
     return rgbs[0, drops != 1, ...], labels[0, drops != 1, ...], \
            masks[0, drops != 1, ...], transforms[0, drops != 1, ...]
 
-def squeeze_all(rgbs, labels, masks, transforms) -> Tuple[torch.Tensor]:
+def squeeze_all(*args) -> Tuple[torch.Tensor]:
     """
     squeezes all given parameters
     """
-    return rgbs.squeeze(0), labels.squeeze(0), masks.squeeze(0), transforms.squeeze(0)
+    return (arg.squeeze(0) for arg in args)
 
-def to_device(rgbs, labels, masks, car_transforms, device) -> Tuple[torch.Tensor]:
+def to_device(device, *args) -> Tuple[torch.Tensor]:
     """
     sends the tensors to the given device
     """
-    return rgbs.to(device), labels.to(device), \
-           masks.to(device), car_transforms.to(device)
+    return (arg.to(device) for arg in args)
 
 def get_noisy_transforms(transforms: torch.Tensor, dx_std, dy_std, th_std) -> torch.Tensor:
     """

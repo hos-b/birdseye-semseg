@@ -45,10 +45,11 @@ def visalized_hard_batches(models: list, dataset: MassHDF5, cfg: ReportConfig,
         hard_batch_dict['step'] = count
         count += 1
         # no need to squeeze with __getitem__
-        (hrgbs, hlabels, hmasks, htransforms, _) = \
+        (hrgbs, hlabels, hcar_masks, hfov_masks, htransforms, _) = \
                             dataset.__getitem__(hard_batch_index)
-        hrgbs, hlabels, hmasks, htransforms = to_device(hrgbs, hlabels, hmasks,
-                                                        htransforms, device)
+        hmasks = hcar_masks + hfov_masks
+        hrgbs, hlabels, hmasks, htransforms = to_device(device, hrgbs, hlabels, 
+                                                        hmasks, htransforms)
         agent_pool.generate_connection_strategy(hmasks, htransforms,
                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                 CENTER[0], CENTER[1])

@@ -50,7 +50,7 @@ def train(**kwargs):
         model.train()
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
-            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
+            rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels, masks, car_transforms)
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
             agent_pool.generate_connection_strategy(masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
@@ -96,13 +96,14 @@ def train(**kwargs):
         aggr_mask_iou = 0.0
         sample_count = 0
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(valid_loader):
+            # TODO: fix
             if (batch_idx + 1) % train_cfg.log_every == 0:
                 print(f'\repoch: {ep + 1}/{epochs}, '
                     f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
-                                                            car_transforms, device)
+            rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels,
+                                                            masks, car_transforms)
             agent_pool.generate_connection_strategy(masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])

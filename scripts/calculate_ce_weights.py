@@ -31,7 +31,7 @@ def main():
         masks = car_masks + fov_masks
         print(f'\rprocessing batch {batch_idx}/{loader_length}', end='', flush=True)
         batch_size = rgbs.shape[1]
-        _, labels, masks, _ = to_device(rgbs, labels, masks, tfs, device)
+        _, labels, masks, _ = to_device(device, rgbs, labels, masks, tfs)
         for i in range(batch_size):
             semantics = labels[0, i]
             mask = masks[0, i]

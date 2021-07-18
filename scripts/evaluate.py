@@ -182,9 +182,8 @@ def evaluate(**kwargs):
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
     for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(loader):
         masks = car_masks + fov_masks
-        rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
-                                                        masks, car_transforms,
-                                                        device)
+        rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels,
+                                                        masks, car_transforms)
         rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
         agent_pool.generate_connection_strategy(masks, car_transforms,
                                                 PPM, NEW_SIZE[0], NEW_SIZE[1],
