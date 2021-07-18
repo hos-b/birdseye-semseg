@@ -48,7 +48,6 @@ class PyramidOccupancyNetwork(nn.Module):
         self.topdown = TopdownNetwork(tfm_channels, topdown_channels, output_size,
                                       topdown_layers, [1, 1], topdown_blocktype)
         # Build classifiers
-        self.maskifier = LinearClassifier(tfm_channels, 1)
         if bayesian_classifer:
             self.classifier = BayesianClassifier(self.topdown.out_channels, num_classes)
         else:
@@ -58,14 +57,14 @@ class PyramidOccupancyNetwork(nn.Module):
             self.classifier.initialise(prior)
 
         self.output_size = output_size
-        # Aggregation parameters
+        # aggregation parameters
         self.aggregation_type = aggr_type
         self.cf_h, self.cf_w = 134, 103
         self.ppm = sem_cfg.pix_per_m(self.cf_h, self.cf_w) # 5.255
         self.center_x = sem_cfg.center_x(self.cf_w) # 51
         self.center_y = sem_cfg.center_y(self.cf_h) # 107
 
-    def forward(self, image, transforms, adjacency_matrix, masks):
+    def forward(self, image, transforms, adjacency_matrix, car_masks):
         # image: [B, 3, 640, 480]
         # Extract multiscale feature maps
         # 0: [B, 256, 60, 80]
@@ -74,26 +73,24 @@ class PyramidOccupancyNetwork(nn.Module):
         # 3: [B, 256, 8 , 10] [currently disabled]
         # 4: [B, 256, 4 ,  5] [currently disabled]
         feature_maps = self.frontend(image)
-        # Transform image features to birds-eye-view
+        # transform image features to birds-eye-view
         # [B, 32, 134, 103] from:
         # -- [B, 32, 34, 103] <- inside FoV
         # -- [B, 32, 35, 103] <- inside FoV
         # -- [B, 32, 17, 103] <- inside FoV
         # -- [B, 32, 48, 103] <- outside FoV [currently zeroed out]
         bev_feats = self.transformer(feature_maps, self.calib, 48)
-        vmasks = get_vehicle_masks(masks).unsqueeze(1)
-        vmasks = F.interpolate(vmasks, size=(134, 103))
-        bev_feats += vmasks
-        # detach bev features
-        mask_pred = F.interpolate(self.maskifier(bev_feats.detach()), size=self.output_size)
+        # add ego car masks
+        bev_feats += F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w),
+                                   mode='bilinear')
         # [B, 32, 134, 103]
         bev_feats = self.aggregate_features(bev_feats, transforms, adjacency_matrix)
-        # Apply topdown network
+        # apply topdown network
         # [B, 128, 256, 205]
         td_feats = self.topdown(bev_feats)
-        # Predict individual class log-probabilities
+        # predict individual class log-probabilities
         # [B, class_count, 256, 205]
-        return self.classifier(td_feats), mask_pred
+        return self.classifier(td_feats)
 
     def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
         """
