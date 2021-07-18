@@ -180,7 +180,6 @@ def evaluate(**kwargs):
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
     model.eval()
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
-    sample_plot_prob = 1.0 / eval_cfg.plot_count
     for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(loader):
         masks = car_masks + fov_masks
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
