@@ -126,7 +126,7 @@ def train(**kwargs):
             if not visualized and log_enable:
                 first_batch_img = plot_mask_batch(
                     rgbs, labels, solo_pred, aggr_pred, solo_masks,
-                    agent_pool, plot_dest='image',
+                    agent_pool.combined_masks, plot_dest='image',
                     semantic_classes=train_cfg.classes,
                     title=f'E: {ep + 1}, B#: {batch_no.item()}'
                 )
