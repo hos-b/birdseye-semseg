@@ -132,12 +132,7 @@ class SampleWindow:
         self.baseline.eval()
 
     def start(self):
-        baseline_available = False
-        for name in self.networks.keys():
-            if name == 'baseline':
-                baseline_available = True
-                break
-        if not baseline_available:
+        if 'baseline' not in self.networks:
             print("missing 'baseline' network")
             exit()
         self.change_sample()
@@ -203,7 +198,8 @@ class SampleWindow:
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
-        for idx, (rgbs, labels, masks, car_transforms, _) in enumerate(dloader):
+        for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
+            masks = car_masks + fov_masks
             print(f'\r{idx + 1}/{total_length}', end='')
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                             masks, car_transforms,
@@ -219,7 +215,6 @@ class SampleWindow:
                                                       self.eval_cfg.se2_noise_th_std)
             agent_count = rgbs.shape[0]
             sample_count += agent_count
-            full_adjacency_matrix = torch.ones(agent_count, agent_count)
             for name, network in self.networks.items():
                 # manual aggregation for baseline network
                 if name == 'baseline':
@@ -254,7 +249,8 @@ class SampleWindow:
             exec(f"self.masked_iou_label_{i}.configure(text='{mskd_iou_txt}')")
 
     def change_sample(self):
-        (rgbs, labels, masks, car_transforms, batch_index) = next(self.dset_iterator)
+        (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
+        masks = car_masks + fov_masks
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
                                                         self.device)

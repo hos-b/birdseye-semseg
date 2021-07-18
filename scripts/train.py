@@ -58,7 +58,7 @@ def train(**kwargs):
         sample_count = 0
         # training
         model.train()
-        for batch_idx, (rgbs, labels, masks, car_transforms, _) in enumerate(train_loader):
+        for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks,
                                                             car_transforms, device)

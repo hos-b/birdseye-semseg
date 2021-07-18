@@ -61,15 +61,16 @@ def get_noisy_transforms(transforms: torch.Tensor, dx_std, dy_std, th_std) -> to
     se2_noise[:, 3, 3] = 1
     return transforms @ se2_noise
 
-def get_vehicle_masks(masks: torch.Tensor, starting_pixel: int = 171):
+def separate_masks(masks: torch.Tensor, boundary_pixel: int = 172):
     """
-    zero out the FoV parts, leaving only the vehicle in each mask.
-    if there is a vehicle right in front of the current one, the starting
+    seperates the mask into vehicle and FoV masks.
+    if there is a vehicle right in front of the current one, the boundary
     pixel is violated. less that 5% ? who cares. masks size: Bx256x205
     """
     vehicle_masks = masks.clone()
-    vehicle_masks[:, :starting_pixel + 1] = 0
-    return vehicle_masks
+    vehicle_masks[:, :boundary_pixel] = 0
+    masks[:, boundary_pixel:] = 0
+    return vehicle_masks, masks
 
 # dicts for plotting batches based on agent count
 newline_dict = {

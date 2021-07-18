@@ -6,7 +6,7 @@ import torch
 import torch.utils.data
 import torchvision.transforms as transforms
 from PIL import Image as PILImage
-
+from data.utils import separate_masks
 from data.color_map import convert_semantic_classes
 
 
@@ -75,7 +75,9 @@ class MassHDF5(torch.utils.data.Dataset):
             # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, "transform"]
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
-        return torch.stack(rgbs), torch.stack(semsegs), torch.stack(masks), \
+        # cut the mask into two separate tensors
+        veh_masks, fov_masks = separate_masks(torch.stack(masks))
+        return torch.stack(rgbs), torch.stack(semsegs), veh_masks, fov_masks, \
                torch.stack(car_transforms), torch.LongTensor([idx])
 
     def __len__(self):

@@ -48,7 +48,7 @@ def train(**kwargs):
         sample_count = 0
         # training
         model.train()
-        for batch_idx, (rgbs, labels, masks, car_transforms, _) in enumerate(train_loader):
+        for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
             rgbs, labels, masks, car_transforms = to_device(rgbs, labels, masks, car_transforms, device)
             rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
@@ -95,7 +95,7 @@ def train(**kwargs):
         solo_mask_iou = 0.0
         aggr_mask_iou = 0.0
         sample_count = 0
-        for batch_idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
+        for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(valid_loader):
             if (batch_idx + 1) % train_cfg.log_every == 0:
                 print(f'\repoch: {ep + 1}/{epochs}, '
                     f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')

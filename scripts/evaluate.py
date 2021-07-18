@@ -184,7 +184,8 @@ def evaluate(**kwargs):
     probs = [1 - sample_plot_prob, sample_plot_prob] 
     # plot stuff
     columns = 6
-    for idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(loader):
+    for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(loader):
+        masks = car_masks + fov_masks
         rgbs, labels, masks, car_transforms = to_device(rgbs, labels,
                                                         masks, car_transforms,
                                                         device)
