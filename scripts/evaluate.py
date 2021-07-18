@@ -15,7 +15,7 @@ from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
 
 def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: torch.Tensor,
-                    aggr_mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
+                    aggr_mask_preds: torch.Tensor, gt_solo_masks: torch.Tensor, gt_aggr_masks: torch.Tensor,
                     plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
     """
     plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
@@ -29,9 +29,9 @@ def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: t
     for i in range(agent_count):
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
-        single_gt_mask = gt_masks[i].cpu()
-        single_pred_mask = solo_mask_preds[i].cpu().squeeze()
-        aggr_gt_mask = agent_pool.combined_masks[i].cpu()
+        solo_gt_mask = gt_solo_masks[i].cpu()
+        solo_pred_mask = solo_mask_preds[i].cpu().squeeze()
+        aggr_gt_mask = gt_aggr_masks[i].cpu()
         aggr_pred_mask = aggr_mask_preds[i].cpu().squeeze()
         ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
         # create subplot and append to ax
@@ -39,12 +39,12 @@ def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: t
         # target solo mask
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
         ax[-1].set_title(f"target solo mask {i}")
-        plt.imshow(single_gt_mask)
+        plt.imshow(solo_gt_mask)
 
         # predicted solo mask
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
         ax[-1].set_title(f"pred solo mask {i}")
-        plt.imshow(single_pred_mask)
+        plt.imshow(solo_pred_mask)
 
         # target aggregated mask
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
@@ -91,23 +91,22 @@ def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: t
         plt.show()
 
 
-def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.Tensor, 
-                    mask_preds: torch.Tensor, gt_masks: torch.Tensor, agent_pool: CurriculumPool,
-                    plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
+def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, aggr_preds: torch.Tensor,
+                    gt_aggr_masks: torch.Tensor, plot_dest: str,
+                    semantic_classes: str, filename = 'test.png', title=''):
     """
     plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
     full output, masked output, full target and masked target for all agents in the batch.
     """
     agent_count = rgbs.shape[0]
-    columns = 7
-    fig = plt.figure(figsize=(30, agent_count * 4))
+    columns = 5
+    fig = plt.figure(figsize=(25, agent_count * 4))
     fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
     # plt.axis('off')
     for i in range(agent_count):
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
-        single_gt_mask = gt_masks[i].cpu()
-        combined_gt_mask = agent_pool.combined_masks[i].cpu()
+        combined_gt_mask = gt_aggr_masks[i].cpu()
         ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
         # create subplot and append to ax
         ax = []
@@ -117,36 +116,26 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, sseg_preds: torch.
         ax[-1].set_title(f"rgb {i}")
         plt.imshow(rgb.cpu())
 
-        # basic mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target mask {i}")
-        plt.imshow(single_gt_mask)
-
-        # predicted mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
-        ax[-1].set_title(f"predicted mask {i}")
-        plt.imshow(mask_preds[i].squeeze().cpu())
-
         # omniscient semantic BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
         ax[-1].set_title(f"omniscient BEV {i}")
         plt.imshow(ss_gt_img)
 
         # target semantic BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
         ax[-1].set_title(f"target BEV {i}")
         ss_gt_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_gt_img)
 
         # predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
         ax[-1].set_title(f"predicted BEV {i}")
-        ss_pred = torch.max(sseg_preds[i], dim=0)[1]
+        ss_pred = torch.max(aggr_preds[i], dim=0)[1]
         ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
         plt.imshow(ss_pred_img)
 
         # masked predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 7, xticks=[], yticks=[]))
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
         ax[-1].set_title(f"masked prediction {i}")
         ss_pred_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_pred_img)

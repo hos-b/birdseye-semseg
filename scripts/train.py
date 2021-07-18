@@ -39,10 +39,7 @@ def train(**kwargs):
     # losses & optimization
     scheduler: lr_scheduler.LambdaLR = kwargs.get('scheduler')
     optimizer: torch.optim.Adam = kwargs.get('optimizer')
-    mask_loss: nn.L1Loss = kwargs.get('mask_loss')
     semseg_loss = kwargs.get('semseg_loss')
-    mask_loss_weight = kwargs.get('mask_loss_weight')
-    sseg_loss_weight = kwargs.get('sseg_loss_weight')
     # avg iou metric
     last_snapshot_metric = 0.0
     # dataset
@@ -53,21 +50,20 @@ def train(**kwargs):
     # starting epoch
     start_ep = kwargs.get('start_ep')
     for ep in range(start_ep, epochs):
-        total_train_m_loss = 0.0
+        total_train_a_loss = 0.0
         total_train_s_loss = 0.0
         sample_count = 0
         # training
         model.train()
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
-            #TODO: fix
             sample_count += rgbs.shape[1]
-            rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels,
-                                                            masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
+                                                        fov_masks, car_transforms)
             # simulate connection drops
-            rgbs, labels, masks, car_transforms = drop_agent_data(rgbs, labels,
-                                                                  masks, car_transforms,
-                                                                  train_cfg.drop_prob)
-            agent_pool.generate_connection_strategy(masks, car_transforms,
+            rgbs, labels, car_masks, fov_masks, car_transforms = drop_agent_data(train_cfg.drop_prob,
+                                                        rgbs, labels, car_masks, fov_masks, car_transforms)
+            solo_masks = car_masks + fov_masks
+            agent_pool.generate_connection_strategy(solo_masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # fwd-bwd
@@ -78,57 +74,54 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dx_std,
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
-            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, masks)
-            m_loss = mask_loss(mask_preds.squeeze(1), masks)
-            s_loss = torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
-                                dim=(0, 1, 2))
-            # semseg & mask batch loss
-            batch_train_m_loss = m_loss.item()
-            batch_train_s_loss = s_loss.item()
-            # weighted losses
-            (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
-             s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight).backward()
-
+            _, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            # solo & aggregated batch loss
+            s_loss = 0 # torch.mean(semseg_loss(solo_preds, labels) * solo_masks)
+            a_loss = torch.mean(semseg_loss(aggr_preds, labels) * agent_pool.combined_masks)
+            (s_loss + a_loss).backward()
+            batch_train_s_loss = 0 # s_loss.item()
+            batch_train_a_loss = a_loss.item()
             optimizer.step()
 
             # log batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0:
                 if log_enable:
                     wandb.log({
-                        'loss/batch train mask': batch_train_m_loss,
-                        'loss/batch train sseg': batch_train_s_loss
+                        'loss/batch train solo': batch_train_s_loss,
+                        'loss/batch train aggr': batch_train_a_loss
                     })
                 print(f'\repoch: {ep + 1}/{epochs}, '
                       f'training batch: {batch_idx + 1} / {len(train_loader)}', end='')
-            total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
+            total_train_a_loss += batch_train_a_loss
             # end of batch
 
         # log train epoch loss
         if log_enable:
             wandb.log({
-                'loss/total train mask': total_train_m_loss / sample_count,
-                'loss/total train sseg': total_train_s_loss / sample_count,
+                'loss/total train solo': total_train_s_loss / sample_count,
+                'loss/total train aggr': total_train_a_loss / sample_count,
                 'misc/epoch': ep + 1
             })
-        print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
-              f'{(total_train_s_loss / sample_count)} segmentation')
+        print(f'\nepoch loss: {(total_train_s_loss / sample_count):.6f} solo, '
+                            f'{(total_train_a_loss / sample_count):.6f} aggregated')
         # validation ---------------------------------------------------------------------------
         model.eval()
         visualized = False
-        total_valid_m_loss = 0.0
         total_valid_s_loss = 0.0
-        sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).to(device)
-        mask_ious = 0.0
+        total_valid_a_loss = 0.0
+        solo_sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).to(device)
+        aggr_sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).to(device)
         sample_count = 0
-        for batch_idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
-            print(f'\repoch: {ep + 1}/{epochs}, '
-                  f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
+        for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(valid_loader):
+            print(f'\repoch: {ep + 1}/{epochs}, validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             sample_count += rgbs.shape[1]
-            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels,
-                                                            masks, car_transforms)
-            agent_pool.generate_connection_strategy(masks, car_transforms,
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
+                                                        fov_masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                        fov_masks, car_transforms)
+            solo_masks = car_masks + fov_masks
+            agent_pool.generate_connection_strategy(solo_masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # add se2 noise to transforms
@@ -138,49 +131,56 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
             with torch.no_grad():
-                sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, masks)
-            sseg_ious += get_iou_per_class(sseg_preds, labels, agent_pool.combined_masks,
-                                       train_cfg.num_classes).to(device)
-            mask_ious += get_mask_iou(mask_preds.squeeze(1), masks, train_cfg.mask_detection_thresh)
+                _, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            # solo_sseg_ious += get_iou_per_class(solo_preds, labels, solo_masks,
+            #                                     train_cfg.num_classes).to(device)
+            aggr_sseg_ious += get_iou_per_class(aggr_preds, labels, agent_pool.combined_masks,
+                                                train_cfg.num_classes).to(device)
             # sum up losses
-            total_valid_m_loss += mask_loss(mask_preds.squeeze(1), masks).item()
-            total_valid_s_loss += torch.mean(semseg_loss(sseg_preds, labels) * agent_pool.combined_masks,
-                                             dim=(0, 1, 2)).item()
+            # total_valid_s_loss += torch.mean(semseg_loss(solo_preds, labels) * solo_masks)
+            total_valid_a_loss += torch.mean(semseg_loss(aggr_preds, labels) * agent_pool.combined_masks)
             # visualize a random batch and all hard batches [if enabled]
-            if not visualized and log_enable:
+            if not visualized:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
-                first_batch_img = plot_full_batch(rgbs, labels, sseg_preds, mask_preds, masks,
-                                                  agent_pool, plot_dest='image',
+                first_batch_img = plot_full_batch(rgbs, labels, aggr_preds,
+                                                  agent_pool.combined_masks, plot_dest='image',
                                                   semantic_classes=train_cfg.classes,
                                                   title=f'E: {ep + 1}, B#: {batch_no.item()}')
                 validation_img_log_dict['media/results'] = \
                     wandb.Image(first_batch_img, caption='full batch predictions')
-                wandb.log(validation_img_log_dict)
+                if log_enable:
+                    wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
 
         # more wandb logging -------------------------------------------------------------------
-        elevation_metric = 0.0
+        avg_aggr_iou = 0.0
+        avg_solo_iou = 0.0
         log_dict = {}
         for key, val in segmentation_classes.items():
-            log_dict[f'iou/{val.lower()}'] = (sseg_ious[key] / sample_count).item()
+            log_dict[f'solo iou/{val.lower()}'] = (solo_sseg_ious[key] / sample_count)
+            log_dict[f'aggr iou/{val.lower()}'] = (aggr_sseg_ious[key] / sample_count)
             if val != 'Misc' and val != 'Water':
-                elevation_metric += sseg_ious[key] / sample_count
-        log_dict['loss/total validation mask'] = (total_valid_m_loss / sample_count)
-        log_dict['loss/total validation sseg'] = (total_valid_s_loss / sample_count)
-        log_dict['iou/mask'] = (mask_ious / sample_count).item()
+                avg_aggr_iou += log_dict[f'aggr iou/{val.lower()}']
+                avg_solo_iou += log_dict[f'solo iou/{val.lower()}']
+        if train_cfg.classes == 'ours':
+            avg_aggr_iou /= 5
+            avg_solo_iou /= 5
+        else:
+            avg_aggr_iou /= train_cfg.num_classes
+            avg_solo_iou /= train_cfg.num_classes
+        log_dict['loss/total validation solo'] = (total_valid_s_loss / sample_count)
+        log_dict['loss/total validation aggr'] = (total_valid_a_loss / sample_count)
         log_dict['misc/epoch'] = ep + 1
         log_dict['misc/save'] = 0
-        log_dict['curriculum/elevation metric'] = (elevation_metric / 5).item()
-        log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
-        log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
-        print(f'\nepoch validation loss: {total_valid_m_loss / sample_count} mask, '
-              f'{total_valid_s_loss / sample_count} segmentation')
+        log_dict['curriculum/elevation metric'] = avg_aggr_iou
+        print(f'\nepoch validation loss: {(total_valid_s_loss / sample_count):.6f} solo, '
+                                       f'{(total_valid_a_loss / sample_count):.6f} aggregated')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
-        if log_dict['curriculum/elevation metric'] > last_snapshot_metric:
+        if avg_aggr_iou > last_snapshot_metric:
             print(f'best model @ epoch {ep + 1}')
-            last_snapshot_metric = log_dict['curriculum/elevation metric']
+            last_snapshot_metric = avg_aggr_iou
             snapshot_tag = 'best'
             log_dict['misc/save'] = 1
         torch.save(optimizer.state_dict(), train_cfg.snapshot_dir +
@@ -196,8 +196,8 @@ def train(**kwargs):
                     increase_diff = True
             elif train_cfg.strategy == 'metric':
                 # elevation metric = avg[avg[important class IoU] + avg[mask IoU]]
-                elevation_metric /= 6
-                if elevation_metric >= train_cfg.strategy_parameter:
+                avg_aggr_iou /= 6
+                if avg_aggr_iou >= train_cfg.strategy_parameter:
                     increase_diff = True
             if increase_diff:
                 agent_pool.difficulty = min(agent_pool.difficulty + 1,
