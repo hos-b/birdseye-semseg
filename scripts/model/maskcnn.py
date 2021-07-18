@@ -34,7 +34,7 @@ class MaskCNN(torch.nn.Module):
         self.center_x = self.sem_cfg.center_x(self.cf_w)
         self.center_y = self.sem_cfg.center_y(self.cf_h)
 
-    def forward(self, x, transforms, adjacency_matrix):
+    def forward(self, x, transforms, adjacency_matrix, car_masks):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(x)
@@ -42,6 +42,9 @@ class MaskCNN(torch.nn.Module):
         x = self.global_feature_extractor(shared)
         # B, 128, 80, 108
         x = self.feature_fusion(shared, x)
+        # add ego car masks
+        x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w),
+                              mode='bilinear', align_corners=True)
         # B, 128, 80, 108
         aggr_x = self.aggregate_features(x, transforms, adjacency_matrix)
         aggr_x = torch.sigmoid(self.mask_prediction(aggr_x))
@@ -53,13 +56,15 @@ class MaskCNN(torch.nn.Module):
         return solo_x, aggr_x
 
     def aggregate_features(self, x, transforms, adjacency_matrix):
-        # calculating constants
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
-                                                             self.center_x, self.center_y).to(transforms.device)
+            relative_tfs = get_single_relative_img_transform(
+                transforms, i, self.ppm,
+                self.cf_h, self.cf_w,
+                self.center_x, self.center_y
+            ).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
                                                  flags=self.aggregation_type)
             warped_features[outside_fov] = 0

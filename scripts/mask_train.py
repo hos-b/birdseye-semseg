@@ -50,15 +50,18 @@ def train(**kwargs):
         model.train()
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
             sample_count += rgbs.shape[1]
-            rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels, masks, car_transforms)
-            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            agent_pool.generate_connection_strategy(masks, car_transforms,
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
+                                                                        fov_masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                                        fov_masks, car_transforms)
+            solo_masks = car_masks + fov_masks
+            agent_pool.generate_connection_strategy(solo_masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # fwd-bwd
             optimizer.zero_grad()
-            solo_pred, aggr_pred = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-            m_solo_loss = mask_loss(solo_pred.squeeze(1), masks)
+            solo_pred, aggr_pred = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            m_solo_loss = mask_loss(solo_pred.squeeze(1), solo_masks)
             m_aggr_loss = mask_loss(aggr_pred.squeeze(1), agent_pool.combined_masks)
             (m_solo_loss + m_aggr_loss).backward()
             # semseg & mask batch loss
@@ -85,8 +88,8 @@ def train(**kwargs):
                 'loss/total train aggr mask': total_train_a_m_loss / sample_count,
                 'misc/epoch': ep + 1
             })
-        print(f'\nepoch loss: {(total_train_s_m_loss / sample_count)} solo, '
-                            f'{(total_train_a_m_loss / sample_count)} aggregated')
+        print(f'\nepoch loss: {(total_train_s_m_loss / sample_count):.6f} solo, '
+                            f'{(total_train_a_m_loss / sample_count):.6f} aggregated')
         # validation ---------------------------------------------------------------------------
         model.eval()
         visualized = False
@@ -96,22 +99,24 @@ def train(**kwargs):
         aggr_mask_iou = 0.0
         sample_count = 0
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(valid_loader):
-            # TODO: fix
             if (batch_idx + 1) % train_cfg.log_every == 0:
                 print(f'\repoch: {ep + 1}/{epochs}, '
                     f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             sample_count += rgbs.shape[1]
-            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels,
-                                                            masks, car_transforms)
-            agent_pool.generate_connection_strategy(masks, car_transforms,
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
+                                                                        fov_masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                                        fov_masks, car_transforms)
+            solo_masks = car_masks + fov_masks
+            agent_pool.generate_connection_strategy(solo_masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             with torch.no_grad():
-                solo_pred, aggr_pred = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-                m_solo_loss = mask_loss(solo_pred.squeeze(1), masks)
+                solo_pred, aggr_pred = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+                m_solo_loss = mask_loss(solo_pred.squeeze(1), solo_masks)
                 m_aggr_loss = mask_loss(aggr_pred.squeeze(1), agent_pool.combined_masks)
-            solo_mask_iou += get_mask_iou(solo_pred.squeeze(1), masks, train_cfg.mask_detection_thresh)
+            solo_mask_iou += get_mask_iou(solo_pred.squeeze(1), solo_masks, 
+                                          train_cfg.mask_detection_thresh)
             aggr_mask_iou += get_mask_iou(aggr_pred.squeeze(1), agent_pool.combined_masks,
                                           train_cfg.mask_detection_thresh)
             # sum up losses
@@ -120,7 +125,7 @@ def train(**kwargs):
             # visualize a random batch and all hard batches [if enabled]
             if not visualized and log_enable:
                 first_batch_img = plot_mask_batch(
-                    rgbs, labels, solo_pred, aggr_pred, masks,
+                    rgbs, labels, solo_pred, aggr_pred, solo_masks,
                     agent_pool, plot_dest='image',
                     semantic_classes=train_cfg.classes,
                     title=f'E: {ep + 1}, B#: {batch_no.item()}'
@@ -141,8 +146,8 @@ def train(**kwargs):
         log_dict['iou/aggr mask'] = (aggr_mask_iou / sample_count).item()
         log_dict['misc/epoch'] = ep + 1
         log_dict['misc/save'] = 0
-        print(f'\nepoch validation loss: {(total_valid_s_m_loss / sample_count)} solo, '
-                                       f'{(total_valid_a_m_loss / sample_count)} aggregated')
+        print(f'\nepoch validation loss: {(total_valid_s_m_loss / sample_count):.6f} solo, '
+                                       f'{(total_valid_a_m_loss / sample_count):.6f} aggregated')
         # saving the new model -----------------------------------------------------------------
         snapshot_tag = 'last'
         new_snapshot_metric = log_dict['loss/total validation solo mask'] + \
