@@ -67,12 +67,9 @@ class GraphBEVNet(torch.nn.Module):
         x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear', align_corners=True)
         # B, 256, 80, 108
         aggr_x = self.aggregate_features(x, transforms, adjacency_matrix)
-        aggr_x = torch.sigmoid(self.classifier(aggr_x))
-        # B, 256, 80, 108
-        solo_x = torch.sigmoid(self.classifier(x))
-        # B, 1, 480, 640
-        solo_x = F.interpolate(solo_x, self.output_size, mode='bilinear', align_corners=True)
-        aggr_x = F.interpolate(aggr_x, self.output_size, mode='bilinear', align_corners=True)
+        # B, 7, 256, 205
+        solo_x = F.interpolate(self.classifier(x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_x = F.interpolate(self.classifier(aggr_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_x, aggr_x
 
     def aggregate_features(self, x, transforms, adjacency_matrix):
