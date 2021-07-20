@@ -1,5 +1,6 @@
 import os
 import torch
+import torch.optim as optim
 import torch.nn as nn
 from torch.optim import lr_scheduler
 from kornia.losses.focal import FocalLoss
@@ -26,6 +27,7 @@ from data.utils import to_device
 from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
 from model.noisy_mcnn import NoisyMCNN
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
+from model.graph_bevnet import GraphBEVNet
 from evaluate import plot_full_batch
 
 def train(**kwargs):
@@ -33,12 +35,12 @@ def train(**kwargs):
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
     log_enable = kwargs.get('log_enable')
     # network & cuda
-    device = kwargs.get('device')
-    model = kwargs.get('model')
+    device: torch.device = kwargs.get('device')
+    model: nn.Module = kwargs.get('model')
     agent_pool: CurriculumPool = kwargs.get('agent_pool')
     # losses & optimization
     scheduler: lr_scheduler.LambdaLR = kwargs.get('scheduler')
-    optimizer: torch.optim.Adam = kwargs.get('optimizer')
+    optimizer: optim.Adam = kwargs.get('optimizer')
     semseg_loss = kwargs.get('semseg_loss')
     # avg iou metric
     last_snapshot_metric = 0.0
@@ -74,12 +76,12 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dx_std,
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
-            _, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            solo_preds, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
             # solo & aggregated batch loss
-            s_loss = 0 # torch.mean(semseg_loss(solo_preds, labels) * solo_masks)
+            s_loss = torch.mean(semseg_loss(solo_preds, labels) * solo_masks)
             a_loss = torch.mean(semseg_loss(aggr_preds, labels) * agent_pool.combined_masks)
             (s_loss + a_loss).backward()
-            batch_train_s_loss = 0 # s_loss.item()
+            batch_train_s_loss = s_loss.item()
             batch_train_a_loss = a_loss.item()
             optimizer.step()
 
@@ -95,7 +97,8 @@ def train(**kwargs):
             total_train_s_loss += batch_train_s_loss
             total_train_a_loss += batch_train_a_loss
             # end of batch
-
+            if batch_idx == 200:
+                break
         # log train epoch loss
         if log_enable:
             wandb.log({
@@ -131,13 +134,13 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
             with torch.no_grad():
-                _, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
-            # solo_sseg_ious += get_iou_per_class(solo_preds, labels, solo_masks,
-            #                                     train_cfg.num_classes).to(device)
+                solo_preds, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            solo_sseg_ious += get_iou_per_class(solo_preds, labels, solo_masks,
+                                                train_cfg.num_classes).to(device)
             aggr_sseg_ious += get_iou_per_class(aggr_preds, labels, agent_pool.combined_masks,
                                                 train_cfg.num_classes).to(device)
             # sum up losses
-            # total_valid_s_loss += torch.mean(semseg_loss(solo_preds, labels) * solo_masks)
+            total_valid_s_loss += torch.mean(semseg_loss(solo_preds, labels) * solo_masks)
             total_valid_a_loss += torch.mean(semseg_loss(aggr_preds, labels) * agent_pool.combined_masks)
             # visualize a random batch and all hard batches [if enabled]
             if not visualized:
@@ -152,6 +155,8 @@ def train(**kwargs):
                     wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
+            if batch_idx == 200:
+                break
 
         # more wandb logging -------------------------------------------------------------------
         avg_aggr_iou = 0.0
@@ -264,6 +269,9 @@ def parse_and_execute():
     elif train_cfg.model_name == 'pyrocc':
         model = PyramidOccupancyNetwork(train_cfg.num_classes, new_size,
                     geom_cfg, train_cfg.aggregation_type).to(device)
+    elif train_cfg.model_name == 'bevnet':
+        model = GraphBEVNet(train_cfg.num_classes, new_size,
+                    geom_cfg, train_cfg.aggregation_type).to(device)
     else:
         print('unknown network architecture {train_cfg.model_name}')
         exit()
@@ -318,7 +326,7 @@ def parse_and_execute():
         semseg_loss = nn.CrossEntropyLoss(weight=torch.tensor(train_cfg.ce_weights), reduction='none')
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
-    mask_loss = nn.L1Loss(reduction='mean')
+    mask_loss = nn.L1Loss(reduction='mean') # TODO: remove?
     # send to gpu
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)
