@@ -28,15 +28,15 @@ class GraphBEVNet(torch.nn.Module):
                                                                dw_channels2=48,
                                                                out_channels=64)
         self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
-                                                               block_channels=(64, 96, 128),
-                                                               t=6,
+                                                               block_channels=(64, 128, 256),
+                                                               t=8,
                                                                num_blocks=(4, 4, 4),
                                                                pool_sizes=(4, 6, 8, 10))
         self.feature_fusion = FeatureFusionModule(highres_in_channels=64,
-                                                 lowres_in_channels=128,
-                                                 out_channels=128,
+                                                 lowres_in_channels=256,
+                                                 out_channels=256,
                                                  scale_factor=4)
-        self.classifier = TransposedClassifier(128, num_classes)
+        self.classifier = TransposedClassifier(256, num_classes)
         # calibration parameters
         rgb_w, rgb_h, fov = 640, 480, 60.0
         focal_length = rgb_w / (2 * np.tan(fov * np.pi / 360))
