@@ -24,7 +24,7 @@ from metrics.iou import get_iou_per_class, get_mask_iou
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_noisy_transforms
 from data.utils import to_device
-from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
+from model.large_mcnn import TransposedMCNN
 from model.noisy_mcnn import NoisyMCNN
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
 from model.graph_bevnet import GraphBEVNet
@@ -144,7 +144,7 @@ def train(**kwargs):
             # visualize a random batch and all hard batches [if enabled]
             if not visualized:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
-                first_batch_img = plot_full_batch(rgbs, labels, aggr_preds,
+                first_batch_img = plot_full_batch(rgbs, labels, solo_preds, aggr_preds, solo_masks,
                                                   agent_pool.combined_masks, plot_dest='image',
                                                   semantic_classes=train_cfg.classes,
                                                   title=f'E: {ep + 1}, B#: {batch_no.item()}')
@@ -256,9 +256,6 @@ def parse_and_execute():
     # network stuff ----------------------------------------------------------------------------
     if train_cfg.model_name == 'mcnnT':
         model = TransposedMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).to(device)
-    elif train_cfg.model_name == 'mcnnTMax':
-        model = MaxoutMCNNT(train_cfg.num_classes, new_size,
                     geom_cfg, train_cfg.aggregation_type).to(device)
     elif train_cfg.model_name == 'mcnnNoisy':
         model = NoisyMCNN(train_cfg.num_classes, new_size,
