@@ -11,7 +11,7 @@ from data.dataset import MassHDF5
 from data.config import EvaluationConfig, SemanticCloudConfig
 from data.utils import squeeze_all, to_device
 from data.utils import font_dict, newline_dict
-from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
+from model.large_mcnn import TransposedMCNN
 from model.noisy_mcnn import NoisyMCNN
 
 def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: torch.Tensor,
@@ -91,7 +91,8 @@ def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: t
         plt.show()
 
 
-def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, aggr_preds: torch.Tensor,
+def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_preds: torch.Tensor, 
+                    aggr_preds: torch.Tensor, gt_solo_masks: torch.Tensor,
                     gt_aggr_masks: torch.Tensor, plot_dest: str,
                     semantic_classes: str, filename = 'test.png', title=''):
     """
@@ -99,7 +100,7 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, aggr_preds: torch.
     full output, masked output, full target and masked target for all agents in the batch.
     """
     agent_count = rgbs.shape[0]
-    columns = 5
+    columns = 7
     fig = plt.figure(figsize=(25, agent_count * 4))
     fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
     # plt.axis('off')
@@ -107,6 +108,7 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, aggr_preds: torch.
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
         combined_gt_mask = gt_aggr_masks[i].cpu()
+        solo_gt_mask = gt_solo_masks[i].cpu()
         ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
         # create subplot and append to ax
         ax = []
@@ -127,16 +129,29 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, aggr_preds: torch.
         ss_gt_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_gt_img)
 
-        # predicted semseg
+        # predicted semseg solo
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
-        ax[-1].set_title(f"predicted BEV {i}")
+        ax[-1].set_title(f"predicted solo BEV {i}")
+        ss_pred = torch.max(solo_preds[i], dim=0)[1]
+        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
+        plt.imshow(ss_pred_img)
+
+        # masked predicted semseg solo
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
+        ax[-1].set_title(f"masked solo prediction {i}")
+        ss_pred_img[solo_gt_mask == 0] = 0
+        plt.imshow(ss_pred_img)
+
+        # predicted semseg aggr
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
+        ax[-1].set_title(f"predicted aggr. BEV {i}")
         ss_pred = torch.max(aggr_preds[i], dim=0)[1]
         ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
         plt.imshow(ss_pred_img)
 
-        # masked predicted semseg
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
-        ax[-1].set_title(f"masked prediction {i}")
+        # masked predicted semseg aggr
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 7, xticks=[], yticks=[]))
+        ax[-1].set_title(f"masked aggr. prediction {i}")
         ss_pred_img[combined_gt_mask == 0] = 0
         plt.imshow(ss_pred_img)
     
@@ -231,9 +246,6 @@ def main():
     if eval_cfg.model_names[0] == 'mcnnT':
         model = TransposedMCNN(eval_cfg.num_classes, new_size,
                        geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
-    elif eval_cfg.model_name == 'mcnnTMax':
-        model = MaxoutMCNNT(eval_cfg.num_classes, new_size,
-                        geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
     elif eval_cfg.model_name == 'mcnnNoisy':
         model = NoisyMCNN(eval_cfg.num_classes, new_size,
                         geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
