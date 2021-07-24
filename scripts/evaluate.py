@@ -90,7 +90,6 @@ def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: t
     elif plot_dest == 'show':
         plt.show()
 
-
 def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_preds: torch.Tensor, 
                     aggr_preds: torch.Tensor, gt_solo_masks: torch.Tensor,
                     gt_aggr_masks: torch.Tensor, plot_dest: str,
@@ -176,6 +175,78 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_preds: torch.
     elif plot_dest == 'show':
         plt.show()
 
+def plot_unmasked_batch(rgbs: torch.Tensor, solo_labels: torch.Tensor, solo_preds: torch.Tensor, 
+                        aggr_labels: torch.Tensor, aggr_preds: torch.Tensor, plot_dest: str,
+                        semantic_classes: str, filename = 'test.png', title=''):
+    """
+    plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
+    full output, masked output, full target and masked target for all agents in the batch.
+    this function is only for networks that predict the mask as a semantic class.
+    """
+    agent_count = rgbs.shape[0]
+    columns = 5
+    fig = plt.figure(figsize=(20, agent_count * 4))
+    fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
+    # plt.axis('off')
+    for i in range(agent_count):
+        rgb = rgbs[i, ...].permute(1, 2, 0)
+        rgb = (rgb + 1) / 2
+        solo_ss_gt_img = convert_semantics_to_rgb(solo_labels[i].cpu(), semantic_classes)
+        aggr_ss_gt_img = convert_semantics_to_rgb(aggr_labels[i].cpu(), semantic_classes)
+        # create subplot and append to ax
+        ax = []
+
+        # front RGB image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
+        ax[-1].set_title(f"rgb {i}")
+        plt.imshow(rgb.cpu())
+
+        # target solo semantic BEV image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
+        ax[-1].set_title(f"target solo BEV {i}")
+        plt.imshow(solo_ss_gt_img)
+
+        # predicted semseg solo
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
+        ax[-1].set_title(f"predicted solo BEV {i}")
+        ss_pred = torch.max(solo_preds[i], dim=0)[1]
+        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
+        plt.imshow(ss_pred_img)
+
+        # target aggr semantic BEV image
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
+        ax[-1].set_title(f"target aggr BEV {i}")
+        plt.imshow(aggr_ss_gt_img)
+
+        # predicted semseg aggr
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
+        ax[-1].set_title(f"predicted aggr. BEV {i}")
+        ss_pred = torch.max(aggr_preds[i], dim=0)[1]
+        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
+        plt.imshow(ss_pred_img)
+
+    
+    if plot_dest == 'disk':
+        matplotlib.use('Agg')
+        fig.canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+        fig.clear()
+        plt.close(fig)
+        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
+    elif plot_dest == 'image':
+        matplotlib.use('Agg')
+        fig.canvas.draw()
+        width, height = fig.get_size_inches() * fig.get_dpi()
+        width, height = int(width), int(height)
+        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
+        fig.clear()
+        plt.close(fig)
+        return image
+    elif plot_dest == 'show':
+        plt.show()
+
 def evaluate(**kwargs):
     eval_cfg: EvaluationConfig = kwargs.get('eval_cfg')
     model = kwargs.get('model')
@@ -203,6 +274,7 @@ def evaluate(**kwargs):
         if eval_cfg.plot_count == 0:
             print('\ndone!')
             break
+
 
 def main():
     # configuration
