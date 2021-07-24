@@ -274,9 +274,6 @@ def parse_and_execute():
     start_ep = train_cfg.resume_starting_epoch if train_cfg.resume_training else 0
     lr_lambda = lambda epoch: pow((1 - (((epoch + start_ep) - 1) / train_cfg.epochs)), 0.9)
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
-    mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
-    sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
-    optimizer.add_param_group({"params": [mask_loss_weight, sseg_loss_weight]})
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
                                 train_cfg.max_agent_count, device)
     # loading the network parameters/optimizer state -------------------------------------------
@@ -327,9 +324,8 @@ def parse_and_execute():
         mask_loss = mask_loss.to(device)
     # begin -------------------------------------------------------------------------------------
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
-          agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
+          agent_pool=agent_pool, scheduler=scheduler, semseg_loss=semseg_loss, start_ep=start_ep,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,
-          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep,
           segmentation_classes=segmentation_classes)
 
 if __name__ == '__main__':
