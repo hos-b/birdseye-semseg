@@ -30,7 +30,7 @@ class MassHDF5(torch.utils.data.Dataset):
         self.max_agent_count = self.dataset.attrs['max_agent_count'][0]
         self.n_samples = self.get_dataset_size()
         self.batch_indices, self.batch_sizes = self.get_batch_info(50100)
-        print(f"found {self.n_samples} samples in {self.batch_sizes.shape[0]} batches")
+        print(f'found {self.n_samples} samples in {self.batch_sizes.shape[0]} batches')
         self.rgb_transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.ColorJitter(brightness=self.jitter[0], contrast=self.jitter[1],
@@ -60,20 +60,20 @@ class MassHDF5(torch.utils.data.Dataset):
         b_start_idx = self.batch_indices[idx]
         for i in range(b_agent_count):
             # RGB Image: H, W, C
-            rgbs.append(self.rgb_transform(self.dataset[b_start_idx + i, "front_rgb"]
+            rgbs.append(self.rgb_transform(self.dataset[b_start_idx + i, 'front_rgb']
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
+            # Masks: H, W
+            masks.append(self.mask_transform(self.dataset[b_start_idx + i, 'top_mask']
+                        .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze())
             # Semantic Label: H, W
-            semseg = self.dataset[b_start_idx + i, "top_semseg"] .view(dtype=np.uint8).reshape(500, 400)
+            semseg = self.dataset[b_start_idx + i, 'top_semseg'] .view(dtype=np.uint8).reshape(500, 400)
             # change semantic labels to a subset
-            semseg = convert_semantic_classes(semseg, self.classes)
+            semseg = convert_semantic_classes(semseg, self.classes, masks[-1])
             # opencv size is (width, height), instead of (rows, cols)
             semseg = cv2.resize(semseg, dsize=self.size[::-1], interpolation=cv2.INTER_NEAREST)
             semsegs.append(torch.tensor(semseg, dtype=torch.long))
-            # Masks: H, W
-            masks.append(self.mask_transform(self.dataset[b_start_idx + i, "top_mask"]
-                        .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze())
             # Car Transforms: 4 x 4
-            car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, "transform"]
+            car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, 'transform']
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
         # cut the mask into two separate tensors
         veh_masks, fov_masks = separate_masks(torch.stack(masks))
@@ -94,7 +94,7 @@ class MassHDF5(torch.utils.data.Dataset):
         for i in range(batch_histogram.shape[0]):
             total_samples += (i + self.min_agent_count) * batch_histogram[i]
         
-        assert total_samples == self.dataset.shape[0] - 1, "unexpected number of samples"
+        assert total_samples == self.dataset.shape[0] - 1, 'unexpected number of samples'
         return total_samples
     
     def get_batch_info(self, estimate_batch_count=11000):
@@ -149,11 +149,3 @@ class MassHDF5(torch.utils.data.Dataset):
         except:
             print(f'could not write metadata to file {self.path}/{filename}')
         return batch_start_indices, batch_sizes
-
-def get_datasets(dataset, path, hdf5name, split=(0.8, 0.2), size=(500, 400), classes='carla', jitter=[0,0,0,0]):
-    if classes != 'carla' and classes != 'ours':
-        print("unknown segmentation class category: {classes}, using 'carla'")
-        classes = 'carla'
-    dset = MassHDF5(dataset=dataset, path=path, hdf5name=hdf5name,
-                    size=size, classes=classes, jitter=jitter)
-    return torch.utils.data.random_split(dset, [int(split[0] * len(dset)), int(split[1] * len(dset))])
