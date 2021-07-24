@@ -68,7 +68,7 @@ class MassHDF5(torch.utils.data.Dataset):
             # Semantic Label: H, W
             semseg = self.dataset[b_start_idx + i, 'top_semseg'] .view(dtype=np.uint8).reshape(500, 400)
             # change semantic labels to a subset
-            semseg = convert_semantic_classes(semseg, self.classes, masks[-1])
+            semseg = convert_semantic_classes(semseg, self.classes)
             # opencv size is (width, height), instead of (rows, cols)
             semseg = cv2.resize(semseg, dsize=self.size[::-1], interpolation=cv2.INTER_NEAREST)
             semsegs.append(torch.tensor(semseg, dtype=torch.long))

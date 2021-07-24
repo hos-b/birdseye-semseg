@@ -146,7 +146,7 @@ __carla_to_diminished_ids = {
     22 : 2  # Terrain     -> Non-drivable
 }
 
-def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str, mask: np.ndarray = None) -> np.ndarray:
+def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str) -> np.ndarray:
     """
     converts a HxW array of carla semantic IDs to a predefined subset ('ours' or 'diminished').
     if 'carla' or an unknown string is passed as target, the function retuns the exact input
@@ -154,16 +154,12 @@ def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str, mas
     assert len(semantic_ids.shape) == 2, f'expected HxW, got {semantic_ids.shape}'
     # if target_classes is unknown (or 'carla') return identity
     target_semantics = semantic_ids
-    if target_classes == 'ours':
+    # we do not distinguish between mask and non-masked pixels
+    # it's implemented as a post processing to avoid data loss
+    if target_classes == 'ours' or target_classes == 'ours+mask':
         target_semantics = np.zeros_like(semantic_ids)
         for carla_id, our_id in __carla_to_our_ids.items():
             target_semantics[semantic_ids == carla_id] = our_id
-    elif target_classes == 'ours+mask':
-        target_semantics = np.zeros_like(semantic_ids)
-        for carla_id, our_id in __carla_to_our_ids.items():
-            target_semantics[semantic_ids == carla_id] = our_id
-        # add mask as label
-        target_semantics[mask == 1] = 7
     elif target_classes == 'diminished':
         target_semantics = np.zeros_like(semantic_ids)
         for carla_id, our_id in __carla_to_diminished_ids.items():
