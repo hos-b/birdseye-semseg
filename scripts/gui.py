@@ -1,4 +1,5 @@
 import os
+from typing import Dict
 import cv2
 import torch
 import kornia
@@ -7,15 +8,15 @@ import numpy as np
 import PIL.ImageTk
 import PIL.Image as PILImage
 
+import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import convert_semantics_to_rgb
-from data.color_map import __our_classes as segmentation_classes
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms
 from metrics.iou import iou_per_class
-from model.large_mcnn import TransposedMCNN, MaxoutMCNNT
+from model.large_mcnn import TransposedMCNN
 from model.noisy_mcnn import NoisyMCNN
 
 class SampleWindow:
@@ -186,7 +187,7 @@ class SampleWindow:
         self.eval_cfg.se2_noise_dy_std = dy_std
         self.update_prediction()
 
-    def calculate_ious(self, dataset: MassHDF5):
+    def calculate_ious(self, dataset: MassHDF5, segmentation_classes: dict):
         if not self.eval_cfg.evaluate_at_start:
             print('full dataset evaluation disabled in yaml file')
             for i, (network) in enumerate(self.networks.keys()):
@@ -373,9 +374,6 @@ def main():
     if eval_cfg.baseline_model_name == 'mcnnT':
         baseline_model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
                     sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnnTMax':
-        baseline_model = MaxoutMCNNT(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
     elif eval_cfg.baseline_model_name == 'mcnnNoisy':
         baseline_model = NoisyMCNN(eval_cfg.num_classes, NEW_SIZE,
                     sem_cfg, eval_cfg.aggregation_types[0]).cuda(0)
@@ -395,9 +393,6 @@ def main():
         if eval_cfg.model_names[i] == 'mcnnT':
             model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
                         sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnnTMax':
-            model = MaxoutMCNNT(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         elif eval_cfg.model_names[i] == 'mcnnNoisy':
             model = NoisyMCNN(eval_cfg.num_classes, NEW_SIZE,
                         sem_cfg, eval_cfg.aggregation_types[i]).to(device)
@@ -408,7 +403,15 @@ def main():
         print(f'loading {snapshot_path}')
         gui.add_network(model, eval_cfg.runs[i])
     # evaluate the added networks
-    gui.calculate_ious(test_set)
+    if eval_cfg.classes == 'carla':
+        segmentation_classes = color_map.__carla_classes
+    elif eval_cfg.classes == 'ours':
+        segmentation_classes = color_map.__our_classes
+    elif eval_cfg.classes == 'ours+mask':
+        segmentation_classes = color_map.__our_classes_plus_mask
+    elif eval_cfg.classes == 'diminished':
+        segmentation_classes = color_map.__diminished_classes
+    gui.calculate_ious(test_set, segmentation_classes)
     # start the gui
     gui.start()
 
