@@ -37,6 +37,16 @@ __ours_to_rgb_palette = {
     5: [0, 0, 142],
     6: [45, 60, 150]
 }
+__oursplusmask_to_rgb_palette = {
+    0: [70, 70, 70],
+    1: [55, 90, 80],
+    2: [128, 64, 128],
+    3: [244, 35, 232],
+    4: [107, 142, 35],
+    5: [0, 0, 142],
+    6: [45, 60, 150],
+    7: [0, 0, 0] # mask is black
+}
 __diminished_to_rgb_palette = {
     0: [0, 0, 142],
     1: [128, 64, 128],
@@ -76,6 +86,16 @@ __our_classes = {
     4: 'Vegetation',
     5: 'Vehicles',
     6: 'Water'
+}
+__our_classes_plus_mask = {
+    0: 'Buildings',
+    1: 'Misc',
+    2: 'Road',
+    3: 'SideWalk',
+    4: 'Vegetation',
+    5: 'Vehicles',
+    6: 'Water',
+    7: 'Mask'
 }
 __diminished_classes = {
     0: 'Vehicles',
@@ -126,7 +146,7 @@ __carla_to_diminished_ids = {
     22 : 2  # Terrain     -> Non-drivable
 }
 
-def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str) -> np.ndarray:
+def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str, mask: np.ndarray = None) -> np.ndarray:
     """
     converts a HxW array of carla semantic IDs to a predefined subset ('ours' or 'diminished').
     if 'carla' or an unknown string is passed as target, the function retuns the exact input
@@ -138,6 +158,12 @@ def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str) -> 
         target_semantics = np.zeros_like(semantic_ids)
         for carla_id, our_id in __carla_to_our_ids.items():
             target_semantics[semantic_ids == carla_id] = our_id
+    elif target_classes == 'ours+mask':
+        target_semantics = np.zeros_like(semantic_ids)
+        for carla_id, our_id in __carla_to_our_ids.items():
+            target_semantics[semantic_ids == carla_id] = our_id
+        # add mask as label
+        target_semantics[mask == 1] = 7
     elif target_classes == 'diminished':
         target_semantics = np.zeros_like(semantic_ids)
         for carla_id, our_id in __carla_to_diminished_ids.items():
@@ -160,6 +186,12 @@ def convert_semantics_to_rgb(semantic_ids : torch.Tensor, semantic_classes: str)
                                          semantic_ids.shape[1], 3),
                                   dtype=np.uint8)
         for sid, cityscapes_rgb in __ours_to_rgb_palette.items():
+            semantic_rgb[semantic_ids == sid] = cityscapes_rgb
+    elif semantic_classes == 'ours+mask':
+        semantic_rgb = np.ndarray(shape=(semantic_ids.shape[0],
+                                         semantic_ids.shape[1], 3),
+                                  dtype=np.uint8)
+        for sid, cityscapes_rgb in __oursplusmask_to_rgb_palette.items():
             semantic_rgb[semantic_ids == sid] = cityscapes_rgb
     elif semantic_classes == 'diminished':
         semantic_rgb = np.ndarray(shape=(semantic_ids.shape[0],
