@@ -76,10 +76,11 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
             solo_preds, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            # set out-of-view regions to mask_semantic_id
             aggr_labels = labels.clone()
-            aggr_labels[agent_pool.combined_masks == 1] = mask_semantic_id
+            aggr_labels[agent_pool.combined_masks == 0] = mask_semantic_id
             solo_labels = labels.clone()
-            solo_labels[solo_masks == 1] = mask_semantic_id
+            solo_labels[solo_masks == 0] = mask_semantic_id
             # solo & aggregated batch loss
             a_loss = torch.mean(semseg_loss(aggr_preds, solo_labels))
             s_loss = torch.mean(semseg_loss(solo_preds, aggr_labels))
@@ -137,10 +138,11 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_th_std)
             with torch.no_grad():
                 solo_preds, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            # set out-of-view regions to mask_semantic_id
             aggr_labels = labels.clone()
-            aggr_labels[agent_pool.combined_masks == 1] = mask_semantic_id
+            aggr_labels[agent_pool.combined_masks == 0] = mask_semantic_id
             solo_labels = labels.clone()
-            solo_labels[solo_masks == 1] = mask_semantic_id
+            solo_labels[solo_masks == 0] = mask_semantic_id
             solo_sseg_ious += get_iou_per_class(solo_preds, solo_labels,
                                                 torch.ones_like(solo_labels),
                                                 train_cfg.num_classes).to(device)
