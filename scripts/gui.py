@@ -15,9 +15,8 @@ from data.color_map import convert_semantics_to_rgb
 from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
 from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms
-from metrics.iou import iou_per_class
-from model.large_mcnn import TransposedMCNN
-from model.noisy_mcnn import NoisyMCNN
+from metrics.iou import get_iou_per_class
+from model.factory import get_model
 
 class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, device: torch.device, new_size, center, ppm):
@@ -236,8 +235,8 @@ class SampleWindow:
                     with torch.no_grad():
                         ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
                                                                                 agent_count)))
-                self.mskd_ious[name] += iou_per_class(ss_preds, labels, gt_aggregate_masks).to(self.device)
-                self.full_ious[name] += iou_per_class(ss_preds, labels, torch.ones_like(gt_aggregate_masks)).to(self.device)
+                self.mskd_ious[name] += get_iou_per_class(ss_preds, labels, gt_aggregate_masks).to(self.device)
+                self.full_ious[name] += get_iou_per_class(ss_preds, labels, torch.ones_like(gt_aggregate_masks)).to(self.device)
 
         for i, (network) in enumerate(self.networks.keys()):
             full_iou_txt = 'full IoU  '
@@ -371,15 +370,8 @@ def main():
     # baseline stuff
     baseline_dir = eval_cfg.snapshot_dir.format(eval_cfg.baseline_run)
     baseline_path = baseline_dir + f'/{eval_cfg.baseline_model_version}_model.pth'
-    if eval_cfg.baseline_model_name == 'mcnnT':
-        baseline_model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    elif eval_cfg.baseline_model_name == 'mcnnNoisy':
-        baseline_model = NoisyMCNN(eval_cfg.num_classes, NEW_SIZE,
-                    sem_cfg, eval_cfg.aggregation_types[0]).cuda(0)
-    else:
-        print(f'unknown baseline network architecture {eval_cfg.baseline_model_name}')
-        exit()
+    baseline_model = get_model(eval_cfg.baseline_model_name, eval_cfg.num_classes, NEW_SIZE,
+                               sem_cfg, eval_cfg.aggregation_types[0]).to(device)
     baseline_model.load_state_dict(torch.load(baseline_path))
     gui.add_network(baseline_model, 'baseline')
     # other network stuff
@@ -390,17 +382,10 @@ def main():
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
             exit()
-        if eval_cfg.model_names[i] == 'mcnnT':
-            model = TransposedMCNN(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        elif eval_cfg.model_names[i] == 'mcnnNoisy':
-            model = NoisyMCNN(eval_cfg.num_classes, NEW_SIZE,
-                        sem_cfg, eval_cfg.aggregation_types[i]).to(device)
-        else:
-            print(f'unknown network architecture {eval_cfg.model_names[i]}')
-            exit()
-        model.load_state_dict(torch.load(snapshot_path))
+        model = get_model(eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
+                          sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         print(f'loading {snapshot_path}')
+        model.load_state_dict(torch.load(snapshot_path))
         gui.add_network(model, eval_cfg.runs[i])
     # evaluate the added networks
     if eval_cfg.classes == 'carla':

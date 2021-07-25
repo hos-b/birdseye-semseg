@@ -20,14 +20,11 @@ from data.config import SemanticCloudConfig, TrainingConfig
 import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.logging import init_wandb
-from metrics.iou import get_iou_per_class, get_mask_iou
+from metrics.iou import get_iou_per_class
 from data.utils import drop_agent_data, squeeze_all
 from data.utils import get_noisy_transforms
 from data.utils import to_device
-from model.large_mcnn import TransposedMCNN
-from model.noisy_mcnn import NoisyMCNN
-from model.pyrocc.pyrocc import PyramidOccupancyNetwork
-from model.graph_bevnet import GraphBEVNet
+from model.factory import get_model
 from evaluate import plot_unmasked_batch
 
 def train(**kwargs):
@@ -269,21 +266,8 @@ def parse_and_execute():
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
-    if train_cfg.model_name == 'mcnnT':
-        model = TransposedMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).to(device)
-    elif train_cfg.model_name == 'mcnnNoisy':
-        model = NoisyMCNN(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).to(device)
-    elif train_cfg.model_name == 'pyrocc':
-        model = PyramidOccupancyNetwork(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).to(device)
-    elif train_cfg.model_name == 'bevnet':
-        model = GraphBEVNet(train_cfg.num_classes, new_size,
-                    geom_cfg, train_cfg.aggregation_type).to(device)
-    else:
-        print('unknown network architecture {train_cfg.model_name}')
-        exit()
+    model = get_model(train_cfg.model_name, train_cfg.num_classes, new_size,
+                      geom_cfg, train_cfg.aggregation_type).to(device)
     print(f'{(model.parameter_count() / 1e6):.2f}M trainable parameters')
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     start_ep = train_cfg.resume_starting_epoch if train_cfg.resume_training else 0

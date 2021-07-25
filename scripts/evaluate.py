@@ -11,8 +11,7 @@ from data.dataset import MassHDF5
 from data.config import EvaluationConfig, SemanticCloudConfig
 from data.utils import squeeze_all, to_device
 from data.utils import font_dict, newline_dict
-from model.large_mcnn import TransposedMCNN
-from model.noisy_mcnn import NoisyMCNN
+from model.factory import get_model
 
 def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: torch.Tensor,
                     aggr_mask_preds: torch.Tensor, gt_solo_masks: torch.Tensor, gt_aggr_masks: torch.Tensor,
@@ -277,7 +276,7 @@ def evaluate(**kwargs):
 
 
 def main():
-    # configuration
+    # basic configuration ---------------------------------------------------------------
     eval_cfg = EvaluationConfig('config/evaluation.yml')
     geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     if len(eval_cfg.runs) > 1:
@@ -293,7 +292,7 @@ def main():
     device = torch.device(device_str)
     # seed to insure the same train/test split
     torch.manual_seed(eval_cfg.torch_seed)
-    # plot stuff 
+    # plot stuff ------------------------------------------------------------------------
     eval_cfg.plot_dir = eval_cfg.plot_dir.format(eval_cfg.runs[0])
     eval_cfg.plot_dir += '_' + eval_cfg.plot_tag
     if not os.path.exists(eval_cfg.plot_dir):
@@ -305,7 +304,7 @@ def main():
     else:
         print("valid plot types are 'show' and 'disk'")
         exit()
-    # network stuff
+    # network stuff ---------------------------------------------------------------------
     if eval_cfg.model_versions[0] != 'best' and eval_cfg.model_versions[0] != 'last':
         print("valid model version are 'best' and 'last'")
         exit()
@@ -315,19 +314,12 @@ def main():
     if not os.path.exists(snapshot_path):
         print(f'{snapshot_path} does not exist')
         exit()
-    if eval_cfg.model_names[0] == 'mcnnT':
-        model = TransposedMCNN(eval_cfg.num_classes, new_size,
-                       geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
-    elif eval_cfg.model_name == 'mcnnNoisy':
-        model = NoisyMCNN(eval_cfg.num_classes, new_size,
-                        geom_cfg, eval_cfg.aggregation_types[0]).cuda(0)
-    else:
-        print('unknown network architecture {eval_cfg.model_name}')
-        exit()
+    model = get_model(eval_cfg.model_name, eval_cfg.num_classes, new_size,
+                      geom_cfg, eval_cfg.aggregation_type).to(device)
     model.load_state_dict(torch.load(snapshot_path))
     agent_pool = CurriculumPool(eval_cfg.difficulty, eval_cfg.difficulty,
                                 eval_cfg.max_agent_count, device)
-    # dataloader stuff
+    # dataloader stuff ------------------------------------------------------------------
     eval_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
                         hdf5name=eval_cfg.dset_file, size=new_size,
                         classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
