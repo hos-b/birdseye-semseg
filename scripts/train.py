@@ -247,6 +247,8 @@ def parse_and_execute():
         segmentation_classes = color_map.__carla_classes
     elif train_cfg.classes == 'ours':
         segmentation_classes = color_map.__our_classes
+    elif train_cfg.classes == 'ours+mask':
+        segmentation_classes = color_map.__our_classes_plus_mask
     elif train_cfg.classes == 'diminished':
         segmentation_classes = color_map.__diminished_classes
     # snapshot dir -----------------------------------------------------------------------------
