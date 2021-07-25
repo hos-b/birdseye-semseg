@@ -46,6 +46,7 @@ def train(**kwargs):
     valid_loader = kwargs.get('valid_loader')
     segmentation_classes = kwargs.get('segmentation_classes')
     mask_semantic_id = max(segmentation_classes.keys())
+    print(f'segmenting mask with semantic id: {mask_semantic_id}')
     epochs = train_cfg.epochs
     # starting epoch
     start_ep = kwargs.get('start_ep')
@@ -75,11 +76,13 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
             solo_preds, aggr_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+            aggr_labels = labels.clone()
+            aggr_labels[agent_pool.combined_masks == 1] = mask_semantic_id
+            solo_labels = labels.clone()
+            solo_labels[solo_masks == 1] = mask_semantic_id
             # solo & aggregated batch loss
-            labels[agent_pool.combined_masks == 1] = mask_semantic_id
-            a_loss = torch.mean(semseg_loss(aggr_preds, labels))
-            labels[solo_masks == 1] = mask_semantic_id
-            s_loss = torch.mean(semseg_loss(solo_preds, labels))
+            a_loss = torch.mean(semseg_loss(aggr_preds, solo_labels))
+            s_loss = torch.mean(semseg_loss(solo_preds, aggr_labels))
             (s_loss + a_loss).backward()
             batch_train_s_loss = s_loss.item()
             batch_train_a_loss = a_loss.item()
@@ -139,10 +142,10 @@ def train(**kwargs):
             solo_labels = labels.clone()
             solo_labels[solo_masks == 1] = mask_semantic_id
             solo_sseg_ious += get_iou_per_class(solo_preds, solo_labels,
-                                                torch.ones_like(solo_preds),
+                                                torch.ones_like(solo_labels),
                                                 train_cfg.num_classes).to(device)
             aggr_sseg_ious += get_iou_per_class(aggr_preds, aggr_labels,
-                                                torch.ones_like(solo_preds),
+                                                torch.ones_like(aggr_labels),
                                                 train_cfg.num_classes).to(device)
             # sum up losses
             total_valid_s_loss += torch.mean(semseg_loss(solo_preds, solo_labels))
