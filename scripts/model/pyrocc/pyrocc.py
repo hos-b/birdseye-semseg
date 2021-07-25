@@ -94,7 +94,7 @@ class PyramidOccupancyNetwork(nn.Module):
         # solo_td_feats = self.topdown(bev_feats)
         # predict individual class log-probabilities
         # [B, class_count, 256, 205]
-        return None, self.classifier(aggr_td_feats)
+        return self.classifier(aggr_td_feats), None
 
     def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
         """
