@@ -82,8 +82,8 @@ def train(**kwargs):
             solo_labels = labels.clone()
             solo_labels[solo_masks == 0] = mask_semantic_id
             # solo & aggregated batch loss
-            a_loss = torch.mean(semseg_loss(aggr_preds, solo_labels))
-            s_loss = torch.mean(semseg_loss(solo_preds, aggr_labels))
+            a_loss = torch.mean(semseg_loss(aggr_preds, aggr_labels))
+            s_loss = torch.mean(semseg_loss(solo_preds, solo_labels))
             (s_loss + a_loss).backward()
             batch_train_s_loss = s_loss.item()
             batch_train_a_loss = a_loss.item()
