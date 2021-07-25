@@ -62,6 +62,10 @@ class PyramidOccupancyNetwork(nn.Module):
         self.ppm = sem_cfg.pix_per_m(self.cf_h, self.cf_w) # 5.255
         self.center_x = sem_cfg.center_x(self.cf_w) # 51
         self.center_y = sem_cfg.center_y(self.cf_h) # 107
+        # model specification
+        self.output_count = 2
+        self.model_type = 'semantic-only'
+        self.notes = 'not enough gpu memory for double semantic prediction'
 
     def forward(self, image, transforms, adjacency_matrix, car_masks):
         # image: [B, 3, 640, 480]

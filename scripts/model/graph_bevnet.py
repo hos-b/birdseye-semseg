@@ -53,6 +53,10 @@ class GraphBEVNet(torch.nn.Module):
                                                     ymax=4,
                                                     focal_length=focal_length,
                                                     cy=img_offset)
+        # model specification
+        self.output_count = 2
+        self.model_type = 'semantic-only'
+        self.notes = 'very large & slow'
 
     def forward(self, x, transforms, adjacency_matrix, car_masks):
         # B, 3, 480, 640: input size

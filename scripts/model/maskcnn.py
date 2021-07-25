@@ -33,6 +33,10 @@ class MaskCNN(torch.nn.Module):
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
         self.center_x = self.sem_cfg.center_x(self.cf_w)
         self.center_y = self.sem_cfg.center_y(self.cf_h)
+        # model specification
+        self.output_count = 2
+        self.model_type = 'mask-only'
+        self.notes = 'small, fast'
 
     def forward(self, x, transforms, adjacency_matrix, car_masks):
         # B, 3, 480, 640: input size
