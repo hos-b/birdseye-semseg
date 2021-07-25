@@ -9,6 +9,8 @@ import kornia
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
 
+
+
 class TransposedMCNN(nn.Module):
     """
     large and wide MCNN with extra deconv layers in the segmentation decoder
@@ -18,19 +20,19 @@ class TransposedMCNN(nn.Module):
         self.output_size = output_size
         self.sem_cfg = sem_cfg
         self.aggregation_type = aggr_type
-        self.learning_to_downsample = LearningToDownsampleWide(dw_channels1=32,
-                                                               dw_channels2=48,
-                                                               out_channels=64)
+        self.learning_to_downsample = LearningToDownsample(dw_channels1=32,
+                                                           dw_channels2=48,
+                                                           out_channels=64)
         self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
-                                                                        block_channels=(64, 128, 256),
+                                                                        block_channels=(64, 96, 128),
                                                                         t=8,
-                                                                        num_blocks=(4, 8, 8),
-                                                                        pool_sizes=(6, 8, 10, 12))
+                                                                        num_blocks=(3, 3, 3),
+                                                                        pool_sizes=(2, 4, 6, 8))
         self.feature_fusion = FeatureFusionModule(highres_in_channels=64,
-                                                           lowres_in_channels=256,
-                                                           out_channels=256,
+                                                           lowres_in_channels=128,
+                                                           out_channels=128,
                                                            scale_factor=4)
-        self.classifier = TransposedClassifier(256, num_classes)
+        self.classifier = TransposedClassifier(128, num_classes)
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
         self.center_x = self.sem_cfg.center_x(self.cf_w)
@@ -72,6 +74,30 @@ class TransposedMCNN(nn.Module):
         returns the number of trainable parameters
         """
         return sum(p.numel() for p in self.parameters() if p.requires_grad)
+
+class TransposedMCNNXL(TransposedMCNN):
+    """
+    extra large and wide MCNN with extra deconv layers in the segmentation decoder
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super().__init__(num_classes, output_size, sem_cfg, aggr_type)
+        self.learning_to_downsample = LearningToDownsampleWide(dw_channels1=32,
+                                                               dw_channels2=48,
+                                                               out_channels=64)
+        self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
+                                                                        block_channels=(64, 128, 256),
+                                                                        t=8,
+                                                                        num_blocks=(4, 8, 8),
+                                                                        pool_sizes=(6, 8, 10, 12))
+        self.feature_fusion = FeatureFusionModule(highres_in_channels=64,
+                                                           lowres_in_channels=256,
+                                                           out_channels=256,
+                                                           scale_factor=4)
+        self.classifier = TransposedClassifier(256, num_classes)
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
 
 # ------------------------------------------------------ Modules ------------------------------------------------------
 
