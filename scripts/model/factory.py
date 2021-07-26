@@ -1,4 +1,4 @@
-from model.large_mcnn import TransposedMCNN, TransposedMCNNXL
+from model.large_mcnn import TransposedMCNN, TransposedMCNNXL, ExtendedMCNNT
 from model.noisy_mcnn import NoisyMCNN
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
 from model.graph_bevnet import GraphBEVNet
@@ -15,6 +15,8 @@ def get_model(model_name: str, *args):
         return TransposedMCNN(*args)
     elif model_name == 'mcnnTXL':
         return TransposedMCNNXL(*args)
+    elif model_name == 'mcnnTE':
+        return ExtendedMCNNT(*args)
     elif model_name == 'mcnnNoisy':
         return NoisyMCNN(*args)
     elif model_name == 'pyrocc':

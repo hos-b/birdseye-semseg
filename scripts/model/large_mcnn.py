@@ -20,18 +20,17 @@ class TransposedMCNN(nn.Module):
         self.output_size = output_size
         self.sem_cfg = sem_cfg
         self.aggregation_type = aggr_type
-        self.learning_to_downsample = LearningToDownsample(dw_channels1=32,
-                                                           dw_channels2=48,
-                                                           out_channels=64)
+        self.learning_to_downsample = LearningToDownsampleWide(dw_channels1=32,
+                                                               dw_channels2=48,
+                                                               out_channels=64)
         self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
-                                                                        block_channels=(64, 96, 128),
-                                                                        t=8,
-                                                                        num_blocks=(3, 3, 3),
-                                                                        pool_sizes=(2, 4, 6, 8))
+                                                               block_channels=(64, 96, 128),
+                                                               t=8, num_blocks=(3, 3, 3),
+                                                               pool_sizes=(2, 4, 6, 8))
         self.feature_fusion = FeatureFusionModule(highres_in_channels=64,
-                                                           lowres_in_channels=128,
-                                                           out_channels=128,
-                                                           scale_factor=4)
+                                                  lowres_in_channels=128,
+                                                  out_channels=128,
+                                                  scale_factor=4)
         self.classifier = TransposedClassifier(128, num_classes)
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
@@ -46,13 +45,13 @@ class TransposedMCNN(nn.Module):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(x)
-        # B, 256, 15, 20
+        # B, 128, 15, 20
         x = self.global_feature_extractor(shared)
-        # B, 256, 80, 108
+        # B, 128, 80, 108
         x = self.feature_fusion(shared, x)
         # add ego car masks
         x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear', align_corners=True)
-        # B, 256, 80, 108
+        # B, 128, 80, 108
         aggr_x = self.aggregate_features(x, transforms, adjacency_matrix)
         # B, 7, 128, 205
         solo_x = F.interpolate(self.classifier(x), self.output_size, mode='bilinear', align_corners=True)
@@ -85,18 +84,14 @@ class TransposedMCNNXL(TransposedMCNN):
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super().__init__(num_classes, output_size, sem_cfg, aggr_type)
-        self.learning_to_downsample = LearningToDownsampleWide(dw_channels1=32,
-                                                               dw_channels2=48,
-                                                               out_channels=64)
         self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
-                                                                        block_channels=(64, 128, 256),
-                                                                        t=8,
-                                                                        num_blocks=(4, 8, 8),
-                                                                        pool_sizes=(6, 8, 10, 12))
+                                                               block_channels=(64, 128, 256),
+                                                               t=8, num_blocks=(4, 8, 8),
+                                                               pool_sizes=(6, 8, 10, 12))
         self.feature_fusion = FeatureFusionModule(highres_in_channels=64,
-                                                           lowres_in_channels=256,
-                                                           out_channels=256,
-                                                           scale_factor=4)
+                                                  lowres_in_channels=256,
+                                                  out_channels=256,
+                                                  scale_factor=4)
         self.classifier = TransposedClassifier(256, num_classes)
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
@@ -106,6 +101,42 @@ class TransposedMCNNXL(TransposedMCNN):
         self.output_count = 2
         self.model_type = 'semantic-only'
         self.notes = 'large, slow'
+
+class ExtendedMCNNT(TransposedMCNN):
+    """
+    Transposed MCNN with extra layers for the graph decoder. global feature extractor is enlarged.
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super().__init__(num_classes, output_size, sem_cfg, aggr_type)
+        self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
+                                                               block_channels=(64, 96, 128),
+                                                               t=8, num_blocks=(4, 8, 8),
+                                                               pool_sizes=(6, 8, 10, 12))
+        self.graph_aggr_conv = nn.Sequential(
+            _DSConv(dw_channels=128, out_channels=128),
+            _DSConv(dw_channels=128, out_channels=128)
+        )
+        # model specification
+        self.output_count = 2
+        self.model_type = 'semantic-only'
+        self.notes = 'small, fast'
+    
+    def forward(self, x, transforms, adjacency_matrix, car_masks):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.learning_to_downsample(x)
+        # B, 128, 15, 20
+        x = self.global_feature_extractor(shared)
+        # B, 128, 80, 108
+        x = self.feature_fusion(shared, x)
+        # add ego car masks
+        x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear', align_corners=True)
+        # B, 128, 80, 108
+        aggr_x = self.graph_aggr_conv(self.aggregate_features(x, transforms, adjacency_matrix))
+        # B, 7, 128, 205
+        solo_x = F.interpolate(self.classifier(x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_x = F.interpolate(self.classifier(aggr_x), self.output_size, mode='bilinear', align_corners=True)
+        return solo_x, aggr_x
 
 # ------------------------------------------------------ Modules ------------------------------------------------------
 
@@ -290,10 +321,10 @@ class _ConvINReLU(nn.Module):
 
 class _DSConv(nn.Module):
     """Depthwise Separable Convolutions"""
-    def __init__(self, dw_channels, out_channels, stride=1, kernel_size=3):
+    def __init__(self, dw_channels, out_channels, stride=1, kernel_size=3, padding=1):
         super(_DSConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(dw_channels, dw_channels, kernel_size, stride, 1, groups=dw_channels, bias=False),
+            nn.Conv2d(dw_channels, dw_channels, kernel_size, stride, padding, groups=dw_channels, bias=False),
             nn.InstanceNorm2d(dw_channels),
             nn.ReLU(True),
             nn.Conv2d(dw_channels, out_channels, 1, bias=False),
