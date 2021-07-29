@@ -6,9 +6,11 @@ import numpy as np
 from torch.nn import functional as F
 from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
-from model.large_mcnn import LearningToDownsampleWide, GlobalFeatureExtractor, FeatureFusionModule, TransposedClassifier
+from model.large_mcnn import LearningToDownsampleWide, GlobalFeatureExtractor
+from model.large_mcnn import FeatureFusionModule, TransposedClassifier
+from model.base import DoubleSemantic
 
-class GraphBEVNet(torch.nn.Module):
+class GraphBEVNet(DoubleSemantic):
     """
     FastSCNN slightly modified to output full masks
     with aggregation from other agents.
