@@ -12,14 +12,15 @@ import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import convert_semantics_to_rgb
-from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
+from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks, get_single_adjacent_aggregate_mask
 from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms
 from metrics.iou import get_iou_per_class
 from model.factory import get_model
 
+
 class SampleWindow:
-    def __init__(self, eval_cfg: EvaluationConfig, device: torch.device, new_size, center, ppm):
+    def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
         # network stuff
         self.networks = {}
         self.output_h = new_size[0]
@@ -29,23 +30,24 @@ class SampleWindow:
         self.ppm = ppm
         self.eval_cfg = eval_cfg
         self.semantic_classes = eval_cfg.classes
-        self.class_count = eval_cfg.num_classes
+        self.segclass_dict = classes_dict
         self.device = device
         self.current_data = None
         self.adjacency_matrix = None
-        self.self_masking_en = False
+        self.baseline_masking_en = False
+        self.show_masks = False
         self.agent_index = 0
         self.agent_count = 8
         self.window = tkinter.Tk()
         # image panels captions
         self.rgb_panel_caption         = tkinter.Label(self.window, text='front rgb')
-        self.masked_pred_panel_caption = tkinter.Label(self.window, text='masked pred')
-        self.full_pred_panel_caption   = tkinter.Label(self.window, text='full pred')
-        self.target_panel_caption      = tkinter.Label(self.window, text='target')
-        self.rgb_panel_caption.         grid(column=0, row=0, columnspan=5)
-        self.masked_pred_panel_caption. grid(column=6, row=0, columnspan=5)
-        self.full_pred_panel_caption.   grid(column=11, row=0, columnspan=5)
-        self.target_panel_caption.      grid(column=16, row=0, columnspan=5)
+        self.solo_pred_panel_caption   = tkinter.Label(self.window, text='solo pred')
+        self.aggr_pred_panel_caption   = tkinter.Label(self.window, text='aggr pred')
+        self.aggr_trgt_panel_caption   = tkinter.Label(self.window, text='target')
+        self.rgb_panel_caption.        grid(column=0, row=0, columnspan=5)
+        self.solo_pred_panel_caption.  grid(column=6, row=0, columnspan=5)
+        self.aggr_pred_panel_caption.  grid(column=11, row=0, columnspan=5)
+        self.aggr_trgt_panel_caption.  grid(column=16, row=0, columnspan=5)
         # agent selection buttons
         self.sep_1 = tkinter.Label(self.window, text='  ')
         self.sep_1.grid(row=1, rowspan=10, column=21)
@@ -55,32 +57,34 @@ class SampleWindow:
             exec(f"self.abutton_{i}.configure(command=lambda: self.agent_clicked({i}))", locals(), locals())
             exec(f"self.abutton_{i}.grid(column={22 + (i % buttons_per_row)}, row={1 + (i // buttons_per_row)})")
         # misc. buttons
-        self.agent_label  = tkinter.Label(self.window, text=f'agent {self.agent_index}/{self.agent_count}')
-        self.next_sample  = tkinter.Button(self.window, command=self.change_sample, text='next sample')
-        self.smask_button = tkinter.Button(self.window, command=self.toggle_self_masking, text=f'self mask: {int(self.self_masking_en)}')
-        self.agent_label. grid(column=22, row=0, columnspan=4)
-        self.smask_button.grid(column=22, row=3, columnspan=4)
-        self.next_sample. grid(column=22, row=4, columnspan=4)
+        self.agent_label      = tkinter.Label(self.window, text=f'agent {self.agent_index}/{self.agent_count}')
+        self.next_sample      = tkinter.Button(self.window, command=self.change_sample, text='next sample')
+        self.smask_button     = tkinter.Button(self.window, command=self.toggle_baseline_self_masking, text=f'filter baseline: {int(self.baseline_masking_en)}')
+        self.viz_masks_button = tkinter.Button(self.window, command=self.toggle_mask_visualization, text=f'visualize masks: {int(self.show_masks)}')
+        self.agent_label.       grid(column=22, row=0, columnspan=4)
+        self.smask_button.      grid(column=22, row=3, columnspan=4)
+        self.viz_masks_button.  grid(column=22, row=4, columnspan=4)
+        self.next_sample.       grid(column=22, row=5, columnspan=4)
         # noise parameters
         self.noise_label     = tkinter.Label(self.window, text=f'noise parameters')
-        self.noise_label.    grid(column=22, row=5, columnspan=4)
+        self.noise_label.    grid(column=22, row=6, columnspan=4)
         self.dx_noise_label  = tkinter.Label(self.window, text=f'std-x:')
-        self.dx_noise_label. grid(column=22, row=6, columnspan=2)
+        self.dx_noise_label. grid(column=22, row=7, columnspan=2)
         self.dx_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dx_std}')
         self.dx_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dx_noise_text)
-        self.dx_noise_entry. grid(column=24, row=6, columnspan=2)
+        self.dx_noise_entry. grid(column=24, row=7, columnspan=2)
         self.dy_noise_label  = tkinter.Label(self.window, text=f'std-y:')
-        self.dy_noise_label. grid(column=22, row=7, columnspan=2)
+        self.dy_noise_label. grid(column=22, row=8, columnspan=2)
         self.dy_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dy_std}')
         self.dy_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dy_noise_text)
-        self.dy_noise_entry. grid(column=24, row=7, columnspan=2)
+        self.dy_noise_entry. grid(column=24, row=8, columnspan=2)
         self.th_noise_label  = tkinter.Label(self.window, text=f'std-yaw:')
-        self.th_noise_label. grid(column=22, row=8, columnspan=2)
+        self.th_noise_label. grid(column=22, row=9, columnspan=2)
         self.th_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_th_std}')
         self.th_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.th_noise_text)
-        self.th_noise_entry. grid(column=24, row=8, columnspan=2)
+        self.th_noise_entry. grid(column=24, row=9, columnspan=2)
         self.apply_noise     = tkinter.Button(self.window, command=self.apply_noise_params, text='undertaker')
-        self.apply_noise.    grid(column=22, row=9, columnspan=4)
+        self.apply_noise.    grid(column=22, row=10, columnspan=4)
 
         # adjacency matrix buttons
         self.sep_2 = tkinter.Label(self.window, text='  ')
@@ -105,31 +109,27 @@ class SampleWindow:
         net_row = 2 + len(self.networks) * 12
         network.eval()
         self.networks[label] = network
-        self.mskd_ious[label] = torch.zeros((self.class_count, 1), dtype=torch.float64).to(self.device)
-        self.full_ious[label] = torch.zeros((self.class_count, 1), dtype=torch.float64).to(self.device)
+        self.mskd_ious[label] = torch.zeros((self.eval_cfg.num_classes, 1), dtype=torch.float64).to(self.device)
+        self.full_ious[label] = torch.zeros((self.eval_cfg.num_classes, 1), dtype=torch.float64).to(self.device)
         exec(f"self.network_label_{id}        = tkinter.Label(self.window, text='[{label}]')")
         exec(f"self.rgb_panel_{id}            = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.masked_pred_panel_{id}    = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.full_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.target_panel_{id}         = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.solo_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.aggr_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.aggr_trgt_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.masked_iou_label_{id}     = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.full_iou_label_{id}       = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.seperator_{id}            = tkinter.Label(self.window, text='{'-' * 105}')")
         exec(f"self.network_label_{id}.         grid(column=0, row={net_row - 1}, columnspan=1)")
         exec(f"self.rgb_panel_{id}.             grid(column=0, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.masked_pred_panel_{id}.     grid(column=6, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.full_pred_panel_{id}.       grid(column=11, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.target_panel_{id}.          grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.solo_pred_panel_{id}.       grid(column=6, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.aggr_pred_panel_{id}.       grid(column=11, row={net_row}, columnspan=5, rowspan=8)")
+        exec(f"self.aggr_trgt_panel_{id}.       grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.masked_iou_label_{id}.      grid(column=0, row={net_row + 8}, columnspan=20)")
         exec(f"self.full_iou_label_{id}.        grid(column=0, row={net_row + 9}, columnspan=20)")
         exec(f"self.seperator_{id}.             grid(column=0, row={net_row + 10}, columnspan=20)")
 
     def assign_dataset_iterator(self, dset_iterator):
         self.dset_iterator = dset_iterator
-
-    def set_baseline(self, net: torch.nn.Module):
-        self.baseline = net
-        self.baseline.eval()
 
     def start(self):
         if 'baseline' not in self.networks:
@@ -157,9 +157,14 @@ class SampleWindow:
             self.agent_label.configure(text=f'agent {self.agent_index + 1}/{self.agent_count}')
             self.update_prediction()
 
-    def toggle_self_masking(self):
-        self.self_masking_en = not self.self_masking_en
-        self.smask_button.configure(text=f'self mask: {int(self.self_masking_en)}')
+    def toggle_mask_visualization(self):
+        self.show_masks = not self.show_masks
+        self.viz_masks_button.configure(text=f'visualize masks: {int(self.show_masks)}')
+        self.update_prediction()
+
+    def toggle_baseline_self_masking(self):
+        self.baseline_masking_en = not self.baseline_masking_en
+        self.smask_button.configure(text=f'filter baseline: {int(self.baseline_masking_en)}')
         self.update_prediction()
     
     def apply_noise_params(self):
@@ -186,7 +191,7 @@ class SampleWindow:
         self.eval_cfg.se2_noise_dy_std = dy_std
         self.update_prediction()
 
-    def calculate_ious(self, dataset: MassHDF5, segmentation_classes: dict):
+    def calculate_ious(self, dataset: MassHDF5):
         if not self.eval_cfg.evaluate_at_start:
             print('full dataset evaluation disabled in yaml file')
             for i, (network) in enumerate(self.networks.keys()):
@@ -198,15 +203,19 @@ class SampleWindow:
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
+        # mask iou
+        mask_iou_dict = {}
+        for key in self.networks:
+            mask_iou_dict[key] = 0.0
+
         for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
-            masks = car_masks + fov_masks
             print(f'\r{idx + 1}/{total_length}', end='')
-            rgbs, labels, masks, car_transforms = to_device(self.device, rgbs, labels,
-                                                            masks, car_transforms)
-            rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-            gt_aggregate_masks = get_all_aggregate_masks(masks, car_transforms, self.ppm,
-                                                      self.output_h, self.output_w,
-                                                      self.center_x, self.center_y)
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
+                                                                           car_masks, fov_masks,
+                                                                           car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                                             fov_masks, car_transforms)
+
             if self.eval_cfg.se2_noise_enable:
                 car_transforms = get_noisy_transforms(car_transforms,
                                                       self.eval_cfg.se2_noise_dx_std,
@@ -214,46 +223,39 @@ class SampleWindow:
                                                       self.eval_cfg.se2_noise_th_std)
             agent_count = rgbs.shape[0]
             sample_count += agent_count
+            
             for name, network in self.networks.items():
-                # manual aggregation for baseline network
-                if name == 'baseline':
-                    with torch.no_grad():
-                        single_ss_preds, single_mask_preds = network(rgbs, car_transforms, torch.eye(agent_count))
-                    # masking of regions outside FoV [for a fair comparison]
-                    single_ss_preds *= single_mask_preds
-                    ss_preds = torch.zeros_like(single_ss_preds)
-                    for i in range(agent_count):
-                        relative_tfs = get_single_relative_img_transform(car_transforms, i, self.ppm,
-                                                                         self.output_h, self.output_w,
-                                                                         self.center_x, self.center_y).to(self.device)
-                        relative_semantics = kornia.warp_affine(single_ss_preds, relative_tfs,
-                                                                dsize=(self.output_h, self.output_w),
-                                                                flags='nearest')
-                        ss_preds[i] = relative_semantics.sum(dim=0)
-                # latent aggregation for others
-                else:
-                    with torch.no_grad():
-                        ss_preds, _ = network(rgbs, car_transforms, torch.ones((agent_count,
-                                                                                agent_count)))
-                self.mskd_ious[name] += get_iou_per_class(ss_preds, labels, gt_aggregate_masks).to(self.device)
-                self.full_ious[name] += get_iou_per_class(ss_preds, labels, torch.ones_like(gt_aggregate_masks)).to(self.device)
+                batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
+                    self.segclass_dict, name, rgbs, car_masks, fov_masks,
+                    car_transforms, labels, self.ppm, self.output_h, self.output_w,
+                    self.center_x, self.center_y
+                )
+                self.mskd_ious[name] += batch_mskd_ious
+                self.full_ious[name] += batch_full_ious
+                mask_iou_dict[name] += mask_iou
 
         for i, (network) in enumerate(self.networks.keys()):
             full_iou_txt = 'full IoU  '
             mskd_iou_txt = 'mskd IoU  '
-            for semantic_idx, semantic_class in segmentation_classes.items():
+            for semantic_idx, semantic_class in self.segclass_dict.items():
                 full_iou_txt += f'{semantic_class.lower()}: {(self.full_ious[network][semantic_idx] / sample_count).item():.02f} '
                 mskd_iou_txt += f'{semantic_class.lower()}: {(self.mskd_ious[network][semantic_idx] / sample_count).item():.02f} '
+            # if mask is not a semantic class, get the serparately calculated value (or 0 if n/a)
+            if 'Mask' not in self.segclass_dict.values():
+                full_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count):.02f} '
+                mskd_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count):.02f} '
+
             exec(f"self.full_iou_label_{i}.configure(text='{full_iou_txt}')")
             exec(f"self.masked_iou_label_{i}.configure(text='{mskd_iou_txt}')")
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
-        masks = car_masks + fov_masks
-        rgbs, labels, masks, car_transforms = to_device(self.device, rgbs, labels,
-                                                        masks, car_transforms)
-        rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-        self.current_data = (rgbs, labels, masks, car_transforms)
+        rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
+                                                                       car_masks, fov_masks,
+                                                                       car_transforms)
+        rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                                         fov_masks, car_transforms)
+        self.current_data = (rgbs, labels, car_masks, fov_masks, car_transforms)
         self.agent_count = rgbs.shape[0]
         self.adjacency_matrix = torch.eye(self.agent_count)
         self.window.title(f'batch #{batch_index.squeeze().item()}')
@@ -276,12 +278,12 @@ class SampleWindow:
         self.update_prediction()
 
     def update_prediction(self):
-        (rgbs, labels, _, car_transforms) = self.current_data
+        (rgbs, labels, car_masks, fov_masks, car_transforms) = self.current_data
         
         car_transforms = get_noisy_transforms(car_transforms,
-                                                self.eval_cfg.se2_noise_dx_std,
-                                                self.eval_cfg.se2_noise_dy_std,
-                                                self.eval_cfg.se2_noise_th_std)
+                                              self.eval_cfg.se2_noise_dx_std,
+                                              self.eval_cfg.se2_noise_dy_std,
+                                              self.eval_cfg.se2_noise_th_std)
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
@@ -290,6 +292,14 @@ class SampleWindow:
 
         # target image
         ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), self.semantic_classes)
+        
+        if self.show_masks:
+            aggr_gt_mask = get_single_adjacent_aggregate_mask(
+                car_masks + fov_masks, car_transforms, self.agent_index, self.ppm,
+                self.output_h, self.output_w, self.center_x, self.center_y,
+                self.adjacency_matrix, True
+            ).cpu().numpy()
+            ss_gt_img[aggr_gt_mask == 0, :] = 0
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         for i, (name, network) in enumerate(self.networks.items()):
@@ -298,83 +308,71 @@ class SampleWindow:
             exec(f"self.rgb_panel_{i}.image = rgb_tk")
 
             # >>> target image
-            exec(f"self.target_panel_{i}.configure(image=target_tk)")
-            exec(f"self.target_panel_{i}.image = target_tk")
+            exec(f"self.aggr_trgt_panel_{i}.configure(image=target_tk)")
+            exec(f"self.aggr_trgt_panel_{i}.image = target_tk")
 
+            solo_sseg_pred, solo_mask_pred, \
+            aggr_sseg_pred, aggr_mask_pred = network.get_eval_output(
+                self.segclass_dict, name, rgbs, car_masks, fov_masks, car_transforms,
+                self.adjacency_matrix, self.ppm, self.output_h, self.output_w,
+                self.center_x, self.center_y, self.agent_index, self.baseline_masking_en,
+                torch.device('cpu')
+            )
 
-            if name == 'baseline':
-                # >>> masked predicted semseg w/o external influence
-                with torch.no_grad():
-                    all_ss_preds, all_mask_preds = network(rgbs, car_transforms, torch.eye(self.agent_count))
-                current_ss_pred = all_ss_preds[self.agent_index].argmax(dim=0)
-                current_ss_pred_img = convert_semantics_to_rgb(current_ss_pred.cpu(), self.semantic_classes)
-                current_mask_pred = all_mask_preds[self.agent_index].squeeze().cpu()
-                current_ss_pred_img[current_mask_pred == 0] = 0
-                masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
-                exec(f"self.masked_pred_panel_{i}.configure(image=masked_pred_tk)")
-                exec(f"self.masked_pred_panel_{i}.image = masked_pred_tk")
-                # >>> full predicted semseg w/ influence from adjacency matrix
-                # using self masking (only for baseline since others do latent masking)
-                if self.self_masking_en:
-                    all_ss_preds *= all_mask_preds
-                not_selected = torch.where(self.adjacency_matrix[self.agent_index] == 0)[0]
-                relative_tfs = get_single_relative_img_transform(car_transforms, self.agent_index,
-                                                                 self.ppm, self.output_h, self.output_w,
-                                                                 self.center_x, self.center_y).to(self.device)
-                current_warped_semantics = kornia.warp_affine(all_ss_preds, relative_tfs,
-                                                              dsize=(self.output_h, self.output_w),
-                                                              flags='nearest')
-                current_warped_semantics[not_selected] = 0
-                current_warped_semantics = current_warped_semantics.sum(dim=0).argmax(dim=0)
-                current_aggregated_semantics = convert_semantics_to_rgb(current_warped_semantics.cpu(),
-                                                                        self.semantic_classes)
-            else:
-                # >>> masked predicted semseg w/o external influence
-                with torch.no_grad():
-                    all_ss_eye, all_mask_eye = network(rgbs, car_transforms, torch.eye(self.agent_count))
-                current_ss_pred = all_ss_eye[self.agent_index].argmax(dim=0)
-                current_ss_pred_img = convert_semantics_to_rgb(current_ss_pred.cpu(), self.semantic_classes)
-                current_mask_pred = all_mask_eye[self.agent_index].squeeze().cpu()
-                current_ss_pred_img[current_mask_pred == 0] = 0
-                masked_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_ss_pred_img), 'RGB')
-                exec(f"self.masked_pred_panel_{i}.configure(image=masked_pred_tk)")
-                exec(f"self.masked_pred_panel_{i}.image = masked_pred_tk")
-                # >>> full predicted semseg w/ influence from adjacency matrix
-                with torch.no_grad():
-                    all_ss_preds, all_mask_preds = network(rgbs, car_transforms, self.adjacency_matrix)
-                current_aggregated_semantics = \
-                    convert_semantics_to_rgb(all_ss_preds[self.agent_index].argmax(dim=0).cpu(),
-                                             self.semantic_classes)
-
-            full_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(current_aggregated_semantics), 'RGB')
-            exec(f"self.full_pred_panel_{i}.configure(image=full_pred_tk)")
-            exec(f"self.full_pred_panel_{i}.image = full_pred_tk")
+            solo_sseg_pred_img = convert_semantics_to_rgb(solo_sseg_pred.argmax(dim=0), self.semantic_classes)
+            if self.show_masks:
+                solo_sseg_pred_img[solo_mask_pred == 0] = 0
+            solo_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(solo_sseg_pred_img), 'RGB')
+            # >>> masked predicted semseg w/o external influence
+            exec(f"self.solo_pred_panel_{i}.configure(image=solo_sseg_pred_tk)")
+            exec(f"self.solo_pred_panel_{i}.image = solo_sseg_pred_tk")
+            # >>> full predicted semseg w/ influence from adjacency matrix
+            aggr_sseg_pred_img = convert_semantics_to_rgb(aggr_sseg_pred.argmax(dim=0),
+                                                          self.semantic_classes)
+            if self.show_masks:
+                aggr_sseg_pred_img[aggr_mask_pred == 0] = 0
+            aggr_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(aggr_sseg_pred_img), 'RGB')
+            exec(f"self.aggr_pred_panel_{i}.configure(image=aggr_sseg_pred_tk)")
+            exec(f"self.aggr_pred_panel_{i}.image = aggr_sseg_pred_tk")
 
 def main():
     sem_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     eval_cfg = EvaluationConfig('config/evaluation.yml')
     device = torch.device(eval_cfg.device)
     torch.manual_seed(eval_cfg.torch_seed)
-    # image geometry
+    # image geometry ---------------------------------------------------------------------------------------
     NEW_SIZE = (eval_cfg.output_h, eval_cfg.output_w)
     CENTER = (sem_cfg.center_x(NEW_SIZE[1]), sem_cfg.center_y(NEW_SIZE[0]))
     PPM = sem_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
     # gui object
-    gui = SampleWindow(eval_cfg, device, NEW_SIZE, CENTER, PPM)
-    # dataloader stuff
+    # evaluate the added networks
+    if eval_cfg.classes == 'carla':
+        segmentation_classes = color_map.__carla_classes
+    elif eval_cfg.classes == 'ours':
+        segmentation_classes = color_map.__our_classes
+    elif eval_cfg.classes == 'ours+mask':
+        segmentation_classes = color_map.__our_classes_plus_mask
+    elif eval_cfg.classes == 'diminished':
+        segmentation_classes = color_map.__diminished_classes
+    gui = SampleWindow(eval_cfg, segmentation_classes, device, NEW_SIZE, CENTER, PPM)
+    # dataloader stuff -------------------------------------------------------------------------------------
     test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
                         hdf5name=eval_cfg.dset_file, size=NEW_SIZE,
                         classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset_iterator(iter(loader))
-    # baseline stuff
+    # baseline stuff ---------------------------------------------------------------------------------------
     baseline_dir = eval_cfg.snapshot_dir.format(eval_cfg.baseline_run)
     baseline_path = baseline_dir + f'/{eval_cfg.baseline_model_version}_model.pth'
     baseline_model = get_model(eval_cfg.baseline_model_name, eval_cfg.num_classes, NEW_SIZE,
                                sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    baseline_model.load_state_dict(torch.load(baseline_path))
+    try:
+        baseline_model.load_state_dict(torch.load(baseline_path))
+    except:
+        print(f'{eval_cfg.baseline_model_name} implementation is incompatible with {eval_cfg.baseline_run}')
+        exit()
     gui.add_network(baseline_model, 'baseline')
-    # other network stuff
+    # other network stuff ----------------------------------------------------------------------------------
     for i in range(len(eval_cfg.runs)):
         snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[i])
         snapshot_path = f'{eval_cfg.model_versions[i]}_model.pth'
@@ -385,19 +383,15 @@ def main():
         model = get_model(eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
                           sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         print(f'loading {snapshot_path}')
-        model.load_state_dict(torch.load(snapshot_path))
+        try:
+            model.load_state_dict(torch.load(snapshot_path))
+        except:
+            print(f'{eval_cfg.model_names[i]} implementation is incompatible with {eval_cfg.runs}')
+            exit()
         gui.add_network(model, eval_cfg.runs[i])
-    # evaluate the added networks
-    if eval_cfg.classes == 'carla':
-        segmentation_classes = color_map.__carla_classes
-    elif eval_cfg.classes == 'ours':
-        segmentation_classes = color_map.__our_classes
-    elif eval_cfg.classes == 'ours+mask':
-        segmentation_classes = color_map.__our_classes_plus_mask
-    elif eval_cfg.classes == 'diminished':
-        segmentation_classes = color_map.__diminished_classes
-    gui.calculate_ious(test_set, segmentation_classes)
-    # start the gui
+    # evaluate the added networks --------------------------------------------------------------------------
+    gui.calculate_ious(test_set)
+    # start the gui ----------------------------------------------------------------------------------------
     gui.start()
 
 if __name__ == '__main__':
