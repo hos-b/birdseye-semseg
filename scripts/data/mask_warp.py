@@ -100,14 +100,36 @@ def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, 
         warped_mask[warped_mask < 1] = 0
     return warped_mask
 
-def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
+def get_single_adjacent_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, w,
+                                       center_x, center_y, adjacency_matrix, merge_masks=False, flags='bilinear'):
+    """
+    input: masks & transforms of all agents, target agent id, extra info
+    output: accumulative mask for the selected agent, given the adjacency matrix
+    """
+    assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
+    assert agent_id < masks.shape[0], f"given agent index {agent_id} does not exist"
+    # apply adjacency matrix to masks
+    new_masks = masks.clone().unsqueeze(1)
+    nonadjacent = torch.where(adjacency_matrix[agent_id] == 0)[0]
+    new_masks[nonadjacent] = 0
+    relative_tfs = get_single_relative_img_transform(transforms, agent_id,
+                                                     pixels_per_meter, h, w,
+                                                     center_x, center_y).to(transforms.device)
+    warped_mask = kornia.warp_affine(new_masks, relative_tfs, dsize=(h, w), flags=flags)
+    warped_mask = warped_mask.sum(dim=0)
+    if merge_masks:
+        warped_mask[warped_mask > 1] = 1
+        warped_mask[warped_mask < 1] = 0
+    return warped_mask.squeeze()
+
+def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest', merge_masks=False):
     """
     input:
         - all agent masks
         - all agent transforms
         - extra info about the geometry
     output:
-        - accumulative identified masks for each agent
+        - accumulated mask for each agent
     """
     assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
     agent_count = masks.shape[0]
@@ -115,6 +137,9 @@ def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x,
     warped_masks = kornia.warp_affine(masks.unsqueeze(1).repeat(agent_count, 1, 1, 1),
                                       relative_tfs, dsize=(h, w), flags=flags)
     warped_masks = warped_masks.reshape(agent_count, agent_count, h, w)
+    if merge_masks:
+        warped_masks[warped_masks > 1] = 1
+        warped_masks[warped_masks < 1] = 0
     return warped_masks.sum(dim=1)
 
 def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
