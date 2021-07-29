@@ -34,8 +34,10 @@ class CurriculumPool:
             return
         # no calculations necessary for max number of agents (!= max_difficulty)
         elif self.difficulty == self.max_agent_count:
-            self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x, center_y).long()
-            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count), dtype=torch.bool, device=self.device)
+            self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w,
+                                                          center_x, center_y, merge_masks=True).long()
+            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count),
+                                               dtype=torch.bool, device=self.device)
             return
         # for other cases, need to do some stuff
         self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
@@ -44,7 +46,7 @@ class CurriculumPool:
         for i in range(self.agent_count):
             new_masks[i] *= 1 << i
         self.combined_masks = get_all_aggregate_masks(new_masks, transforms, pixels_per_meter, h, w,
-                                                      center_x, center_y, 'nearest').long()
+                                                      center_x, center_y, 'nearest', False).long()
         # using the unique ids of the masks to find biggest 
         for i in range(self.agent_count):
             possible_connections, counts = self.combined_masks[i].unique(sorted=False, return_counts=True)
