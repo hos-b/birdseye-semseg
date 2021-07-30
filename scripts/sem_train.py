@@ -258,14 +258,11 @@ def parse_and_execute():
     valid_loader = torch.utils.data.DataLoader(valid_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
                                                num_workers=train_cfg.loader_workers)
-    if train_cfg.classes == 'carla':
-        segmentation_classes = color_map.__carla_classes
-    elif train_cfg.classes == 'ours':
-        segmentation_classes = color_map.__our_classes
-    elif train_cfg.classes == 'ours+mask':
-        segmentation_classes = color_map.__our_classes_plus_mask
-    elif train_cfg.classes == 'diminished':
-        segmentation_classes = color_map.__diminished_classes
+
+    if not train_cfg.classes.endswith('+mask'):
+        print('this script should only be used with embedded masks')
+        exit()
+    segmentation_classes = color_map.__our_classes_plus_mask
     # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
     if not os.path.exists(train_cfg.snapshot_dir):
