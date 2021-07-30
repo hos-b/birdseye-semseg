@@ -47,10 +47,10 @@ class DualTransposedMCNN(SoloAggrSemanticsMask):
         aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix)
         aggr_mask_x = self.aggregate_features(mask_x         , transforms, adjacency_matrix)
         # B, 7, 128, 205
-        solo_sseg_x = F.interpolate(self.mask_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
-        solo_mask_x = F.interpolate(self.sseg_mcnn.classifier(     mask_x), self.output_size, mode='bilinear', align_corners=True)
-        aggr_sseg_x = F.interpolate(self.mask_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
-        aggr_mask_x = F.interpolate(self.sseg_mcnn.classifier(aggr_mask_x), self.output_size, mode='bilinear', align_corners=True)
+        solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        solo_mask_x = F.interpolate(self.mask_mcnn.classifier(     mask_x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_mask_x = F.interpolate(self.mask_mcnn.classifier(aggr_mask_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
 
     def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
