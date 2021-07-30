@@ -66,3 +66,9 @@ class DualTransposedMCNN(SoloAggrSemanticsMask):
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
+
+    def parameter_count(self):
+        """
+        returns the number of trainable parameters
+        """
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
