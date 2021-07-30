@@ -101,8 +101,6 @@ def train(**kwargs):
             total_train_m_loss += batch_train_m_loss
             total_train_s_loss += batch_train_s_loss
             # end of batch
-            if batch_idx == 200:
-                break
 
         # log train epoch loss
         if log_enable:
@@ -121,7 +119,7 @@ def train(**kwargs):
         sseg_ious = torch.zeros((train_cfg.num_classes, 1), dtype=torch.float64).to(device)
         mask_ious = 0.0
         sample_count = 0
-        for batch_idx, (rgbs, labels, masks, car_transforms, batch_no) in enumerate(valid_loader):
+        for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, dataset_idx) in enumerate(valid_loader):
             print(f'\repoch: {ep + 1}/{epochs}, '
                   f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             sample_count += rgbs.shape[1]
@@ -158,7 +156,7 @@ def train(**kwargs):
                                                   solo_mask_preds, aggr_mask_preds,
                                                   solo_masks, agent_pool.combined_masks,
                                                   plot_dest='image', semantic_classes=train_cfg.classes,
-                                                  title=f'E: {ep + 1}, B#: {batch_no.item()}')
+                                                  title=f'E: {ep + 1}, B#: {dataset_idx.item()}')
                 validation_img_log_dict['media/results'] = \
                     wandb.Image(first_batch_img, caption='full batch predictions')
                 if log_enable:
@@ -176,11 +174,9 @@ def train(**kwargs):
 
         if train_cfg.classes == 'ours':
             # 2 classes are irrelevant, so are masks
-            avg_aggr_iou /= train_cfg.num_classes - 2
-            avg_solo_iou /= train_cfg.num_classes - 2
+            avg_iou /= train_cfg.num_classes - 2
         else:
-            avg_aggr_iou /= train_cfg.num_classes
-            avg_solo_iou /= train_cfg.num_classes
+            avg_iou /= train_cfg.num_classes
 
         log_dict['loss/total validation mask'] = (total_valid_m_loss / sample_count)
         log_dict['loss/total validation sseg'] = (total_valid_s_loss / sample_count)
