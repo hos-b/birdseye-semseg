@@ -109,8 +109,8 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor,
 
         solo_sseg_pred = solo_sseg_preds[i].cpu()
         aggr_sseg_pred = aggr_sseg_preds[i].cpu()
-        solo_mask_pred = solo_mask_preds[i].cpu()
-        aggr_mask_pred = aggr_mask_preds[i].cpu()
+        solo_mask_pred = solo_mask_preds[i].cpu().squeeze()
+        aggr_mask_pred = aggr_mask_preds[i].cpu().squeeze()
         solo_gt_mask = gt_solo_masks[i].cpu()
         aggr_gt_mask = gt_aggr_masks[i].cpu()
         ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
