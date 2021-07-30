@@ -89,24 +89,30 @@ def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: t
     elif plot_dest == 'show':
         plt.show()
 
-def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_preds: torch.Tensor, 
-                    aggr_preds: torch.Tensor, gt_solo_masks: torch.Tensor,
-                    gt_aggr_masks: torch.Tensor, plot_dest: str,
-                    semantic_classes: str, filename = 'test.png', title=''):
+def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor,
+                    solo_sseg_preds: torch.Tensor,  aggr_sseg_preds: torch.Tensor,
+                    solo_mask_preds: torch.Tensor,  aggr_mask_preds: torch.Tensor,
+                    gt_solo_masks: torch.Tensor, gt_aggr_masks: torch.Tensor,
+                    plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
     """
     plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
     full output, masked output, full target and masked target for all agents in the batch.
     """
     agent_count = rgbs.shape[0]
-    columns = 7
+    columns = 6
     fig = plt.figure(figsize=(25, agent_count * 4))
     fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
     # plt.axis('off')
     for i in range(agent_count):
         rgb = rgbs[i, ...].permute(1, 2, 0)
         rgb = (rgb + 1) / 2
-        combined_gt_mask = gt_aggr_masks[i].cpu()
+
+        solo_sseg_pred = solo_sseg_preds[i].cpu()
+        aggr_sseg_pred = aggr_sseg_preds[i].cpu()
+        solo_mask_pred = solo_mask_preds[i].cpu()
+        aggr_mask_pred = aggr_mask_preds[i].cpu()
         solo_gt_mask = gt_solo_masks[i].cpu()
+        aggr_gt_mask = gt_aggr_masks[i].cpu()
         ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
         # create subplot and append to ax
         ax = []
@@ -116,42 +122,40 @@ def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_preds: torch.
         ax[-1].set_title(f"rgb {i}")
         plt.imshow(rgb.cpu())
 
-        # omniscient semantic BEV image
+        # omniscient BEV
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
         ax[-1].set_title(f"omniscient BEV {i}")
         plt.imshow(ss_gt_img)
 
-        # target semantic BEV image
+        # target solo prediction
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target BEV {i}")
-        ss_gt_img[combined_gt_mask == 0] = 0
+        ax[-1].set_title(f"target solo {i}")
+        ss_gt_img_cpy = ss_gt_img.copy()
+        ss_gt_img_cpy[solo_gt_mask == 0] = 0
+        plt.imshow(ss_gt_img_cpy)
+
+        # predicted solo prediction
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
+        ax[-1].set_title(f"pred solo {i}")
+        solo_ss_pred_ids = torch.max(solo_sseg_pred, dim=0)[1]
+        solo_ss_pred_img = convert_semantics_to_rgb(solo_ss_pred_ids.cpu(), semantic_classes)
+        solo_ss_pred_img[solo_mask_pred < 0.6] = 0
+        plt.imshow(solo_ss_pred_img)
+
+        # target aggr prediction
+        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
+        ax[-1].set_title(f"target aggr {i}")
+        ss_gt_img[aggr_gt_mask == 0] = 0
         plt.imshow(ss_gt_img)
 
-        # predicted semseg solo
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
-        ax[-1].set_title(f"predicted solo BEV {i}")
-        ss_pred = torch.max(solo_preds[i], dim=0)[1]
-        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
-        plt.imshow(ss_pred_img)
-
-        # masked predicted semseg solo
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
-        ax[-1].set_title(f"masked solo prediction {i}")
-        ss_pred_img[solo_gt_mask == 0] = 0
-        plt.imshow(ss_pred_img)
-
-        # predicted semseg aggr
+        # predicted aggr prediction
         ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
-        ax[-1].set_title(f"predicted aggr. BEV {i}")
-        ss_pred = torch.max(aggr_preds[i], dim=0)[1]
-        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
-        plt.imshow(ss_pred_img)
+        ax[-1].set_title(f"pred aggr {i}")
+        aggr_ss_pred_ids = torch.max(aggr_sseg_pred, dim=0)[1]
+        aggr_ss_pred_img = convert_semantics_to_rgb(aggr_ss_pred_ids.cpu(), semantic_classes)
+        aggr_ss_pred_img[aggr_mask_pred < 0.6] = 0
+        plt.imshow(aggr_ss_pred_img)
 
-        # masked predicted semseg aggr
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 7, xticks=[], yticks=[]))
-        ax[-1].set_title(f"masked aggr. prediction {i}")
-        ss_pred_img[combined_gt_mask == 0] = 0
-        plt.imshow(ss_pred_img)
     
     if plot_dest == 'disk':
         matplotlib.use('Agg')
