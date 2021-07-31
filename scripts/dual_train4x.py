@@ -183,7 +183,7 @@ def train(**kwargs):
         log_dict['iou/mask'] = (mask_ious / sample_count).item()
         log_dict['misc/epoch'] = ep + 1
         log_dict['misc/save'] = 0
-        log_dict['curriculum/elevation metric'] = (avg_iou / 5).item()
+        log_dict['curriculum/elevation metric'] = avg_iou.item()
         log_dict['weight/sseg'] = torch.exp(-sseg_loss_weight).item()
         log_dict['weight/mask'] = torch.exp(-mask_loss_weight).item()
         print(f'\nepoch validation loss: {total_valid_m_loss / sample_count} mask, '
