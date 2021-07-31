@@ -7,14 +7,12 @@
 **/.clangd/
 **/.ccls-cache/
 **/.cache/
-mass_data_collector/guide/
-# this is extra for the symlink
-mass_data_collector/.cache
-mass_data_collector/.clangd
 **/tensorboard
 **/snapshots
 **/wandb
 **/log
-scripts/test-seg
 scripts/plots
 scripts/runs
+scripts/model/lie_so3/lie_so3.egg-info
+scripts/model/lie_so3/dist
+.gitignore
