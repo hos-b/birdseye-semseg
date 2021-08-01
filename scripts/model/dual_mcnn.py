@@ -8,9 +8,9 @@ from data.mask_warp import get_single_relative_img_transform
 from model.large_mcnn import TransposedMCNN
 from model.base import SoloAggrSemanticsMask
 
-class DualTransposedMCNN(SoloAggrSemanticsMask):
+class DualTransposedMCNN4x(SoloAggrSemanticsMask):
     """
-    two MCNNTs, one for mask, other for semantics
+    two MCNNTs, one for mask, other for semantics. outputs solo & aggr versions of both.
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super().__init__()
