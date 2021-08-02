@@ -5,7 +5,7 @@ import kornia
 
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
-from model.large_mcnn import TransposedMCNN
+from model.large_mcnn import TransposedMCNN, _DSConv
 from model.base import SoloAggrSemanticsMask
 
 class DualTransposedMCNN4x(SoloAggrSemanticsMask):
@@ -19,6 +19,9 @@ class DualTransposedMCNN4x(SoloAggrSemanticsMask):
         self.aggregation_type = aggr_type
         self.mask_mcnn = TransposedMCNN(1          , output_size, sem_cfg, aggr_type)
         self.sseg_mcnn = TransposedMCNN(num_classes, output_size, sem_cfg, aggr_type)
+        self.graph_aggr_conv1 = _DSConv(dw_channels=128, out_channels=128)
+        self.graph_aggr_conv2 = _DSConv(dw_channels=128, out_channels=128)
+
         # aggregation parameters
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
@@ -44,7 +47,11 @@ class DualTransposedMCNN4x(SoloAggrSemanticsMask):
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear', align_corners=True)
         mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear', align_corners=True)
         # B, 128, 80, 108
+        # 2 stage message passing
         aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix)
+        aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
+        aggr_sseg_x = self.aggregate_features(aggr_sseg_x    , transforms, adjacency_matrix)
+        aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
         aggr_mask_x = self.aggregate_features(mask_x         , transforms, adjacency_matrix)
         # B, 7, 128, 205
         solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
