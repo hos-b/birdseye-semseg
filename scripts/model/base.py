@@ -18,6 +18,12 @@ class DoubleSemantic(nn.Module):
     """
     def __init__(self):
         super().__init__()
+    
+    def parameter_count(self):
+        """
+        returns the number of trainable parameters
+        """
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     @torch.no_grad()
     def get_eval_output(self, semantic_classes: dict, network_tag: str, rgbs: torch.Tensor,
@@ -170,6 +176,12 @@ class AggrSemanticsSoloMask(nn.Module):
     """
     def __init__(self):
         super().__init__()
+    
+    def parameter_count(self):
+        """
+        returns the number of trainable parameters
+        """
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     @torch.no_grad()
     def get_eval_output(self, semantic_classes: dict, network_tag: str, rgbs: torch.Tensor,
@@ -282,6 +294,12 @@ class SoloAggrSemanticsMask(nn.Module):
     """
     def __init__(self):
         super().__init__()
+    
+    def parameter_count(self):
+        """
+        returns the number of trainable parameters
+        """
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
 
     @torch.no_grad()
     def get_eval_output(self, semantic_classes: dict, network_tag: str, rgbs: torch.Tensor,
