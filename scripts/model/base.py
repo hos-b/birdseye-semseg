@@ -43,7 +43,7 @@ class DoubleSemantic(nn.Module):
             # remove mask from semantic classes for aggregation
             if 'Mask' in semantic_classes.values():
                 # mask id is the last index of the label list
-                mask_sem_id = len(semantic_classes.keys())
+                mask_sem_id = len(semantic_classes.keys()) - 1
                 # save original solo predictions before pre-aggregation mutilation
                 # solo prediction is inherently masked => predicted mask = ones
                 final_solo_mask_pred = torch.ones_like(solo_gt_masks[0])
@@ -88,7 +88,7 @@ class DoubleSemantic(nn.Module):
             final_solo_sseg_pred = solo_sseg_preds[agent_index]
             final_aggr_sseg_pred = aggr_sseg_preds[agent_index]
             if 'Mask' in semantic_classes.values():
-                final_solo_mask_pred = torch.ones_like(solo_gt_masks[agent_index])
+                final_solo_mask_pred = torch.ones_like(solo_gt_masks[0])
                 final_aggr_mask_pred = torch.ones_like(solo_gt_masks[0])
             else:
                 final_solo_mask_pred = solo_gt_masks[agent_index]
@@ -109,14 +109,11 @@ class DoubleSemantic(nn.Module):
         the function returns the ious for a batch.
         """
         num_classes = len(semantic_classes.keys())
-        # mask id is the last index of the label list
-        mask_sem_id = num_classes
         agent_count = rgbs.shape[0]
         solo_gt_masks = car_masks + fov_masks
         # only calculated for baseline networks with mask as semantic id
         # for others, it is automtaically calculated with get_iou_per_class
         mask_iou = 0.0
-
         aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, car_transforms, ppm,
                                                 output_h, output_w, center_x, center_y,
                                                 merge_masks=True)
@@ -125,6 +122,8 @@ class DoubleSemantic(nn.Module):
             solo_sseg_preds, _ = self.forward(rgbs, car_transforms,
                                               torch.eye(agent_count), car_masks)
             if 'Mask' in semantic_classes.values():
+                # mask id is the last index of the label list
+                mask_sem_id = num_classes - 1
                 semantic_ids = torch.argmax(solo_sseg_preds, dim=1)
                 # extract mask from semantic labels for sem aggregation & mask iou calc
                 solo_mask_preds = (semantic_ids == mask_sem_id).long()
@@ -172,7 +171,8 @@ class DoubleSemantic(nn.Module):
 class AggrSemanticsSoloMask(nn.Module):
     """
     base class for networs that predict solo mask and aggregated semantics.
-    implements methods for evaluation
+    implements methods for evaluation. the best model so far (wce-mcnnt-0noise-full-0.1)
+    is of this type
     """
     def __init__(self):
         super().__init__()
@@ -202,7 +202,7 @@ class AggrSemanticsSoloMask(nn.Module):
             final_aggr_mask_pred = get_single_adjacent_aggregate_mask(
                 solo_mask_preds, car_transforms, agent_index,
                 ppm, output_h, output_w, center_x, center_y,
-                adjacency_matrix, True
+                adjacency_matrix, False
             )
             # mask of regions outside FoV for semantic aggregation
             if self_mask:
@@ -219,18 +219,21 @@ class AggrSemanticsSoloMask(nn.Module):
             final_aggr_sseg_pred = agent_relative_semantics.sum(dim=0)
         # use latent aggregation if not used as baseline
         else:
-            aggr_sseg_preds, solo_mask_preds = self.forward(rgbs, car_transforms,
-                                                            adjacency_matrix, car_masks)
             solo_sseg_preds, _ = self.forward(rgbs, car_transforms,
                                               torch.eye(agent_count), car_masks)
+            aggr_sseg_preds, solo_mask_preds = self.forward(rgbs, car_transforms,
+                                                            adjacency_matrix, car_masks)
             final_solo_sseg_pred = solo_sseg_preds[agent_index]
             final_aggr_sseg_pred = aggr_sseg_preds[agent_index]
             final_solo_mask_pred = solo_mask_preds[agent_index]
             final_aggr_mask_pred = get_single_adjacent_aggregate_mask(
                 solo_mask_preds, car_transforms, agent_index,
                 ppm, output_h, output_w, center_x, center_y,
-                adjacency_matrix, True
+                adjacency_matrix, False
             )
+
+        final_aggr_mask_pred[final_aggr_mask_pred > 0.7] = 1.0
+        final_aggr_mask_pred[final_aggr_mask_pred <= 0.7] = 0.0
         # calculate aggregated mask based on adjacency matrix (either from network or gt)
         return final_solo_sseg_pred.to(device), final_solo_mask_pred.to(device), \
                final_aggr_sseg_pred.to(device), final_aggr_mask_pred.to(device)
@@ -276,9 +279,9 @@ class AggrSemanticsSoloMask(nn.Module):
             )
         aggr_mask_preds = get_all_aggregate_masks(solo_mask_preds, car_transforms, ppm,
                                                   output_h, output_w, center_x, center_y,
-                                                  merge_masks=True)
+                                                  merge_masks=False)
+        aggr_mask_preds[aggr_mask_preds > 1] = 1.0
         mask_iou  = get_mask_iou(aggr_mask_preds, aggr_gt_masks, mask_detect_thresh).item()
-        
         mskd_ious = get_iou_per_class(aggr_sseg_preds, labels,
                                       aggr_gt_masks, num_classes).to(rgbs.device)
         full_ious = get_iou_per_class(aggr_sseg_preds, labels,
@@ -290,7 +293,7 @@ class AggrSemanticsSoloMask(nn.Module):
 class SoloAggrSemanticsMask(nn.Module):
     """
     base class for networs that predict solo & aggregated masks semantics.
-    implements methods for evaluation
+    implements methods for evaluation. must not be used as baseline.
     """
     def __init__(self):
         super().__init__()
@@ -313,7 +316,7 @@ class SoloAggrSemanticsMask(nn.Module):
         # this type of network is explictly written for comparison with baseline
         assert network_tag != 'baseline', 'network not suitable as baseline. use smaller version'
         solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-            self.forward(rgbs, car_transforms, torch.eye(rgbs.shape[0]), car_masks)
+            self.forward(rgbs, car_transforms, adjacency_matrix, car_masks)
         final_solo_sseg_pred = solo_sseg_preds[agent_index].to(device)
         final_aggr_sseg_pred = aggr_sseg_preds[agent_index].to(device)
         final_solo_mask_pred = solo_mask_preds[agent_index].to(device)
@@ -329,14 +332,14 @@ class SoloAggrSemanticsMask(nn.Module):
         the function returns the ious for a batch.
         """
         assert network_tag != 'baseline', 'network not suitable as baseline. use smaller version'
-
+        agent_count = rgbs.shape[0]
         num_classes = len(semantic_classes.keys())
         solo_gt_masks = car_masks + fov_masks
         aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, car_transforms, ppm,
                                                 output_h, output_w, center_x, center_y,
                                                 merge_masks=True)
         _, _, aggr_sseg_preds, aggr_mask_preds = \
-            self.forward(rgbs, car_transforms, torch.eye(rgbs.shape[0]), car_masks)
+            self.forward(rgbs, car_transforms, torch.ones((agent_count, agent_count)), car_masks)
         
 
         mask_iou  = get_mask_iou(aggr_mask_preds, aggr_gt_masks, mask_detect_thresh).item()
