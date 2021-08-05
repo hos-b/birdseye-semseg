@@ -5,10 +5,10 @@ import kornia
 
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
-from model.large_mcnn import TransposedMCNN
-from model.large_mcnn import _DSConv, TransposedClassifier
+from model.large_mcnn import LearningToDownsampleWide, TransposedMCNN
+from model.large_mcnn import _DSConv, Classifier, TransposedClassifier
 from model.large_mcnn import GlobalFeatureExtractor, FeatureFusionModule
-from model.base import SoloAggrSemanticsMask
+from model.base import SoloAggrSemanticsMask, AggrSemanticsSoloMask
 
 class DualTransposedMCNN4x(SoloAggrSemanticsMask):
     """
@@ -169,6 +169,98 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w,
                                                              center_x, center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
+                                                 flags=self.aggregation_type)
+            # applying the adjacency matrix (difficulty)
+            warped_features[outside_fov] = 0
+            aggregated_features[i] = warped_features.sum(dim=0)
+        return aggregated_features
+
+class DualTransposedMCNN2x(AggrSemanticsSoloMask):
+    """
+    large & wide MCNN with solo mask & aggreagated semantic prediction
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super(DualTransposedMCNN2x, self).__init__()
+        self.output_size = output_size
+        self.sem_cfg = sem_cfg
+        self.learning_to_downsample = LearningToDownsampleWide(dw_channels1=32,
+                                                               dw_channels2=48,
+                                                               out_channels=64)
+        self.semantic_global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
+                                                                        block_channels=(64, 96, 128),
+                                                                        t=8,
+                                                                        num_blocks=(3, 3, 3),
+                                                                        pool_sizes=(2, 4, 6, 8))
+        self.semantic_feature_fusion = FeatureFusionModule(highres_in_channels=64,
+                                                           lowres_in_channels=128,
+                                                           out_channels=128,
+                                                           scale_factor=4)
+        self.classifier = TransposedClassifier(128, num_classes)
+        # none of the pyramid stages can be 1 due to instance norm issue
+        # https://github.com/pytorch/pytorch/issues/45687
+        self.mask_global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
+                                                                    block_channels=(64, 96, 128),
+                                                                    t=6,
+                                                                    num_blocks=(3, 3, 3),
+                                                                    pool_sizes=(2, 3, 4, 5))
+        self.mask_feature_fusion = FeatureFusionModule(highres_in_channels=64,
+                                                       lowres_in_channels=128,
+                                                       out_channels=128,
+                                                       scale_factor=4)
+        self.maskifier = Classifier(128, 1)
+        # aggregation parameters
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
+        # mask aggregation parameters
+        self.msk_cf_h, self.msk_cf_w = 128, 108
+        self.msk_ppm = self.sem_cfg.pix_per_m(self.msk_cf_h, self.msk_cf_w)
+        self.msk_center_x = self.sem_cfg.center_x(self.msk_cf_w)
+        self.msk_center_y = self.sem_cfg.center_y(self.msk_cf_h)
+        self.aggregation_type = aggr_type
+        # model specification
+        self.output_count = 2
+        self.model_type = 'semantic+mask'
+        self.notes = 'small, fast, solo mask for latent masking'
+
+    def forward(self, x, transforms, adjacency_matrix):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.learning_to_downsample(x)
+        # ------------mask branch------------
+        # B, 128, 15, 20
+        x_mask = self.mask_global_feature_extractor(shared)
+        # B, 128, 80, 108
+        x_mask = self.mask_feature_fusion(shared, x_mask)
+        # ----------semantic branch----------
+        # B, 128, 15, 20
+        x_semantic = self.semantic_global_feature_extractor(shared)
+        # B, 128, 80, 108
+        x_semantic = self.semantic_feature_fusion(shared, x_semantic)
+        # --latent masking into aggregation--
+        # B, 128, 80, 108
+        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
+                                             transforms, adjacency_matrix)
+        # B, 7, 80, 108
+        x_semantic = self.classifier(x_semantic)
+        # B, 1, 80, 108
+        x_mask = self.maskifier(x_mask)
+        # ----------- upsampling ------------
+        # B, 7, 256, 205
+        x_semantic = F.interpolate(x_semantic, self.output_size, mode='bilinear', align_corners=True)
+        # B, 1, 256, 205
+        x_mask = torch.sigmoid(F.interpolate(x_mask, self.output_size, mode='bilinear', align_corners=True))
+        return x_semantic, x_mask
+
+    def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
+        agent_count = transforms.shape[0]
+        aggregated_features = torch.zeros_like(x)
+        for i in range(agent_count):
+            outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+                                                             self.center_x, self.center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
                                                  flags=self.aggregation_type)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
