@@ -224,10 +224,10 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
         self.model_type = 'semantic+mask'
         self.notes = 'small, fast, solo mask for latent masking'
 
-    def forward(self, x, transforms, adjacency_matrix):
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
-        shared = self.learning_to_downsample(x)
+        shared = self.learning_to_downsample(rgbs)
         # ------------mask branch------------
         # B, 128, 15, 20
         x_mask = self.mask_global_feature_extractor(shared)
@@ -238,6 +238,13 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
         x_semantic = self.semantic_global_feature_extractor(shared)
         # B, 128, 80, 108
         x_semantic = self.semantic_feature_fusion(shared, x_semantic)
+        # -----------add ego mask-----------
+        x_semantic = x_semantic + F.interpolate(car_masks.unsqueeze(1),
+                                                size=(self.cf_h, self.cf_w),
+                                                mode='bilinear', align_corners=True)
+        x_mask = x_mask + F.interpolate(car_masks.unsqueeze(1),
+                                        size=(self.cf_h, self.cf_w),
+                                        mode='bilinear', align_corners=True)
         # --latent masking into aggregation--
         # B, 128, 80, 108
         x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
