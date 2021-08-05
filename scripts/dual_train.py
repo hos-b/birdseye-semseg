@@ -74,12 +74,21 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dx_std,
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
-            solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
-            m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
-                     mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
-            s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) + \
-                     torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
+            # forward for base mcnn models
+            if model.output_count == 2:
+                aggr_sseg_preds, solo_mask_preds = model(rgbs, car_transforms,
+                                                         agent_pool.adjacency_matrix,
+                                                         car_masks)
+                m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks)
+                s_loss =  torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
+            # forward for full (4x) models
+            else:
+                solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
+                    model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+                m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
+                        mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
+                s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) + \
+                        torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
             # semseg & mask batch loss
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
@@ -138,17 +147,29 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
             with torch.no_grad():
-                solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                    model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+                # forward for base mcnn models
+                if model.output_count == 2:
+                    aggr_sseg_preds, solo_mask_preds = model(rgbs, car_transforms,
+                                                             agent_pool.adjacency_matrix,
+                                                             car_masks)
+                    total_valid_m_loss += mask_loss(solo_mask_preds.squeeze(1), solo_masks)
+                    total_valid_s_loss +=  torch.mean(semseg_loss(aggr_sseg_preds, labels) *
+                                                      agent_pool.combined_masks)
+                    # aliases for visualization
+                    aggr_mask_preds = solo_mask_preds
+                    solo_sseg_preds = aggr_sseg_preds
+                # forward for full (4x) models
+                else:
+                    solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
+                        model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
+                    total_valid_m_loss += (mask_loss(solo_mask_preds.squeeze(1), solo_masks) +
+                                           mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)).item()
+                    total_valid_s_loss += (torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) +
+                                           torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)).item()
             sseg_ious += get_iou_per_class(aggr_sseg_preds, labels, agent_pool.combined_masks,
                                            train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(aggr_mask_preds.squeeze(1), agent_pool.combined_masks,
                                       train_cfg.mask_detection_thresh)
-            # sum up losses
-            total_valid_m_loss += (mask_loss(solo_mask_preds.squeeze(1), solo_masks) +
-                                   mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)).item()
-            total_valid_s_loss += (torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) +
-                                   torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)).item()
             # visualize a random batch and all hard batches [if enabled]
             if not visualized:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
