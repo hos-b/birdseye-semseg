@@ -180,7 +180,7 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
     large & wide MCNN with solo mask & aggreagated semantic prediction
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
-        super(DualTransposedMCNN2x, self).__init__()
+        super().__init__()
         self.output_size = output_size
         self.sem_cfg = sem_cfg
         self.learning_to_downsample = LearningToDownsampleWide(dw_channels1=32,
