@@ -144,6 +144,9 @@ class TrainingConfig:
         if self.gaussian_kernel_size < 0:
             print(f'sanity-check-error: gaussian kernel size cannot be negative.')
             exit()
+        if self.gaussian_kernel_size % 2 == 0:
+            print(f'sanity-check-error: gaussian kernel size must be odd.')
+            exit()
         if self.wallhack_prob < 0 or self.wallhack_prob > 1:
             print(f'sanity-check-error: wallhack probability cannot be negative or greater than 1.')
             exit()
