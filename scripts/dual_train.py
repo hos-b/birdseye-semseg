@@ -1,4 +1,5 @@
 import os
+import cv2
 import torch
 import torch.nn as nn
 from torch.optim import lr_scheduler
@@ -47,6 +48,14 @@ def train(**kwargs):
     valid_loader = kwargs.get('valid_loader')
     segmentation_classes = kwargs.get('segmentation_classes')
     epochs = train_cfg.epochs
+    # wallhack mask
+    if train_cfg.wallhack_prob > 0:
+        wallhack_mask_np = np.zeros(shape=(train_cfg.output_h, train_cfg.output_w), dtype=np.uint8)
+        fov_vertices = np.array([[[81, 155], [122, 155], [204, 20], [204, 0], [0, 0], [0, 20]]], dtype=np.int32)
+        cv2.fillPoly(wallhack_mask_np, fov_vertices, 1)
+        wallhack_mask = torch.from_numpy(wallhack_mask_np).unsqueeze(0).to(device)
+    else:
+        wallhack_mask = torch.zeros((1, train_cfg.output_h, train_cfg.output_w), device=device)
     # starting epoch
     start_ep = kwargs.get('start_ep')
     for ep in range(start_ep, epochs):
@@ -74,21 +83,29 @@ def train(**kwargs):
                                                       train_cfg.se2_noise_dx_std,
                                                       train_cfg.se2_noise_dy_std,
                                                       train_cfg.se2_noise_th_std)
+            # add mask wallhack for semantics
+            if random.uniform(0, 1) < train_cfg.wallhack_prob:
+                wallhack = wallhack_mask
+            else:
+                wallhack = torch.zeros_like(wallhack_mask, device=device)
             # forward for base mcnn models
             if model.output_count == 2:
                 aggr_sseg_preds, solo_mask_preds = model(rgbs, car_transforms,
                                                          agent_pool.adjacency_matrix,
                                                          car_masks)
                 m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks)
-                s_loss =  torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
+                s_loss =  torch.mean(semseg_loss(aggr_sseg_preds, labels) * 
+                                     (agent_pool.combined_masks + wallhack))
             # forward for full (4x) models
             else:
                 solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
                     model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks)
                 m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
-                        mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
-                s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) + \
-                        torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
+                         mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
+                s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) *
+                                    (solo_masks + wallhack)) + \
+                         torch.mean(semseg_loss(aggr_sseg_preds, labels) *
+                                    (agent_pool.combined_masks + wallhack))
             # semseg & mask batch loss
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
