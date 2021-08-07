@@ -74,9 +74,8 @@ class MassHDF5(torch.utils.data.Dataset):
             rgbs.append(self.rgb_transform(self.dataset[b_start_idx + i, 'front_rgb']
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
             # Masks: H, W
-            mask = self.mask_transform(self.dataset[b_start_idx + i, 'top_mask']
-                       .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze()
-            masks.append(mask)
+            masks.append(self.mask_transform(self.dataset[b_start_idx + i, 'top_mask']
+                 .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze())
             # Semantic Label: H, W
             semseg = self.dataset[b_start_idx + i, 'top_semseg'] .view(dtype=np.uint8).reshape(500, 400)
             # change semantic labels to a subset
