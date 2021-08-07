@@ -85,7 +85,7 @@ class TrainingConfig:
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = int(conf['hyperparameters']['epochs'])
         self.color_jitter = list(conf['hyperparameters']['color-jitter'])
-        self.gaussian_mask_std = float(conf['hyperparameters']['guassian-blur-std'])
+        self.gaussian_mask_std = float(conf['hyperparameters']['gaussian-blur-std'])
         self.gaussian_kernel_size = int(conf['hyperparameters']['gaussian-kernel-size'])
         self.wallhack_prob = float(conf['hyperparameters']['wallhack-prob'])
         # validation parameters

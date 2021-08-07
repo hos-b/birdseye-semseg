@@ -1,5 +1,5 @@
 logging:
-  name: 'debug'
+  name: 'mcnnt3x-0.1-ce-diminished'
   group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
@@ -19,19 +19,19 @@ se2-noise:
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'mcnnT2x'
+  model-name: 'mcnnT3x'
   aggregation-type: 'bilinear'
 
 hyperparameters:
   learning-rate: 1e-3
   epochs: 500
   # probability that an agent stops transmitting
-  drop-prob: 0.0
+  drop-prob: 0.1
   # brightness, contrast, saturation, hue
   color-jitter: [0.1, 0.1, 0.1, 0.1]
   # guassian smoothing of masks
-  guassian-blur-std: 0.4
-  guassian-kernel-size: 10
+  gaussian-blur-std: 0.4
+  gaussian-kernel-size: 10
   # mask wallhack probability
   wallhack-prob: 0.4
 
@@ -46,10 +46,10 @@ dataloader:
 dataset:
   output-h: 256
   output-w: 205
-  classes: 'ours' # carla, ours, ours+mask, diminished
-  dataset-dir: '/export/home/aiscar4/mass-data'
-  trainset-file: 'noisy_towns1.hdf5'
-  trainset-name: 'validation_set'
+  classes: 'diminished' # carla, ours, ours+mask, diminished
+  dataset-dir: '/export/home/bahadorm/mass-data'
+  trainset-file: 'noisy_towns2345.hdf5'
+  trainset-name: 'training_set'
   validset-file: 'noisy_towns1.hdf5'
   validset-name: 'validation_set'
 
