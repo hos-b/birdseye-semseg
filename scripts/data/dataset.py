@@ -1,10 +1,14 @@
 import h5py
+import math
+import numbers
 import numpy as np
 
 import cv2
 import torch
 import torch.utils.data
 import torchvision.transforms as transforms
+from torch import nn
+from torch.nn import functional as F
 from PIL import Image as PILImage
 from data.utils import separate_masks
 from data.color_map import convert_semantic_classes
@@ -19,6 +23,13 @@ class MassHDF5(torch.utils.data.Dataset):
         self.jitter = kwargs.get('jitter')
         self.dset_name = kwargs.get('dataset', 'town-01')
         self.classes = kwargs.get('classes')
+        # mask post processing
+        mask_gsigma = kwargs.get('mask_gaussian_sigma')
+        self.gaussian_smoothing_en = mask_gsigma > 0
+        if self.gaussian_smoothing_en:
+            gkernel_size = kwargs.get('guassian_kernel_size')
+            self.gaussian_conv = GaussianConvolution(1, gkernel_size, mask_gsigma, 2)
+        
         print(f'dataset file: {self.full_path}')
         try:
             self.hdf5 = h5py.File(self.full_path, 'r')
@@ -63,8 +74,9 @@ class MassHDF5(torch.utils.data.Dataset):
             rgbs.append(self.rgb_transform(self.dataset[b_start_idx + i, 'front_rgb']
                     .view(dtype=np.uint8).reshape(480, 640, 4)[:, :, [2, 1, 0]])) # BGR to RGB
             # Masks: H, W
-            masks.append(self.mask_transform(self.dataset[b_start_idx + i, 'top_mask']
-                        .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze())
+            mask = self.mask_transform(self.dataset[b_start_idx + i, 'top_mask']
+                       .view(dtype=np.uint8).reshape(500, 400, 1)).squeeze()
+            masks.append(mask)
             # Semantic Label: H, W
             semseg = self.dataset[b_start_idx + i, 'top_semseg'] .view(dtype=np.uint8).reshape(500, 400)
             # change semantic labels to a subset
@@ -77,6 +89,10 @@ class MassHDF5(torch.utils.data.Dataset):
                     .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
         # cut the mask into two separate tensors
         veh_masks, fov_masks = separate_masks(torch.stack(masks))
+        # add gaussian blurring to the fov masks
+        if self.gaussian_smoothing_en:
+            fov_masks = self.gaussian_conv(fov_masks.unsqueeze(1)).squeeze()
+
         return torch.stack(rgbs), torch.stack(semsegs), veh_masks, fov_masks, \
                torch.stack(car_transforms), torch.LongTensor([idx])
 
@@ -149,3 +165,64 @@ class MassHDF5(torch.utils.data.Dataset):
         except:
             print(f'could not write metadata to file {self.path}/{filename}')
         return batch_start_indices, batch_sizes
+
+
+class GaussianConvolution(nn.Module):
+    """
+    Apply gaussian smoothing on a  1d, 2d or 3d tensor. Filtering
+    is performed seperately for each channel in the input using a
+    depthwise convolution.
+    Implentation from Adrian Sahlman (tetratrio) on Pytorch forums
+    """
+    def __init__(self, channels, kernel_size, sigma, dim=2):
+        super(GaussianConvolution, self).__init__()
+        if isinstance(kernel_size, numbers.Number):
+            kernel_size = [kernel_size] * dim
+            self.padding = (kernel_size[0] // 2, kernel_size[1] // 2)
+        if isinstance(sigma, numbers.Number):
+            sigma = [sigma] * dim
+
+        # The gaussian kernel is the product of the
+        # gaussian function of each dimension.
+        kernel = 1
+        meshgrids = torch.meshgrid(
+            [
+                torch.arange(size, dtype=torch.float32)
+                for size in kernel_size
+            ]
+        )
+        for size, std, mgrid in zip(kernel_size, sigma, meshgrids):
+            mean = (size - 1) / 2
+            kernel *= 1 / (std * math.sqrt(2 * math.pi)) * \
+                      torch.exp(-((mgrid - mean) / std) ** 2 / 2)
+
+        # Make sure sum of values in gaussian kernel equals 1.
+        kernel = kernel / torch.sum(kernel)
+
+        # Reshape to depthwise convolutional weight
+        kernel = kernel.view(1, 1, *kernel.size())
+        kernel = kernel.repeat(channels, *[1] * (kernel.dim() - 1))
+
+        self.register_buffer('weight', kernel)
+        self.groups = channels
+
+        if dim == 1:
+            self.conv = F.conv1d
+        elif dim == 2:
+            self.conv = F.conv2d
+        elif dim == 3:
+            self.conv = F.conv3d
+        else:
+            raise RuntimeError(
+                'Only 1, 2 and 3 dimensions are supported. Received {}.'.format(dim)
+            )
+
+    def forward(self, input):
+        """
+        Apply gaussian filter to input.
+        Arguments:
+            input (torch.Tensor): Input to apply gaussian filter on.
+        Returns:
+            filtered (torch.Tensor): Filtered output.
+        """
+        return self.conv(input, weight=self.weight, groups=self.groups, padding=self.padding)

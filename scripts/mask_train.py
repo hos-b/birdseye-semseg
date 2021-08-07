@@ -190,10 +190,12 @@ def parse_and_execute():
     # dataset ----------------------------------------------------------------------------------
     train_set = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.trainset_file, size=new_size,
-                         classes=train_cfg.classes, jitter=train_cfg.color_jitter)
+                         classes=train_cfg.classes, jitter=train_cfg.color_jitter,
+                         mask_gaussian_sigma=0)
     valid_set = MassHDF5(dataset=train_cfg.validset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.validset_file, size=new_size,
-                         classes=train_cfg.classes, jitter=[0, 0, 0, 0])
+                         classes=train_cfg.classes, jitter=[0, 0, 0, 0],
+                         mask_gaussian_sigma=0)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=1,
                                                shuffle=train_cfg.shuffle_data,
                                                num_workers=train_cfg.loader_workers)

@@ -85,6 +85,9 @@ class TrainingConfig:
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
         self.epochs = int(conf['hyperparameters']['epochs'])
         self.color_jitter = list(conf['hyperparameters']['color-jitter'])
+        self.gaussian_mask_std = float(conf['hyperparameters']['guassian-blur-std'])
+        self.gaussian_kernel_size = int(conf['hyperparameters']['gaussian-kernel-size'])
+        self.wallhack_prob = float(conf['hyperparameters']['wallhack-prob'])
         # validation parameters
         self.mask_detection_thresh = float(conf['validation']['mask-det-threshold'])
         # dataloader config
@@ -135,6 +138,15 @@ class TrainingConfig:
             if self.se2_noise_dx_std == 0 and self.se2_noise_dy_std == 0 and self.se2_noise_th_std == 0:
                 print(f'sanity-check-error: noise std cannot be 0 if se2 noise is enabled.')
                 exit()
+        if self.gaussian_mask_std < 0:
+            print(f'sanity-check-error: gaussian mask std cannot be negative.')
+            exit()
+        if self.gaussian_kernel_size < 0:
+            print(f'sanity-check-error: gaussian kernel size cannot be negative.')
+            exit()
+        if self.wallhack_prob < 0 or self.wallhack_prob > 1:
+            print(f'sanity-check-error: wallhack probability cannot be negative or greater than 1.')
+            exit()
         if self.initial_difficulty < 1 or self.initial_difficulty > self.max_agent_count:
             print(f'sanity-check-error: invalid initial difficulty {self.initial_difficulty}.')
             exit()

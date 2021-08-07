@@ -1,6 +1,6 @@
 logging:
   name: 'debug'
-  group: 'moderate'
+  group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
   snapshot-dir: './runs/{}/snapshots'
@@ -8,8 +8,8 @@ logging:
 training:
   device: 'cuda'
   torch-seed: 10
-  loss: 'weighted-cross-entropy'
-  ce-weights: [5.7101e+00, 5.2976e+00, 5.8594e-02, 4.1832e-01, 1.0000e+00, 5.6783e-01, 2.0297e+02]
+  loss: 'cross-entropy'
+  ce-weights: [9.7452e+01, 9.0411e+01, 1.0000e+00, 7.1393e+00, 1.7067e+01, 9.6910e+00, 3.4640e+03]
 
 # currently only tackled in mcnnNoisy
 se2-noise:
@@ -19,23 +19,28 @@ se2-noise:
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'mcnnT4x'
+  model-name: 'mcnnT2x'
   aggregation-type: 'bilinear'
 
 hyperparameters:
-  learning-rate: 1e-4
+  learning-rate: 1e-3
   epochs: 500
   # probability that an agent stops transmitting
-  drop-prob: 0.1
+  drop-prob: 0.0
   # brightness, contrast, saturation, hue
   color-jitter: [0.1, 0.1, 0.1, 0.1]
+  # guassian smoothing of masks
+  guassian-blur-std: 0.4
+  guassian-kernel-size: 10
+  # mask wallhack probability
+  wallhack-prob: 0.4
 
 validation:
   # threshold for counting the mask pixel as detected
   mask-det-threshold: 0.6
 
 dataloader:
-  dataloder-workers: 1
+  dataloder-workers: 0
   shuffle-data: true
 
 dataset:
