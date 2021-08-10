@@ -5,15 +5,15 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['mcnnt-0.1-full-final', 'noisy-se3-full-0.1drop']
-  model-names: ['mcnnT', 'mcnnNoisy']
-  model-versions: ['best', 'best']
-  aggregation-types: ['bilinear', 'bilinear']
+  runs: ['mcnnt3x-0.1-ce-2stage']
+  model-names: ['mcnnT3x']
+  model-versions: ['best']
+  aggregation-types: ['bilinear']
 
 gui:
   evalutate-at-start: true
-  baseline-run: 'mcnnt-baseline-final2'
-  baseline-model-name: 'mcnnT'
+  baseline-run: 'mcnnt2x-nodrop-ce-baseline'
+  baseline-model-name: 'mcnnT2x'
   baseline-model-version: 'best'
 
 # only available for mcnnNoisy and onwards
@@ -23,21 +23,23 @@ se2-noise:
   se2-noise-dx-std: 0.4    # meters
   se2-noise-dy-std: 0.4    # meters
 
-plot:
-  count: 10
-  plot-type: 'disk' # 'show' || 'image' for getting rgb
-  plot-dir: './runs/{}/plots'
-  plot-tag: 'nostats' # added to dir name
-
-curriculum:
-  difficulty: 1
-  maximum-agent-count: 8
-
 dataset:
   random-samples: false
   classes: 'ours'
   output-h: 256
   output-w: 205
+  gaussian-blur-std: 0.0
+  gaussian-kernel-size: 11
   dataset-dir: '/export/home/aiscar4/mass-data'
   dataset-file: 'noisy_towns1.hdf5'
   dataset-name: 'validation_set'
+
+curriculum:
+  difficulty: 1
+  maximum-agent-count: 8
+
+plot:
+  count: 10
+  plot-type: 'disk' # 'show' || 'image' for getting rgb
+  plot-dir: './runs/{}/plots'
+  plot-tag: 'nostats' # added to dir name
