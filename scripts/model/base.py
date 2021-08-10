@@ -259,7 +259,7 @@ class AggrSemanticsSoloMask(nn.Module):
             solo_sseg_preds, solo_mask_preds = self.forward(rgbs, car_transforms,
                                                             torch.eye(agent_count), car_masks)
             # masking of regions outside estimated FoV
-            solo_sseg_preds *= solo_mask_preds.unsqueeze(1)
+            solo_sseg_preds *= solo_mask_preds
             # aggregating semantic predictions
             aggr_sseg_preds = torch.zeros_like(solo_sseg_preds)
             for i in range(agent_count):
@@ -277,7 +277,7 @@ class AggrSemanticsSoloMask(nn.Module):
                 torch.ones((agent_count, agent_count)),
                 car_masks
             )
-        aggr_mask_preds = get_all_aggregate_masks(solo_mask_preds, car_transforms, ppm,
+        aggr_mask_preds = get_all_aggregate_masks(solo_mask_preds.squeeze(1), car_transforms, ppm,
                                                   output_h, output_w, center_x, center_y,
                                                   merge_masks=False)
         aggr_mask_preds[aggr_mask_preds > 1] = 1.0
@@ -341,8 +341,7 @@ class SoloAggrSemanticsMask(nn.Module):
         _, _, aggr_sseg_preds, aggr_mask_preds = \
             self.forward(rgbs, car_transforms, torch.ones((agent_count, agent_count)), car_masks)
         
-
-        mask_iou  = get_mask_iou(aggr_mask_preds, aggr_gt_masks, mask_detect_thresh).item()
+        mask_iou  = get_mask_iou(aggr_mask_preds.squeeze(1), aggr_gt_masks, mask_detect_thresh).item()
         
         mskd_ious = get_iou_per_class(aggr_sseg_preds, labels,
                                       aggr_gt_masks, num_classes).to(rgbs.device)
