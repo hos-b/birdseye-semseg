@@ -70,7 +70,7 @@ class DoubleSemantic(nn.Module):
             
             # mask of regions outside FoV
             if self_mask:
-                solo_sseg_preds *= solo_mask_preds.unsqueeze(1)
+                solo_sseg_preds *= solo_mask_preds
             # aggregate semantic predictions
             outside_fov = torch.where(adjacency_matrix[agent_index] == 0)[0]
             relative_tfs = get_single_relative_img_transform(car_transforms, agent_index, ppm,
@@ -138,7 +138,7 @@ class DoubleSemantic(nn.Module):
                 solo_mask_preds = solo_gt_masks
 
             # masking of regions outside FoV
-            solo_sseg_preds *= solo_mask_preds.unsqueeze(1)
+            solo_sseg_preds *= solo_mask_preds
             # aggregating semantic predictions
             aggr_sseg_preds = torch.zeros_like(solo_sseg_preds)
             for i in range(agent_count):
@@ -198,15 +198,15 @@ class AggrSemanticsSoloMask(nn.Module):
             solo_sseg_preds, solo_mask_preds = self.forward(rgbs, car_transforms,
                                                             torch.eye(agent_count), car_masks)
             final_solo_sseg_pred = solo_sseg_preds[agent_index].clone()
-            final_solo_mask_pred = solo_mask_preds[agent_index]
+            final_solo_mask_pred = solo_mask_preds[agent_index].squeeze()
             final_aggr_mask_pred = get_single_adjacent_aggregate_mask(
-                solo_mask_preds, car_transforms, agent_index,
+                solo_mask_preds.squeeze(1), car_transforms, agent_index,
                 ppm, output_h, output_w, center_x, center_y,
                 adjacency_matrix, False
             )
             # mask of regions outside FoV for semantic aggregation
             if self_mask:
-                solo_sseg_preds *= solo_mask_preds.unsqueeze(1)
+                solo_sseg_preds *= solo_mask_preds
             # aggregate semantic predictions
             outside_fov = torch.where(adjacency_matrix[agent_index] == 0)[0]
             relative_tfs = get_single_relative_img_transform(car_transforms, agent_index, ppm,
@@ -225,15 +225,15 @@ class AggrSemanticsSoloMask(nn.Module):
                                                             adjacency_matrix, car_masks)
             final_solo_sseg_pred = solo_sseg_preds[agent_index]
             final_aggr_sseg_pred = aggr_sseg_preds[agent_index]
-            final_solo_mask_pred = solo_mask_preds[agent_index]
+            final_solo_mask_pred = solo_mask_preds[agent_index].squeeze()
             final_aggr_mask_pred = get_single_adjacent_aggregate_mask(
                 solo_mask_preds, car_transforms, agent_index,
                 ppm, output_h, output_w, center_x, center_y,
                 adjacency_matrix, False
             )
 
-        final_aggr_mask_pred[final_aggr_mask_pred > 0.7] = 1.0
-        final_aggr_mask_pred[final_aggr_mask_pred <= 0.7] = 0.0
+        # final_aggr_mask_pred[final_aggr_mask_pred > 0.7] = 1.0
+        # final_aggr_mask_pred[final_aggr_mask_pred <= 0.7] = 0.0
         # calculate aggregated mask based on adjacency matrix (either from network or gt)
         return final_solo_sseg_pred.to(device), final_solo_mask_pred.to(device), \
                final_aggr_sseg_pred.to(device), final_aggr_mask_pred.to(device)
@@ -319,8 +319,9 @@ class SoloAggrSemanticsMask(nn.Module):
             self.forward(rgbs, car_transforms, adjacency_matrix, car_masks)
         final_solo_sseg_pred = solo_sseg_preds[agent_index].to(device)
         final_aggr_sseg_pred = aggr_sseg_preds[agent_index].to(device)
-        final_solo_mask_pred = solo_mask_preds[agent_index].to(device)
-        final_aggr_mask_pred = aggr_mask_preds[agent_index].to(device)
+        final_solo_mask_pred = solo_mask_preds[agent_index].to(device).squeeze()
+        final_aggr_mask_pred = aggr_mask_preds[agent_index].to(device).squeeze()
+        import pdb; pdb.set_trace()
         return final_solo_sseg_pred, final_solo_mask_pred, \
                final_aggr_sseg_pred, final_aggr_mask_pred
 

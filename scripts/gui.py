@@ -321,7 +321,7 @@ class SampleWindow:
 
             solo_sseg_pred_img = convert_semantics_to_rgb(solo_sseg_pred.argmax(dim=0), self.semantic_classes)
             if self.show_masks:
-                solo_sseg_pred_img[solo_mask_pred == 0] = 0
+                solo_sseg_pred_img[solo_mask_pred == 0, :] = 0
             solo_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(solo_sseg_pred_img), 'RGB')
             # >>> masked predicted semseg w/o external influence
             exec(f"self.solo_pred_panel_{i}.configure(image=solo_sseg_pred_tk)")
@@ -330,7 +330,7 @@ class SampleWindow:
             aggr_sseg_pred_img = convert_semantics_to_rgb(aggr_sseg_pred.argmax(dim=0),
                                                           self.semantic_classes)
             if self.show_masks:
-                aggr_sseg_pred_img[aggr_mask_pred == 0] = 0
+                aggr_sseg_pred_img[aggr_mask_pred == 0, :] = 0
             aggr_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(aggr_sseg_pred_img), 'RGB')
             exec(f"self.aggr_pred_panel_{i}.configure(image=aggr_sseg_pred_tk)")
             exec(f"self.aggr_pred_panel_{i}.image = aggr_sseg_pred_tk")
