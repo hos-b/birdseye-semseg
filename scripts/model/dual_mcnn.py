@@ -57,9 +57,9 @@ class DualTransposedMCNN4x(SoloAggrSemanticsMask):
         aggr_mask_x = self.aggregate_features(mask_x         , transforms, adjacency_matrix)
         # B, 7, 128, 205
         solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
-        solo_mask_x = F.interpolate(F.sigmoid(self.mask_mcnn.classifier(mask_x)), self.output_size, mode='bilinear', align_corners=True)
+        solo_mask_x = F.interpolate(torch.sigmoid(self.mask_mcnn.classifier(mask_x)), self.output_size, mode='bilinear', align_corners=True)
         aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
-        aggr_mask_x = F.interpolate(F.sigmoid(self.mask_mcnn.classifier(aggr_mask_x)), self.output_size, mode='bilinear', align_corners=True)
+        aggr_mask_x = F.interpolate(torch.sigmoid(self.mask_mcnn.classifier(aggr_mask_x)), self.output_size, mode='bilinear', align_corners=True)
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
 
     def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
@@ -101,7 +101,7 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
                                                       lowres_in_channels=128,
                                                       out_channels=128,
                                                       scale_factor=4)
-        self.mask_classifier = TransposedClassifier(128, 1)
+        self.mask_classifier = Classifier(128, 1)
         self.mask_aggr_conv = nn.Conv2d(1, 1, 3, 1, 1, bias=True)
         # semantic aggregation parameters
         self.sem_cf_h, self.sem_cf_w = 80, 108
@@ -109,7 +109,7 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
         self.sem_center_x = self.sem_cfg.center_x(self.sem_cf_w)
         self.sem_center_y = self.sem_cfg.center_y(self.sem_cf_h)
         # mask aggregation parameters
-        self.msk_cf_h, self.msk_cf_w = 128, 108
+        self.msk_cf_h, self.msk_cf_w = 80, 108
         self.msk_ppm = self.sem_cfg.pix_per_m(self.msk_cf_h, self.msk_cf_w)
         self.msk_center_x = self.sem_cfg.center_x(self.msk_cf_w)
         self.msk_center_y = self.sem_cfg.center_y(self.msk_cf_h)
@@ -130,7 +130,7 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
         mask_x = self.mask_feature_fusion(shared, mask_x)
         # add ego car masks
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
-        mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.msk_cf_h, self.msk_cf_w), mode='bilinear', align_corners=True)
         # B, 128, 80, 108
         # 2 stage message passing for semantics
         aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix,
@@ -142,17 +142,16 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
                                               self.sem_center_x, self.sem_center_y)
         aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
         # solo mask estimation
-        # B, 1, 128, 108
-        solo_mask_preds = F.sigmoid(self.mask_classifier(mask_x))
-        # B, 1, 256, 205
-        solo_mask_x = F.interpolate(solo_mask_preds, self.output_size, mode='bilinear', align_corners=True)
+        # B, 1, 80, 108
+        solo_mask_x = torch.sigmoid(self.mask_classifier(mask_x))
         # mask aggregation
-        # B, 1, 128, 108
-        aggr_mask_x = self.aggregate_features(solo_mask_preds, transforms, adjacency_matrix,
+        # B, 1, 80, 108
+        aggr_mask_x = self.aggregate_features(solo_mask_x, transforms, adjacency_matrix,
                                               self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
                                               self.msk_center_x, self.msk_center_y)
-        aggr_mask_x = F.sigmoid(self.mask_aggr_conv(aggr_mask_x))
+        aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
         # B, 1, 256, 205
+        solo_mask_x = F.interpolate(solo_mask_x, self.output_size, mode='bilinear', align_corners=True)
         aggr_mask_x = F.interpolate(aggr_mask_x, self.output_size, mode='bilinear', align_corners=True)
         # B, 7, 256, 205
         solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
