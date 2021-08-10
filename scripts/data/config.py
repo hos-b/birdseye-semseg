@@ -222,6 +222,8 @@ class EvaluationConfig:
         self.dset_name = str(conf['dataset']['dataset-name'])
         self.output_h = int(conf['dataset']['output-h'])
         self.output_w = int(conf['dataset']['output-w'])
+        self.gaussian_mask_std = float(conf['dataset']['gaussian-blur-std'])
+        self.gaussian_kernel_size = int(conf['dataset']['gaussian-kernel-size'])
         self.classes = str(conf['dataset']['classes'])
         self.num_classes = num_classes_dict[self.classes]
         # curriculum parameters
@@ -246,6 +248,15 @@ class EvaluationConfig:
             exit()
         if self.output_h > 500 or self.output_w > 400:
             print(f'sanity-check-error: output size {self.output_h}x{self.output_w} is invalid.')
+            exit()
+        if self.gaussian_mask_std < 0:
+            print(f'sanity-check-error: gaussian mask std cannot be negative.')
+            exit()
+        if self.gaussian_kernel_size < 0:
+            print(f'sanity-check-error: gaussian kernel size cannot be negative.')
+            exit()
+        if self.gaussian_kernel_size % 2 == 0:
+            print(f'sanity-check-error: gaussian kernel size must be odd.')
             exit()
         for i in range(len(self.model_versions)):
             if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':

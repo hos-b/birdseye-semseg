@@ -358,7 +358,9 @@ def main():
     # dataloader stuff -------------------------------------------------------------------------------------
     test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
                         hdf5name=eval_cfg.dset_file, size=NEW_SIZE,
-                        classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
+                        classes=eval_cfg.classes, jitter=[0, 0, 0, 0],
+                        mask_gaussian_sigma=eval_cfg.gaussian_mask_std,
+                        guassian_kernel_size=eval_cfg.gaussian_kernel_size)
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset_iterator(iter(loader))
     # baseline stuff ---------------------------------------------------------------------------------------
