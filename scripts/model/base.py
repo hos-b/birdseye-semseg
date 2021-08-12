@@ -104,7 +104,7 @@ class DoubleSemantic(nn.Module):
     @torch.no_grad()
     def get_batch_ious(self, semantic_classes: dict, network_tag: str, rgbs: torch.Tensor,
                        car_masks: torch.Tensor, fov_masks: torch.Tensor, car_transforms: torch.Tensor,
-                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y, mask_detect_thresh=0.7):
+                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y, mask_detect_thresh):
         """
         the function returns the ious for a batch.
         """
@@ -238,7 +238,7 @@ class AggrSemanticsSoloMask(nn.Module):
     @torch.no_grad()
     def get_batch_ious(self, semantic_classes: dict, network_tag: str, rgbs: torch.Tensor,
                        car_masks: torch.Tensor, fov_masks: torch.Tensor, car_transforms: torch.Tensor,
-                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y, mask_detect_thresh=0.7):
+                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y, mask_detect_thresh):
         """
         the function returns the ious for a batch.
         """
@@ -274,15 +274,13 @@ class AggrSemanticsSoloMask(nn.Module):
                 torch.ones((agent_count, agent_count)),
                 car_masks
             )
-        aggr_mask_preds = get_all_aggregate_masks(solo_mask_preds.squeeze(1), car_transforms, ppm,
-                                                  output_h, output_w, center_x, center_y,
-                                                  merge_masks=False)
-        aggr_mask_preds[aggr_mask_preds > 1] = 1.0
-        mask_iou  = get_mask_iou(aggr_mask_preds, aggr_gt_masks, mask_detect_thresh).item()
-        mskd_ious = get_iou_per_class(aggr_sseg_preds, labels,
-                                      aggr_gt_masks, num_classes).to(rgbs.device)
-        full_ious = get_iou_per_class(aggr_sseg_preds, labels,
-                                      torch.ones_like(aggr_gt_masks), num_classes).to(rgbs.device)
+        # thresholding masks before (and after) aggregation
+        solo_mask_preds[solo_mask_preds >= mask_detect_thresh] = 1
+        solo_mask_preds[solo_mask_preds < mask_detect_thresh] = 0
+        aggr_mask_preds = get_all_aggregate_masks(solo_mask_preds.squeeze(1), car_transforms, ppm, output_h, output_w, center_x, center_y, merge_masks=False)
+        mask_iou  = get_mask_iou(aggr_mask_preds, aggr_gt_masks, mask_detect_thresh)
+        mskd_ious = get_iou_per_class(aggr_sseg_preds, labels, aggr_gt_masks, num_classes).to(rgbs.device)
+        full_ious = get_iou_per_class(aggr_sseg_preds, labels, torch.ones_like(aggr_gt_masks), num_classes).to(rgbs.device)
 
         return mskd_ious, full_ious, mask_iou
 
@@ -324,7 +322,7 @@ class SoloAggrSemanticsMask(nn.Module):
     @torch.no_grad()
     def get_batch_ious(self, semantic_classes: dict, network_tag: str, rgbs: torch.Tensor,
                        car_masks: torch.Tensor, fov_masks: torch.Tensor, car_transforms: torch.Tensor,
-                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y, mask_detect_thresh=0.7):
+                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y, mask_detect_thresh):
         """
         the function returns the ious for a batch.
         """
