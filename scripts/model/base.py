@@ -231,9 +231,6 @@ class AggrSemanticsSoloMask(nn.Module):
                 ppm, output_h, output_w, center_x, center_y,
                 adjacency_matrix, False
             )
-
-        # final_aggr_mask_pred[final_aggr_mask_pred > 0.7] = 1.0
-        # final_aggr_mask_pred[final_aggr_mask_pred <= 0.7] = 0.0
         # calculate aggregated mask based on adjacency matrix (either from network or gt)
         return final_solo_sseg_pred.to(device), final_solo_mask_pred.to(device), \
                final_aggr_sseg_pred.to(device), final_aggr_mask_pred.to(device)
@@ -321,7 +318,6 @@ class SoloAggrSemanticsMask(nn.Module):
         final_aggr_sseg_pred = aggr_sseg_preds[agent_index].to(device)
         final_solo_mask_pred = solo_mask_preds[agent_index].to(device).squeeze()
         final_aggr_mask_pred = aggr_mask_preds[agent_index].to(device).squeeze()
-        import pdb; pdb.set_trace()
         return final_solo_sseg_pred, final_solo_mask_pred, \
                final_aggr_sseg_pred, final_aggr_mask_pred
 
