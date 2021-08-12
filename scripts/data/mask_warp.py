@@ -136,11 +136,11 @@ def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x,
     relative_tfs = get_all_relative_img_transforms(transforms, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
     warped_masks = kornia.warp_affine(masks.unsqueeze(1).repeat(agent_count, 1, 1, 1),
                                       relative_tfs, dsize=(h, w), flags=flags)
-    warped_masks = warped_masks.reshape(agent_count, agent_count, h, w)
+    warped_masks = warped_masks.reshape(agent_count, agent_count, h, w).sum(dim=1)
     if merge_masks:
         warped_masks[warped_masks > 1] = 1
         warped_masks[warped_masks < 1] = 0
-    return warped_masks.sum(dim=1)
+    return warped_masks
 
 def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w, center_x, center_y, flags='nearest'):
     """
