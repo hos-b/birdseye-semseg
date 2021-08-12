@@ -26,12 +26,12 @@ def get_iou_per_class(predictions: torch.Tensor, labels: torch.Tensor, target_ss
 
 def get_mask_iou(predictions: torch.Tensor, gt_masks: torch.Tensor, detection_tresh):
     assert len(predictions.shape) == len(gt_masks.shape), \
-           f"dimensions of predictions {predictions.shape} != ground truth {gt_masks.shape}"
+           f'dimensions of predictions {predictions.shape} != ground truth {gt_masks.shape}'
     preds = predictions.clone()
     preds[preds >= detection_tresh] = 1.0
     preds[preds < detection_tresh] = 0.0
-    preds = preds.long()
-    labels = gt_masks.long()
+    preds = preds == 1.0
+    labels = gt_masks == 1.0
     # image lvl iou for mask
     intersection = (preds & labels).sum(dim=(1, 2))
     union = (preds | labels).sum(dim=(1, 2))
