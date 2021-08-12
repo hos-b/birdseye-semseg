@@ -197,6 +197,7 @@ class EvaluationConfig:
         self.aggregation_types = list(conf['models']['aggregation-types'])
         # gui baseline parameteres
         self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
+        self.mask_thresh = float(conf['gui']['mask-threshold'])
         self.baseline_run = str(conf['gui']['baseline-run'])
         self.baseline_model_name = str(conf['gui']['baseline-model-name'])
         self.baseline_model_version = str(conf['gui']['baseline-model-version'])
@@ -257,6 +258,9 @@ class EvaluationConfig:
             exit()
         if self.gaussian_kernel_size % 2 == 0:
             print(f'sanity-check-error: gaussian kernel size must be odd.')
+            exit()
+        if self.mask_thresh < 0 or self.mask_thresh > 1:
+            print(f'sanity-check-error: mask threshold must be between 0 and 1.')
             exit()
         for i in range(len(self.model_versions)):
             if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':

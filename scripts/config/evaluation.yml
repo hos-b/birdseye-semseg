@@ -5,13 +5,14 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['mcnnt3x-0.1-ce-2stage']
+  runs: ['mcnnt3x-0.1-ce-final']
   model-names: ['mcnnT3x']
   model-versions: ['best']
   aggregation-types: ['bilinear']
 
 gui:
   evalutate-at-start: true
+  mask-threshold: 0.7
   baseline-run: 'mcnnt2x-nodrop-ce-baseline'
   baseline-model-name: 'mcnnT2x'
   baseline-model-version: 'best'

@@ -318,6 +318,11 @@ class SampleWindow:
                 self.center_x, self.center_y, self.agent_index, self.baseline_masking_en,
                 torch.device('cpu')
             )
+            # thresholding masks
+            solo_mask_pred[solo_mask_pred < self.eval_cfg.mask_thresh] = 0
+            solo_mask_pred[solo_mask_pred >= self.eval_cfg.mask_thresh] = 1
+            aggr_mask_pred[aggr_mask_pred < self.eval_cfg.mask_thresh] = 0
+            aggr_mask_pred[aggr_mask_pred >= self.eval_cfg.mask_thresh] = 1
 
             solo_sseg_pred_img = convert_semantics_to_rgb(solo_sseg_pred.argmax(dim=0), self.semantic_classes)
             if self.show_masks:
