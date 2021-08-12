@@ -228,7 +228,7 @@ class SampleWindow:
                 batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
                     self.segclass_dict, name, rgbs, car_masks, fov_masks,
                     car_transforms, labels, self.ppm, self.output_h, self.output_w,
-                    self.center_x, self.center_y
+                    self.center_x, self.center_y, self.eval_cfg.mask_thresh
                 )
                 self.mskd_ious[name] += batch_mskd_ious
                 self.full_ious[name] += batch_full_ious
@@ -238,15 +238,17 @@ class SampleWindow:
             full_iou_txt = 'full IoU  '
             mskd_iou_txt = 'mskd IoU  '
             for semantic_idx, semantic_class in self.segclass_dict.items():
-                full_iou_txt += f'{semantic_class.lower()}: {(self.full_ious[network][semantic_idx] / sample_count).item():.02f} '
-                mskd_iou_txt += f'{semantic_class.lower()}: {(self.mskd_ious[network][semantic_idx] / sample_count).item():.02f} '
+                full_iou_txt += f'{semantic_class.lower()}: {(self.full_ious[network][semantic_idx] / sample_count).item() * 100.0:.02f} '
+                mskd_iou_txt += f'{semantic_class.lower()}: {(self.mskd_ious[network][semantic_idx] / sample_count).item() * 100.0:.02f} '
             # if mask is not a semantic class, get the serparately calculated value (or 0 if n/a)
             if 'Mask' not in self.segclass_dict.values():
-                full_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count):.02f} '
-                mskd_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count):.02f} '
+                full_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count) * 100.0:.02f} '
+                mskd_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count) * 100.0:.02f} '
 
             exec(f"self.full_iou_label_{i}.configure(text='{full_iou_txt}')")
             exec(f"self.masked_iou_label_{i}.configure(text='{mskd_iou_txt}')")
+
+        print('\ndone, starting gui...')
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
