@@ -95,7 +95,7 @@ def train(**kwargs):
                                                          car_masks)
                 m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks)
                 s_loss =  torch.mean(semseg_loss(aggr_sseg_preds, labels) * 
-                                     (agent_pool.combined_masks + wallhack))
+                                     torch.clamp(agent_pool.combined_masks + wallhack, 0.0, 1.0))
             # forward for full (4x) models
             else:
                 solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
@@ -103,9 +103,9 @@ def train(**kwargs):
                 m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
                          mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
                 s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) *
-                                    (solo_masks + wallhack)) + \
+                                    torch.clamp(solo_masks + wallhack, 0.0, 1.0)) + \
                          torch.mean(semseg_loss(aggr_sseg_preds, labels) *
-                                    (agent_pool.combined_masks + wallhack))
+                                    torch.clamp(agent_pool.combined_masks + wallhack, 0.0, 1.0))
             # semseg & mask batch loss
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
