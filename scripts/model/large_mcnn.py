@@ -93,6 +93,7 @@ class TransposedMCNNXL(TransposedMCNN):
                                                   out_channels=256,
                                                   scale_factor=4)
         self.classifier = TransposedClassifier(256, num_classes)
+        # aggregation parameters
         self.cf_h, self.cf_w = 80, 108
         self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
         self.center_x = self.sem_cfg.center_x(self.cf_w)
@@ -116,6 +117,11 @@ class ExtendedMCNNT(TransposedMCNN):
             _DSConv(dw_channels=128, out_channels=128),
             _DSConv(dw_channels=128, out_channels=128)
         )
+        # aggregation parameters
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
         # model specification
         self.output_count = 2
         self.model_type = 'semantic-only'
@@ -135,6 +141,48 @@ class ExtendedMCNNT(TransposedMCNN):
         aggr_x = self.graph_aggr_conv(self.aggregate_features(x, transforms, adjacency_matrix))
         # B, 7, 128, 205
         solo_x = F.interpolate(self.classifier(x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_x = F.interpolate(self.classifier(aggr_x), self.output_size, mode='bilinear', align_corners=True)
+        return solo_x, aggr_x
+
+class ExtendedMCNNT2xAggr(TransposedMCNN):
+    """
+    Transposed MCNN with extra layers for the graph decoder. global feature extractor is enlarged.
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super().__init__(num_classes, output_size, sem_cfg, aggr_type)
+        self.global_feature_extractor = GlobalFeatureExtractor(in_channels=64,
+                                                               block_channels=(64, 96, 128),
+                                                               t=6, num_blocks=(3, 3, 3),
+                                                               pool_sizes=(6, 8, 10, 12))
+        self.graph_aggr_conv1 = _DSConv(dw_channels=128, out_channels=128)
+        self.graph_aggr_conv2 = _DSConv(dw_channels=128, out_channels=128)
+        # aggregation parameters
+        self.cf_h, self.cf_w = 80, 108
+        self.ppm = self.sem_cfg.pix_per_m(self.cf_h, self.cf_w)
+        self.center_x = self.sem_cfg.center_x(self.cf_w)
+        self.center_y = self.sem_cfg.center_y(self.cf_h)
+        # model specification
+        self.output_count = 2
+        self.model_type = 'semantic-only'
+        self.notes = 'small, fast i hope'
+    
+    def forward(self, x, transforms, adjacency_matrix, car_masks):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.learning_to_downsample(x)
+        # B, 128, 15, 20
+        x = self.global_feature_extractor(shared)
+        # B, 128, 80, 108
+        x = self.feature_fusion(shared, x)
+        # add ego car masks
+        x = x + F.interpolate(car_masks.unsqueeze(1), size=(self.cf_h, self.cf_w), mode='bilinear', align_corners=True)
+        # B, 128, 80, 108
+        aggr_x = self.aggregate_features(x, transforms, adjacency_matrix)
+        aggr_x = self.graph_aggr_conv1(aggr_x)
+        aggr_x = self.aggregate_features(aggr_x, transforms, adjacency_matrix)
+        aggr_x = self.graph_aggr_conv2(aggr_x)
+        # B, 7, 128, 205
+        solo_x = F.interpolate(self.classifier(x),      self.output_size, mode='bilinear', align_corners=True)
         aggr_x = F.interpolate(self.classifier(aggr_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_x, aggr_x
 
