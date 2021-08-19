@@ -4,7 +4,8 @@ num_classes_dict = {
     'ours': 7,
     'ours+mask': 8,
     'carla': 23,
-    'diminished': 3
+    'diminished': 3,
+    'diminished+mask': 4
 }
 
 class SemanticCloudConfig:
@@ -171,7 +172,8 @@ class TrainingConfig:
         if self.mask_detection_thresh < 0.0 or self.mask_detection_thresh > 1.0:
             print(f'sanity-check-error: mask detection threshold must be between 0 and 1.')
             exit()
-        if self.classes != 'ours' and self.classes != 'carla' and self.classes != 'diminished' and self.classes != 'ours+mask':
+        if self.classes != 'ours' and self.classes != 'carla' and self.classes != 'diminished' \
+                                  and self.classes != 'ours+mask' and self.classes != 'diminished+mask':
             print(f'sanity-check-error: unknown segmentation classes {self.classes}.')
             exit()
         if self.resume_training and self.resume_tag == '':

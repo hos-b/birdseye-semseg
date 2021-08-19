@@ -1,5 +1,5 @@
 logging:
-  name: 'mcnnt3x-0.1-ce-diminished'
+  name: 'debug' # embedmask-2xaggr-ce-dim-0.1
   group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
@@ -19,7 +19,7 @@ se2-noise:
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'mcnnT3x'
+  model-name: 'mcnnTE2xAggr'
   aggregation-type: 'bilinear'
 
 hyperparameters:
@@ -30,23 +30,23 @@ hyperparameters:
   # brightness, contrast, saturation, hue
   color-jitter: [0.1, 0.1, 0.1, 0.1]
   # guassian smoothing of masks
-  gaussian-blur-std: 0.4
-  gaussian-kernel-size: 10
+  gaussian-blur-std: 0
+  gaussian-kernel-size: 11
   # mask wallhack probability
-  wallhack-prob: 0.4
+  wallhack-prob: 0.0
 
 validation:
   # threshold for counting the mask pixel as detected
   mask-det-threshold: 0.6
 
 dataloader:
-  dataloder-workers: 0
+  dataloder-workers: 2
   shuffle-data: true
 
 dataset:
   output-h: 256
   output-w: 205
-  classes: 'diminished' # carla, ours, ours+mask, diminished
+  classes: 'diminished+mask' # carla, ours, ours+mask, diminished, diminished+mask
   dataset-dir: '/export/home/bahadorm/mass-data'
   trainset-file: 'noisy_towns2345.hdf5'
   trainset-name: 'training_set'
@@ -65,6 +65,6 @@ resume:
   flag: false
   tag: 'resume'
   resume-optimizer-state: true
-  starting-epoch: 11
+  starting-epoch: 21
   difficulty: 8
-  model-version: 'best'
+  model-version: 'last'

@@ -52,6 +52,12 @@ __diminished_to_rgb_palette = {
     1: [128, 64, 128],
     2: [244, 35, 232]
 }
+__diminishedplusmask_to_rgb_palette = {
+    0: [0, 0, 142],
+    1: [128, 64, 128],
+    2: [244, 35, 232],
+    3: [0, 0, 0] # mask is black
+}
 # Semantic IDs to Class String ----------------------------------------------------
 __carla_classes = {
     0 : 'Unlabeled',
@@ -101,6 +107,12 @@ __diminished_classes = {
     0: 'Vehicles',
     1: 'Drivable',
     2: 'Non-drivable'
+}
+__diminished_classes_plus_mask = {
+    0: 'Vehicles',
+    1: 'Drivable',
+    2: 'Non-drivable',
+    3: 'Mask'
 }
 # CARLA Semantic IDs to Subset IDs ------------------------------------------------
 __carla_to_our_ids = {
@@ -160,7 +172,7 @@ def convert_semantic_classes(semantic_ids : np.ndarray, target_classes: str) -> 
         target_semantics = np.zeros_like(semantic_ids)
         for carla_id, our_id in __carla_to_our_ids.items():
             target_semantics[semantic_ids == carla_id] = our_id
-    elif target_classes == 'diminished':
+    elif target_classes == 'diminished' or target_classes == 'diminished+mask':
         target_semantics = np.zeros_like(semantic_ids)
         for carla_id, our_id in __carla_to_diminished_ids.items():
             target_semantics[semantic_ids == carla_id] = our_id
@@ -195,6 +207,12 @@ def convert_semantics_to_rgb(semantic_ids : torch.Tensor, semantic_classes: str)
                                   dtype=np.uint8)
         for sid, cityscapes_rgb in __diminished_to_rgb_palette.items():
             semantic_rgb[semantic_ids == sid] = cityscapes_rgb
+    elif semantic_classes == 'diminished+mask':
+        semantic_rgb = np.ndarray(shape=(semantic_ids.shape[0],
+                                         semantic_ids.shape[1], 3),
+                                  dtype=np.uint8)
+        for sid, cityscapes_rgb in __diminishedplusmask_to_rgb_palette.items():
+            semantic_rgb[semantic_ids == sid] = cityscapes_rgb
     else:
-        return None
+        raise NotImplementedError(f'unknown semantic classes {semantic_classes}')
     return semantic_rgb

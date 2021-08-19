@@ -264,7 +264,10 @@ def parse_and_execute():
     if not train_cfg.classes.endswith('+mask'):
         print('this script should only be used with embedded masks')
         exit()
-    segmentation_classes = color_map.__our_classes_plus_mask
+    if train_cfg.classes == 'ours+mask':
+        segmentation_classes = color_map.__our_classes_plus_mask
+    elif train_cfg.classes == 'diminished+mask':
+        segmentation_classes = color_map.__diminished_classes_plus_mask
     # snapshot dir -----------------------------------------------------------------------------
     train_cfg.snapshot_dir = train_cfg.snapshot_dir.format(train_cfg.training_name)
     if not os.path.exists(train_cfg.snapshot_dir):
