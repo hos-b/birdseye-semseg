@@ -171,6 +171,77 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
 
+class DualMCNNT3Expansive(DualTransposedMCNN3x):
+    """
+    aggregation in output size to save details.
+    """
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
+        super().__init__(num_classes, output_size, sem_cfg, aggr_type)
+        # aggregation parameters
+        self.feature_h, self.feature_w = 80, 108
+        self.aggr_h, self.aggr_w = 256, 205
+        self.aggr_ppm = self.sem_cfg.pix_per_m(self.aggr_h, self.aggr_w)
+        self.aggr_center_x = self.sem_cfg.center_x(self.aggr_w)
+        self.aggr_center_y = self.sem_cfg.center_y(self.aggr_h)
+        # model specification
+        self.output_count = 4
+        self.model_type = 'semantic+mask'
+        self.notes = 'not small, probably not fast but all in one'
+
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.sseg_mcnn.learning_to_downsample(rgbs)
+        # B, 128, 80, 108
+        sseg_x = self.sseg_mcnn.global_feature_extractor(shared)
+        mask_x = self.mask_feature_extractor(shared)
+        # B, 128, 80, 108
+        sseg_x = self.sseg_mcnn.feature_fusion(shared, sseg_x)
+        mask_x = self.mask_feature_fusion(shared, mask_x)
+        # add ego car masks
+        sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.feature_h, self.feature_w), mode='bilinear', align_corners=True)
+        mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.feature_h, self.feature_w), mode='bilinear', align_corners=True)
+        # upsampling to the output size before aggregation
+        # B, 128, 256, 205
+        sseg_x = F.interpolate(sseg_x, size=self.output_size, mode='bilinear', align_corners=True)
+        mask_x = F.interpolate(mask_x, size=self.output_size, mode='bilinear', align_corners=True)
+        # 2 stage message passing for semantics
+        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix)
+        aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
+        aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, adjacency_matrix)
+        aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
+        # solo mask estimation
+        # B, 1, 256, 205
+        solo_mask_x = torch.sigmoid(self.mask_classifier(mask_x))
+        # mask aggregation on full size
+        # B, 1, 256, 205
+        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix,
+                                              self.aggr_ppm, self.aggr_h, self.aggr_w,
+                                              self.aggr_center_x, self.aggr_center_y)
+        aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
+        # downsampling semantics back to the original feature size
+        # B, 128, 80, 108
+        sseg_x      = F.interpolate(sseg_x     , size=(self.feature_h, self.feature_w), mode='bilinear', align_corners=True)
+        aggr_sseg_x = F.interpolate(aggr_sseg_x, size=(self.feature_h, self.feature_w), mode='bilinear', align_corners=True)
+        # B, 7, 256, 205
+        solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
+
+    def aggregate_features(self, x, transforms, adjacency_matrix) -> torch.Tensor:
+        agent_count = transforms.shape[0]
+        aggregated_features = torch.zeros_like(x)
+        for i in range(agent_count):
+            outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.aggr_ppm, self.aggr_h, self.aggr_w,
+                                                             self.aggr_center_x, self.aggr_center_y).to(transforms.device)
+            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.aggr_h, self.aggr_w),
+                                                 flags=self.aggregation_type)
+            # applying the adjacency matrix (difficulty)
+            warped_features[outside_fov] = 0
+            aggregated_features[i] = warped_features.sum(dim=0)
+        return aggregated_features
+
 class DualTransposedMCNN2x(AggrSemanticsSoloMask):
     """
     large & wide MCNN with solo mask & aggreagated semantic prediction

@@ -2,7 +2,7 @@ from model.large_mcnn import TransposedMCNN, TransposedMCNNXL, ExtendedMCNNT, Ex
 from model.noisy_mcnn import NoisyMCNN
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
 from model.graph_bevnet import GraphBEVNet
-from model.dual_mcnn import DualTransposedMCNN4x, DualTransposedMCNN3x, DualTransposedMCNN2x
+from model.dual_mcnn import DualTransposedMCNN4x, DualTransposedMCNN3x, DualMCNNT3Expansive, DualTransposedMCNN2x
 
 
 def get_model(model_name: str, *args):
@@ -36,11 +36,14 @@ def get_model(model_name: str, *args):
     elif model_name == 'mcnnT2x':
         print('creating DualTransposedMCNN2x')
         return DualTransposedMCNN2x(*args)
-    elif model_name == 'mcnnT4x':
-        print('creating DualTransposedMCNN4x')
-        return DualTransposedMCNN4x(*args)
     elif model_name == 'mcnnT3x':
         print('creating DualTransposedMCNN3x')
         return DualTransposedMCNN3x(*args)
+    elif model_name == 'mcnnT3xE':
+        print('creating DualMCNNT3Expansive')
+        return DualMCNNT3Expansive(*args)
+    elif model_name == 'mcnnT4x':
+        print('creating DualTransposedMCNN4x')
+        return DualTransposedMCNN4x(*args)
     else:
         raise ValueError(f'unknown model name: {model_name}')
