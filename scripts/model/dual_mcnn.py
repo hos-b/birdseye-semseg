@@ -215,9 +215,7 @@ class DualMCNNT3Expansive(DualTransposedMCNN3x):
         solo_mask_x = torch.sigmoid(self.mask_classifier(mask_x))
         # mask aggregation on full size
         # B, 1, 256, 205
-        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix,
-                                              self.aggr_ppm, self.aggr_h, self.aggr_w,
-                                              self.aggr_center_x, self.aggr_center_y)
+        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix)
         aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
         # downsampling semantics back to the original feature size
         # B, 128, 80, 108
