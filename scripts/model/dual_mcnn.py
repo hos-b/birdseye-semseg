@@ -171,6 +171,7 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
 
+
 class DualMCNNT3Expansive(DualTransposedMCNN3x):
     """
     aggregation in output size to save details.
@@ -239,6 +240,7 @@ class DualMCNNT3Expansive(DualTransposedMCNN3x):
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
+
 
 class DualTransposedMCNN2x(AggrSemanticsSoloMask):
     """
@@ -312,7 +314,7 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
                                         mode='bilinear', align_corners=True)
         # --latent masking into aggregation--
         # B, 128, 80, 108
-        x_semantic = self.aggregate_features(torch.sigmoid(x_mask) * x_semantic,
+        x_semantic = self.aggregate_features(x_mask * x_semantic,
                                              transforms, adjacency_matrix)
         # B, 7, 80, 108
         x_semantic = self.classifier(x_semantic)
