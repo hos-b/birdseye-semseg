@@ -10,8 +10,7 @@ from model.modules.lie_so3.lie_so3_m import LieSO3
 class NoisyMCNNT3x(DualTransposedMCNN3x):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(NoisyMCNNT3x, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
-        self.seg_matching_net = LatentFeatureMatcher(128, 128, 64, 32, 5 * 9)
-        self.msk_matching_net = LatentFeatureMatcher(1  ,   8,  8, 32, 27 * 21)
+        self.feat_matching_net = LatentFeatureMatcher(128, 128, 64, 32, 5 * 9)
         # semantic aggregation parameters
         self.sem_cf_h, self.sem_cf_w = 80, 108
         self.sem_ppm = self.sem_cfg.pix_per_m(self.sem_cf_h, self.sem_cf_w)
@@ -40,13 +39,18 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         # add ego car masks
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        # tf noise
+        agent_count = transforms.shape[0]
+        relative_tf_noise = torch.zeros(size=(agent_count, agent_count, 3, 3),
+                                        dtype=torch.float32,
+                                        device=transforms.device)
         # B, 128, 80, 108
         # 2 stage message passing for semantics
-        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, self.seg_matching_net,
+        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, relative_tf_noise, False,
                                               adjacency_matrix, self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
                                               self.sem_center_x, self.sem_center_y)
         aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
-        aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, self.seg_matching_net,
+        aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, relative_tf_noise, True,
                                               adjacency_matrix, self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
                                               self.sem_center_x, self.sem_center_y)
         aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
@@ -57,7 +61,7 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         solo_mask_x = F.interpolate(solo_mask_x, self.output_size, mode='bilinear', align_corners=True)
         # mask aggregation on full size
         # B, 1, 256, 205
-        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, self.msk_matching_net,
+        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, relative_tf_noise, True,
                                               adjacency_matrix, self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
                                               self.msk_center_x, self.msk_center_y)
         aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
@@ -66,20 +70,32 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
 
-    def aggregate_features(self, x, transforms, matcher, adjacency_matrix, ppm, cf_h, cf_w, center_x, center_y) -> torch.Tensor:
+    def aggregate_features(self, x, transforms, relative_noise, matched,
+                           adjacency_matrix, ppm, cf_h, cf_w, center_x, center_y) -> torch.Tensor:
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w,
                                                              center_x, center_y).to(transforms.device)
-            relative_tfs = relative_tfs @ matcher(x[i], x, ppm)
-            warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
-                                                 flags=self.aggregation_type)
+            # if features are already matched in an earlier aggregation step
+            if matched:
+                relative_tfs = relative_tfs @ relative_noise[i]
+                warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
+                                                    flags=self.aggregation_type)
+            # otherwise use feature matcher to estimate relative noise
+            else:
+                warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
+                                                     flags=self.aggregation_type)
+                relative_noise[i] = self.feat_matching_net(warped_features[i], warped_features, ppm)
+                warped_features = kornia.warp_affine(warped_features, relative_noise[i, :, :2],
+                                                     dsize=(cf_h, cf_w),
+                                                     flags=self.aggregation_type)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
+
 
 class LatentFeatureMatcher(nn.Module):
     """
