@@ -1,6 +1,8 @@
+import math
 import torch
 import kornia
 from torch import nn
+from typing import Tuple
 import torch.nn.functional as F
 from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
@@ -96,7 +98,6 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
 
-
 class LatentFeatureMatcher(nn.Module):
     """
     latent feature matcher takes two feature maps and
@@ -120,8 +121,8 @@ class LatentFeatureMatcher(nn.Module):
             nn.Linear((c_3 // 2) * lin_dims, lin_size),
             nn.ReLU(),
             nn.Linear(lin_size, lin_size),
-            nn.Tanh(),
-            nn.Linear(lin_size, 3),
+            nn.ReLU(),
+            nn.Linear(lin_size, 5),
         )
         self.lie_so3 = LieSO3()
 
@@ -134,9 +135,10 @@ class LatentFeatureMatcher(nn.Module):
         x = torch.stack((rep_feat_x, feat_y), dim=2).view(batch_size, channels * 2, feat_h, feat_w)
         x = self.feature_matcher(x)
         x = self.linear(x.view(batch_size, -1))
-        lie_input = torch.zeros(size=(batch_size, 1, 1, 3), dtype=x.dtype, device=x.device)
-        lie_input[:, :, :, 2] = x[:, 2].view(batch_size, 1, 1)
-        rot_matrices = self.lie_so3(lie_input).view(batch_size, 3, 3)
+        rot_matrices = self.lie_so3(x[:, 2:].view(batch_size, 1, 1, 3)).view(batch_size, 3, 3)
         rot_matrices[:, 0, 2] = x[:, 0] * ppm
         rot_matrices[:, 1, 2] = x[:, 1] * ppm
+        # zero out other rotations
+        rot_matrices[:, 2, :] = 0
+        rot_matrices[:, 2, 2] = 1
         return rot_matrices
