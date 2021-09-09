@@ -60,7 +60,7 @@ def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels
     # top-left corner transform -> center transform + conversion from meters to pixels
     return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, center_x, center_y, omit_last_row)
 
-def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, center_x, center_y) -> torch.Tensor:
+def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, center_x, center_y, omit_last_row=True) -> torch.Tensor:
     """
     input: 
         - tensor of shape A x 4 x 4, transforms of agents w.r.t. origin
@@ -86,7 +86,7 @@ def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, 
     # copying over the [yaw] rotation
     rel_2d_tf[:, :2, :2] = rel_3d_tf[:, :2, :2]
     # top-left corner transform -> center transform + conversion from meters to pixels
-    return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, center_x, center_y)
+    return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, center_x, center_y, omit_last_row)
 
 def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, w,
                               center_x, center_y, merge_masks=False, mode='bilinear'):
