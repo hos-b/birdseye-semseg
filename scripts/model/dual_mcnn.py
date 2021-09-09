@@ -70,7 +70,7 @@ class DualTransposedMCNN4x(SoloAggrSemanticsMask):
             relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
                                                              self.center_x, self.center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
-                                                 flags=self.aggregation_type)
+                                                 mode=self.aggregation_type)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
@@ -165,7 +165,7 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w,
                                                              center_x, center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
-                                                 flags=self.aggregation_type)
+                                                 mode=self.aggregation_type)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
@@ -235,7 +235,7 @@ class DualMCNNT3Expansive(DualTransposedMCNN3x):
             relative_tfs = get_single_relative_img_transform(transforms, i, self.aggr_ppm, self.aggr_h, self.aggr_w,
                                                              self.aggr_center_x, self.aggr_center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.aggr_h, self.aggr_w),
-                                                 flags=self.aggregation_type)
+                                                 mode=self.aggregation_type)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
@@ -335,7 +335,7 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
             relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
                                                              self.center_x, self.center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
-                                                 flags=self.aggregation_type)
+                                                 mode=self.aggregation_type)
             # applying the adjacency matrix (difficulty)
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)

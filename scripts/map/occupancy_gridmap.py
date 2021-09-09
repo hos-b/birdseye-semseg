@@ -29,7 +29,7 @@ class GridMap:
         relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
                                                          self.center_x, self.center_y).to(self.device)
         warped_semantics = kornia.warp_affine(sem_block, relative_tfs, dsize=(self.cf_h, self.cf_w),
-                                              flags='nearest')
+                                              mode='nearest')
         # applying the adjacency matrix
         warped_semantics[outside_fov] = 0
         # 7 x 256 x 205, probably not even necessary

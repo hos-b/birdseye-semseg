@@ -78,7 +78,7 @@ class DoubleSemantic(nn.Module):
                                                              center_x, center_y).to(rgbs.device)
             agent_relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                           dsize=(output_h, output_w),
-                                                          flags='nearest')
+                                                          mode='nearest')
             agent_relative_semantics[outside_fov] = 0
             final_aggr_sseg_pred = agent_relative_semantics.sum(dim=0)
         # use latent aggregation if not used as baseline
@@ -147,7 +147,7 @@ class DoubleSemantic(nn.Module):
                                                                  center_x, center_y).to(rgbs.device)
                 relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                         dsize=(output_h, output_w),
-                                                        flags='nearest')
+                                                        mode='nearest')
                 aggr_sseg_preds[i] = relative_semantics.sum(dim=0)
         # latent aggregation for others
         else:
@@ -214,7 +214,7 @@ class AggrSemanticsSoloMask(nn.Module):
                                                              center_x, center_y).to(rgbs.device)
             agent_relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                           dsize=(output_h, output_w),
-                                                          flags='nearest')
+                                                          mode='nearest')
             agent_relative_semantics[outside_fov] = 0
             final_aggr_sseg_pred = agent_relative_semantics.sum(dim=0)
         # use latent aggregation if not used as baseline
@@ -265,7 +265,7 @@ class AggrSemanticsSoloMask(nn.Module):
                                                                  center_x, center_y).to(rgbs.device)
                 relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                         dsize=(output_h, output_w),
-                                                        flags='nearest')
+                                                        mode='nearest')
                 aggr_sseg_preds[i] = relative_semantics.sum(dim=0)
         # latent aggregation for others
         else:

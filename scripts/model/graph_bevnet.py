@@ -89,7 +89,7 @@ class GraphBEVNet(DoubleSemantic):
                 self.center_x, self.center_y
             ).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
-                                                 flags=self.aggregation_type)
+                                                 mode=self.aggregation_type)
             warped_features[outside_fov] = 0
             aggregated_features[i, ...] = warped_features.sum(dim=0)
         return aggregated_features
