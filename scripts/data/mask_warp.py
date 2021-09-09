@@ -3,7 +3,8 @@ import torch
 import kornia
 import matplotlib.pyplot as plt
 
-def get_centered_img_transforms(transforms: torch.Tensor, pixels_per_meter, h, w, center_x, center_y) -> torch.Tensor:
+def get_centered_img_transforms(transforms: torch.Tensor, pixels_per_meter,
+                                center_x, center_y, omit_last_row) -> torch.Tensor:
     """
     turns a location-based transform into an image-centered pixel-based transform,
     to be used for warping. the x & y
@@ -27,9 +28,12 @@ def get_centered_img_transforms(transforms: torch.Tensor, pixels_per_meter, h, w
     norg = torch.tensor([[1.0, 0.0, -center_x],
                          [0.0, 1.0, -center_y],
                          [0.0, 0.0,       1.0]])
-    return (porg @ rectified_tf @ norg)[:, :2, :]
+    if omit_last_row:
+        return (porg @ rectified_tf @ norg)[:, :2, :].clone()
+    return (porg @ rectified_tf @ norg)
 
-def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels_per_meter, h, w, center_x, center_y) -> torch.Tensor:
+def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels_per_meter,
+                                      center_x, center_y, omit_last_row=True) -> torch.Tensor:
     """
     input: 
         - tensor of shape A x 4 x 4, transforms of agents w.r.t. origin
@@ -42,9 +46,9 @@ def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels
     output: 
         - tensor of shape A x 3 x 2, transforms of agents w.r.t. given agent
     """
-    assert len(transforms.shape) == 3, f"transforms should have the dimensions Ax3x3 but got {transforms.shape}"
+    assert len(transforms.shape) == 3, f"transforms should have the dimensions Ax4x4 but got {transforms.shape}"
     assert transforms.shape[1:3] == torch.Size([4, 4]), f"transforms should be 4x4 but they're {transforms.shape[1:3]}"
-    agent_count, _, _ = transforms.shape
+    agent_count = transforms.shape[0]
     # 3D transforms w.r.t. origin -> 3D transforms w.r.t. one agent
     rel_3d_tf = transforms[agent_id].inverse() @ transforms
     # 3D relative transforms -> 2D relative transforms
@@ -54,9 +58,9 @@ def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels
     # copying over the [yaw] rotation
     rel_2d_tf[:, :2, :2] = rel_3d_tf[:, :2, :2]
     # top-left corner transform -> center transform + conversion from meters to pixels
-    return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, h, w, center_x, center_y)
+    return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, center_x, center_y, omit_last_row)
 
-def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, h, w, center_x, center_y) -> torch.Tensor:
+def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, center_x, center_y) -> torch.Tensor:
     """
     input: 
         - tensor of shape A x 4 x 4, transforms of agents w.r.t. origin
@@ -82,7 +86,7 @@ def get_all_relative_img_transforms(transforms: torch.Tensor, pixels_per_meter, 
     # copying over the [yaw] rotation
     rel_2d_tf[:, :2, :2] = rel_3d_tf[:, :2, :2]
     # top-left corner transform -> center transform + conversion from meters to pixels
-    return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, h, w, center_x, center_y)
+    return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, center_x, center_y)
 
 def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, w,
                               center_x, center_y, merge_masks=False, mode='bilinear'):
@@ -92,7 +96,7 @@ def get_single_aggregate_mask(masks, transforms, agent_id, pixels_per_meter, h, 
     """
     assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
     assert agent_id < masks.shape[0], f"given agent index {agent_id} does not exist"
-    relative_tfs = get_single_relative_img_transform(transforms, agent_id, pixels_per_meter, h, w, center_x, center_y)
+    relative_tfs = get_single_relative_img_transform(transforms, agent_id, pixels_per_meter, center_x, center_y)
     warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), mode=mode)
     warped_mask = warped_mask.sum(dim=0)
     if merge_masks:
@@ -112,8 +116,7 @@ def get_single_adjacent_aggregate_mask(masks, transforms, agent_id, pixels_per_m
     new_masks = masks.clone().unsqueeze(1)
     nonadjacent = torch.where(adjacency_matrix[agent_id] == 0)[0]
     new_masks[nonadjacent] = 0
-    relative_tfs = get_single_relative_img_transform(transforms, agent_id,
-                                                     pixels_per_meter, h, w,
+    relative_tfs = get_single_relative_img_transform(transforms, agent_id, pixels_per_meter,
                                                      center_x, center_y).to(transforms.device)
     warped_mask = kornia.warp_affine(new_masks, relative_tfs, dsize=(h, w), mode=mode)
     warped_mask = warped_mask.sum(dim=0)
@@ -133,7 +136,7 @@ def get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w, center_x,
     """
     assert len(masks.shape) == 3, f"masks should have the dimensions AxHxW but got {masks.shape}"
     agent_count = masks.shape[0]
-    relative_tfs = get_all_relative_img_transforms(transforms, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
+    relative_tfs = get_all_relative_img_transforms(transforms, pixels_per_meter, center_x, center_y).to(masks.device)
     warped_masks = kornia.warp_affine(masks.unsqueeze(1).repeat(agent_count, 1, 1, 1),
                                       relative_tfs, dsize=(h, w), mode=mode)
     warped_masks = warped_masks.reshape(agent_count, agent_count, h, w).sum(dim=1)
@@ -152,7 +155,7 @@ def get_all_aggregate_masks_deprecated(masks, transforms, pixels_per_meter, h, w
     agent_count = masks.shape[0]
     all_masks = torch.zeros_like(masks)
     for i in range(agent_count):
-        relative_tfs = get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y).to(masks.device)
+        relative_tfs = get_single_relative_img_transform(transforms, i, pixels_per_meter, center_x, center_y).to(masks.device)
         warped_mask = kornia.warp_affine(masks.unsqueeze(1), relative_tfs, dsize=(h, w), mode=mode)
         all_masks[i] = warped_mask.sum(dim=0)
     return all_masks
@@ -167,7 +170,7 @@ def test_transforms(transforms, pixels_per_meter, h, w, center_x, center_y):
     relative_tfs_1 = torch.zeros_like(relative_tfs_2)
     for i in range(agent_count):
         relative_tfs_1[i * agent_count : (i + 1) * agent_count] = \
-            get_single_relative_img_transform(transforms, i, pixels_per_meter, h, w, center_x, center_y)
+            get_single_relative_img_transform(transforms, i, pixels_per_meter, center_x, center_y)
     if (torch.abs(relative_tfs_1 - relative_tfs_2) < 1e-15).unique() != torch.tensor([True]):
         print('\nrelative transforms are not equal')
     else:

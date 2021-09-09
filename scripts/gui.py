@@ -12,10 +12,9 @@ import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import convert_semantics_to_rgb
-from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks, get_single_adjacent_aggregate_mask
+from data.mask_warp import get_single_adjacent_aggregate_mask
 from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms
-from metrics.iou import get_iou_per_class
 from model.factory import get_model
 
 

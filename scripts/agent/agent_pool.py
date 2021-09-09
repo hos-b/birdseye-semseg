@@ -1,6 +1,6 @@
 import torch
 
-from data.mask_warp import get_single_relative_img_transform, get_all_aggregate_masks
+from data.mask_warp import get_all_aggregate_masks
 
 class CurriculumPool:
     """

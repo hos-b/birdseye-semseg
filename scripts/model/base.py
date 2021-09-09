@@ -74,7 +74,6 @@ class DoubleSemantic(nn.Module):
             # aggregate semantic predictions
             outside_fov = torch.where(adjacency_matrix[agent_index] == 0)[0]
             relative_tfs = get_single_relative_img_transform(car_transforms, agent_index, ppm,
-                                                             output_h, output_w,
                                                              center_x, center_y).to(rgbs.device)
             agent_relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                           dsize=(output_h, output_w),
@@ -143,7 +142,6 @@ class DoubleSemantic(nn.Module):
             aggr_sseg_preds = torch.zeros_like(solo_sseg_preds)
             for i in range(agent_count):
                 relative_tfs = get_single_relative_img_transform(car_transforms, i, ppm,
-                                                                 output_h, output_w,
                                                                  center_x, center_y).to(rgbs.device)
                 relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                         dsize=(output_h, output_w),
@@ -210,7 +208,6 @@ class AggrSemanticsSoloMask(nn.Module):
             # aggregate semantic predictions
             outside_fov = torch.where(adjacency_matrix[agent_index] == 0)[0]
             relative_tfs = get_single_relative_img_transform(car_transforms, agent_index, ppm,
-                                                             output_h, output_w,
                                                              center_x, center_y).to(rgbs.device)
             agent_relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                           dsize=(output_h, output_w),
@@ -261,7 +258,6 @@ class AggrSemanticsSoloMask(nn.Module):
             aggr_sseg_preds = torch.zeros_like(solo_sseg_preds)
             for i in range(agent_count):
                 relative_tfs = get_single_relative_img_transform(car_transforms, i, ppm,
-                                                                 output_h, output_w,
                                                                  center_x, center_y).to(rgbs.device)
                 relative_semantics = kornia.warp_affine(solo_sseg_preds, relative_tfs,
                                                         dsize=(output_h, output_w),

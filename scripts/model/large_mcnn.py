@@ -63,7 +63,7 @@ class TransposedMCNN(nn.Module):
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+            relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm,
                                                              self.center_x, self.center_y).to(transforms.device)
             warped_features = kornia.warp_affine(x, relative_tfs, dsize=(self.cf_h, self.cf_w),
                                                  mode=self.aggregation_type)

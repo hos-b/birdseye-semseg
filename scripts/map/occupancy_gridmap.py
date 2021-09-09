@@ -26,7 +26,7 @@ class GridMap:
         """
         outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
         # B x 7 x 256 x 205
-        relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm, self.cf_h, self.cf_w,
+        relative_tfs = get_single_relative_img_transform(transforms, i, self.ppm,
                                                          self.center_x, self.center_y).to(self.device)
         warped_semantics = kornia.warp_affine(sem_block, relative_tfs, dsize=(self.cf_h, self.cf_w),
                                               mode='nearest')
