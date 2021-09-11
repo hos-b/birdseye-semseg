@@ -20,5 +20,12 @@ def init_wandb(name: str, train_cfg: TrainingConfig):
             'strategy': train_cfg.strategy,
             'strategy_parameter': train_cfg.strategy_parameter,
             'torch_seed': train_cfg.torch_seed,
-            'shuffle_data': train_cfg.shuffle_data
+            'shuffle_data': train_cfg.shuffle_data,
+            'se2-noise': train_cfg.se2_noise_enable,
+            'se2_noise_dx_std': train_cfg.se2_noise_dx_std,
+            'se2_noise_dy_std': train_cfg.se2_noise_dy_std,
+            'se2_noise_th_std': train_cfg.se2_noise_th_std,
+            'gaussian_mask_std': train_cfg.gaussian_mask_std,
+            'wallhack': train_cfg.wallhack_prob,
+            'agent_drop_prob': train_cfg.drop_prob
     })

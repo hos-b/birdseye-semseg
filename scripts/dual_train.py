@@ -367,6 +367,7 @@ def parse_and_execute():
         semseg_loss = semseg_loss.to(device)
         mask_loss = mask_loss.to(device)
     # begin -------------------------------------------------------------------------------------
+    train_cfg.print_config()
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,

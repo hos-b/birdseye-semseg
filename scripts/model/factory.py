@@ -13,37 +13,26 @@ def get_model(model_name: str, *args):
     :return: The model.
     """
     if model_name == 'mcnnT':
-        print('creating TransposedMCNN')
         return TransposedMCNN(*args)
     elif model_name == 'mcnnTXL':
-        print('creating TransposedMCNNXL')
         return TransposedMCNNXL(*args)
     elif model_name == 'mcnnTE':
-        print('creating ExtendedMCNNT')
         return ExtendedMCNNT(*args)
     elif model_name == 'mcnnTE2xAggr':
-        print('creating ExtendedMCNNT2xAggr')
         return ExtendedMCNNT2xAggr(*args)
     elif model_name == 'mcnnT3xNoisy':
-        print('creating NoisyMCNNT3x')
         return NoisyMCNNT3x(*args)
     elif model_name == 'pyrocc':
-        print('creating PyramidOccupancyNetwork')
         return PyramidOccupancyNetwork(*args)
     elif model_name == 'bevnet':
-        print('creating GraphBEVNet')
         return GraphBEVNet(*args)
     elif model_name == 'mcnnT2x':
-        print('creating DualTransposedMCNN2x')
         return DualTransposedMCNN2x(*args)
     elif model_name == 'mcnnT3x':
-        print('creating DualTransposedMCNN3x')
         return DualTransposedMCNN3x(*args)
     elif model_name == 'mcnnT3xE':
-        print('creating DualMCNNT3Expansive')
         return DualMCNNT3Expansive(*args)
     elif model_name == 'mcnnT4x':
-        print('creating DualTransposedMCNN4x')
         return DualTransposedMCNN4x(*args)
     else:
         raise ValueError(f'unknown model name: {model_name}')

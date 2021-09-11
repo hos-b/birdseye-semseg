@@ -184,6 +184,61 @@ class TrainingConfig:
             print(f'sanity-check-error: output size {self.output_h}x{self.output_w} is invalid.')
             exit()
 
+    def print_config(self):
+        print('training config\n-----------------------------------')
+        # general
+        print(f'torch-seed: {self.torch_seed}')
+        print(f'loss-function: {self.loss_function}')
+        # noise
+        if not self.se2_noise_enable:
+            print(f'se2-noise: disabled')
+        else:
+            print(f'se2-noise: enabled')
+            print(f'se2-noise dx-std: {self.se2_noise_dx_std}')
+            print(f'se2-noise dy-std: {self.se2_noise_dy_std}')
+            print(f'se2-noise th-std: {self.se2_noise_th_std}')
+        # network
+        print(f'network: {self.model_name}')
+        print(f'aggregation-type: {self.aggregation_type}')
+        # curriculum config
+        if self.curriculum_activate:
+            print(f'curriculum: activated')
+            print(f'curriculum strategy: {self.strategy}')
+            print(f'curriculum initial difficulty: {self.initial_difficulty}')
+            print(f'curriculum maximum difficulty: {self.maximum_difficulty}')
+        else:
+            print(f'curriculum: deactivated')
+            print(f'enforce adj. calculation: {self.enforce_max_calc}')
+        # hyperparameters
+        print(f'connection drop probability: {self.drop_prob}')
+        if self.gaussian_mask_std == 0:
+            print(f'gaussian mask smoothing: disabled')
+        else:
+            print(f'gaussian mask smoothing: enabled')
+            print(f'gaussian mask std: {self.gaussian_mask_std}')
+            print(f'gaussian kernel size: {self.gaussian_kernel_size}')
+        if self.wallhack_prob == 0:
+            print(f'wallhack: disabled')
+        else:
+            print(f'wallhack: enabled')
+            print(f'wallhack probability: {self.wallhack_prob}')
+        # validation parameters
+        print(f'mask detection threshold: {self.mask_detection_thresh}')
+        # dataloader config
+        print('data loader workers: {}'.format(self.loader_workers))
+        # dataset config
+        print(f'classes: {self.classes}')
+        print(f'output size: {self.output_h}x{self.output_w}')
+        # resume
+        if self.resume_training:
+            print(f'resuming training from {self.resume_model_version} checkpoint (epoch {self.resume_starting_epoch})')
+            print(f'resume tag: {self.resume_tag}')
+            print(f'resume difficulty: {self.resume_difficulty}')
+            print(f'resume optimizer state: {self.resume_optimizer_state}')
+        else:
+            print('starting new training')
+        print('-----------------------------------')
+
 class EvaluationConfig:
     def __init__(self, file_path: str):
         yaml_file = open(file_path)
