@@ -11,7 +11,7 @@ class CurriculumPool:
     as the training progresses, the number of agents that are allowed
     to propagate messages increases, starting with 1.
     """
-    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count, device):
+    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count, enforce_max_calc, device):
         self.device = device
         self.agent_count = 0
         # connection strategy
@@ -20,6 +20,7 @@ class CurriculumPool:
         self.combined_masks = None
         self.adjacency_matrix = None
         self.max_agent_count = maximum_agent_count
+        self.enforce_max_calc = enforce_max_calc
 
     def generate_connection_strategy(self, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
         """
@@ -27,20 +28,53 @@ class CurriculumPool:
         create adjacency matrix based on current difficulty
         """
         self.agent_count = masks.shape[0]
-        # no calculations necessary for difficulty = 1
+        # no calculations necessary for difficulty = 1 -----------------------------------------------------
         if self.difficulty ==  1:
             self.combined_masks = masks.clone()
             self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool, device=self.device)
             return
-        # no calculations necessary for max number of agents (!= max_difficulty)
+        # --------------------------------------------------------------------------------------------------
         elif self.difficulty == self.max_agent_count:
-            self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w,
-                                                          center_x, center_y, merge_masks=True).long()
-            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count),
-                                               dtype=torch.bool, device=self.device)
+            # calculate adjacency matrix for maximum difficulty
+            if self.enforce_max_calc:
+                new_masks = masks.clone()
+                for i in range(self.agent_count):
+                    new_masks[i] *= 1 << i
+                self.combined_masks = get_all_aggregate_masks(new_masks, transforms, pixels_per_meter, h, w,
+                                                              center_x, center_y, 'nearest', False).long()
+                self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool, device=self.device)
+                for i in range(self.agent_count):
+                    possible_connections = self.combined_masks[i].unique(
+                        sorted=False, 
+                        return_counts=False
+                    ).long().cpu().tolist()
+                    try:
+                        # no one cares where mask is 0
+                        possible_connections.remove(0)
+                        # or if the agent view overlaps itself
+                        possible_connections.remove(1 << i)
+                    except ValueError:
+                        pass
+                    while len(possible_connections) > 0:
+                        current_connection = possible_connections.pop(0)
+                        # consider the constituent mask elements
+                        for agent_id in decompose_binary_elements(current_connection):
+                            self.adjacency_matrix[i, agent_id] = 1
+                # recalculate the merged masks
+                self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w,
+                                                              center_x, center_y, merge_masks=True).long()
+                # make sure adjacecy matrix is symmetric
+                self.adjacency_matrix = self.adjacency_matrix.transpose(0, 1) & self.adjacency_matrix
+            # assume all agents are connected
+            else:
+                self.combined_masks = get_all_aggregate_masks(masks, transforms, pixels_per_meter, h, w,
+                                                              center_x, center_y, merge_masks=True).long()
+                self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count),
+                                                    dtype=torch.bool, device=self.device)
             return
-        # for other cases, need to do some stuff
-        self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool)
+        # --------------------------------------------------------------------------------------------------
+        # for other cases, calculate adjacency matrix based on current difficulty
+        self.adjacency_matrix = torch.eye(self.agent_count, dtype=torch.bool, device=self.device)
         # identifying the masks (giving them ids)
         new_masks = masks.clone()
         for i in range(self.agent_count):
@@ -84,7 +118,8 @@ class CurriculumPool:
             self.combined_masks[i] = self.combined_masks[i] & accepted_connections
             self.combined_masks[i][self.combined_masks[i] != 0] = 1
 
-        self.adjacency_matrix.to(self.device)
+        # make sure adjacecy matrix is symmetric
+        self.adjacency_matrix = self.adjacency_matrix.transpose(0, 1) & self.adjacency_matrix
 
 def decompose_binary_elements(mask_value) -> list:
     """

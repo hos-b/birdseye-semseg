@@ -319,7 +319,7 @@ def parse_and_execute():
     sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
     optimizer.add_param_group({"params": [mask_loss_weight, sseg_loss_weight]})
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count, device)
+                                train_cfg.max_agent_count, train_cfg.enforce_max_calc, device)
     # loading the network parameters/optimizer state -------------------------------------------
     resume_tag = ''
     if train_cfg.resume_training:

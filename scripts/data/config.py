@@ -81,6 +81,7 @@ class TrainingConfig:
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
         self.strategy = str(conf['curriculum']['strategy'])
         self.strategy_parameter = conf['curriculum']['strategy-parameter']
+        self.enforce_max_calc = bool(conf['curriculum']['enforce-max-calc'])
         # hyperparameters
         self.drop_prob = float(conf['hyperparameters']['drop-prob'])
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])

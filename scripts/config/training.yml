@@ -1,5 +1,5 @@
 logging:
-  name: 'debug' # embedmask-2xaggr-ce-dim-0.1
+  name: 'debug' # mcnnT3xNoisy-1e-4LR-[4.|.6|.6]-ce-0.1
   group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
@@ -9,17 +9,17 @@ training:
   device: 'cuda'
   torch-seed: 10
   loss: 'cross-entropy'
-  ce-weights: [9.7452e+01, 9.0411e+01, 1.0000e+00, 7.1393e+00, 1.7067e+01, 9.6910e+00, 3.4640e+03]
+  ce-weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
-# currently only tackled in mcnnNoisy
+# currently only tackled in mcnnT3xNoisy
 se2-noise:
-  enable: false
+  enable: true
   se2-noise-theta-std: 4.0 # degrees
   se2-noise-dx-std: 0.6    # meters
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'mcnnTE2xAggr'
+  model-name: 'mcnnT3xNoisy'
   aggregation-type: 'bilinear'
 
 hyperparameters:
@@ -40,13 +40,13 @@ validation:
   mask-det-threshold: 0.6
 
 dataloader:
-  dataloder-workers: 2
+  dataloder-workers: 1
   shuffle-data: true
 
 dataset:
   output-h: 256
   output-w: 205
-  classes: 'diminished+mask' # carla, ours, ours+mask, diminished, diminished+mask
+  classes: 'ours' # carla, ours, ours+mask, diminished, diminished+mask
   dataset-dir: '/export/home/bahadorm/mass-data'
   trainset-file: 'noisy_towns2345.hdf5'
   trainset-name: 'training_set'
@@ -58,6 +58,7 @@ curriculum:
   initial-difficulty: 8
   maximum-difficulty: 8
   maximum-agent-count: 8
+  enforce-max-calc: true
   strategy: 'metric'
   strategy-parameter: 0.66
 

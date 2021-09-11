@@ -261,7 +261,7 @@ def parse_and_execute():
     lr_lambda = lambda epoch: pow((1 - (((epoch + start_ep) - 1) / train_cfg.epochs)), 0.9)
     scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lr_lambda)
     agent_pool = CurriculumPool(train_cfg.initial_difficulty, train_cfg.maximum_difficulty,
-                                train_cfg.max_agent_count, device)
+                                train_cfg.max_agent_count, train_cfg.enforce_max_calc, device)
     # loading the network parameters/optimizer state -------------------------------------------
     resume_tag = ''
     if train_cfg.resume_training:
