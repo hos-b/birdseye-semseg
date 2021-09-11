@@ -277,7 +277,7 @@ def parse_and_execute():
     new_size = (train_cfg.output_h, train_cfg.output_w)
     center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
     ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
-    print(f'output image size: {new_size}, vehicle center {center}')
+    print(f'pixels per meter: {ppm}, vehicle center {center}')
     # dataset ----------------------------------------------------------------------------------
     train_set = MassHDF5(dataset=train_cfg.trainset_name, path=train_cfg.dset_dir,
                          hdf5name=train_cfg.trainset_file, size=new_size,
