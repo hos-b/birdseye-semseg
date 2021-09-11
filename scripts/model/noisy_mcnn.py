@@ -2,7 +2,7 @@ import math
 import torch
 import kornia
 from torch import nn
-from typing import Tuple
+from torch._C import device
 import torch.nn.functional as F
 from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
@@ -12,7 +12,7 @@ from model.modules.lie_so3.lie_so3_m import LieSO3
 class NoisyMCNNT3x(DualTransposedMCNN3x):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(NoisyMCNNT3x, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
-        self.feat_matching_net = LatentFeatureMatcher(128, 128, 64, 32, 5 * 9)
+        self.feat_matching_net = LatentFeatureMatcher(128, 80, 108, 0.01)
         # semantic aggregation parameters
         self.sem_cf_h, self.sem_cf_w = 80, 108
         self.sem_ppm = self.sem_cfg.pix_per_m(self.sem_cf_h, self.sem_cf_w)
@@ -42,18 +42,15 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         # tf noise
-        agent_count = transforms.shape[0]
-        relative_tf_noise = torch.zeros(size=(agent_count, agent_count, 3, 3),
-                                        dtype=torch.float32,
-                                        device=transforms.device)
+        self.feat_matching_net.refresh(transforms.shape[0], transforms.device)
         # B, 128, 80, 108
         # 2 stage message passing for semantics
-        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, relative_tf_noise, False,
-                                              adjacency_matrix, self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
+        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix,
+                                              self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
                                               self.sem_center_x, self.sem_center_y)
         aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
-        aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, relative_tf_noise, True,
-                                              adjacency_matrix, self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
+        aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, adjacency_matrix,
+                                              self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
                                               self.sem_center_x, self.sem_center_y)
         aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
         # solo mask estimation
@@ -63,8 +60,8 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         solo_mask_x = F.interpolate(solo_mask_x, self.output_size, mode='bilinear', align_corners=True)
         # mask aggregation on full size
         # B, 1, 256, 205
-        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, relative_tf_noise, True,
-                                              adjacency_matrix, self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
+        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix,
+                                              self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
                                               self.msk_center_x, self.msk_center_y)
         aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
         # B, 7, 256, 205
@@ -72,30 +69,27 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
 
-    def aggregate_features(self, x, transforms, relative_noise, matched,
-                           adjacency_matrix, ppm, cf_h, cf_w, center_x, center_y) -> torch.Tensor:
+    def aggregate_features(self, x, transforms, adjacency_matrix, ppm,
+                           cf_h, cf_w, center_x, center_y) -> torch.Tensor:
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
-            outside_fov = torch.where(adjacency_matrix[i] == 0)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, cf_h, cf_w,
-                                                             center_x, center_y).to(transforms.device)
-            # if features are already matched in an earlier aggregation step
-            if matched:
-                relative_tfs = relative_tfs @ relative_noise[i]
-                warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
-                                                    flags=self.aggregation_type)
-            # otherwise use feature matcher to estimate relative noise
+            outside_fov = torch.where(adjacency_matrix[i] == False)[0]
+            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y, False).to(transforms.device)
+            # if so2 noise is already estimated for current batch
+            if self.feat_matching_net.estimated:
+                corrected_tf = self.feat_matching_net.estimated_noise[i] @ relative_tfs
+                warped_features = kornia.warp_affine(x, corrected_tf[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+            # otherwise estimate relative noise
             else:
-                warped_features = kornia.warp_affine(x, relative_tfs, dsize=(cf_h, cf_w),
-                                                     flags=self.aggregation_type)
-                relative_noise[i] = self.feat_matching_net(warped_features[i], warped_features, ppm)
-                warped_features = kornia.warp_affine(warped_features, relative_noise[i, :, :2],
-                                                     dsize=(cf_h, cf_w),
-                                                     flags=self.aggregation_type)
-            # applying the adjacency matrix (difficulty)
+                warped_features = kornia.warp_affine(x, relative_tfs[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+                estimated_noise = self.feat_matching_net(warped_features[i], warped_features, i, ppm, center_x, center_y)
+                warped_features = kornia.warp_affine(warped_features, estimated_noise[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+            # applying the adjacency matrix
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
+        # set noise estimation to true
+        self.feat_matching_net.estimated = True
         return aggregated_features
 
 class LatentFeatureMatcher(nn.Module):
@@ -103,42 +97,103 @@ class LatentFeatureMatcher(nn.Module):
     latent feature matcher takes two feature maps and
     returns their relative transform.
     """
-    def __init__(self, c_input = 128, c2 = 128, c_3 = 64, lin_size = 32, lin_dims = 5 * 9):
+    def __init__(self, input_ch, input_h, input_w, rotation_scale):
         super(LatentFeatureMatcher, self).__init__()
+        self.rotation_scale = rotation_scale
         # feature matching network
         self.feature_matcher = nn.Sequential(
-            nn.Conv2d(c_input * 2, c2, kernel_size=10, stride=2, groups=c_input, bias=False),
-            nn.InstanceNorm2d(c2),
+            nn.Conv2d(input_ch * 2, input_ch, kernel_size=10, stride=2, groups=input_ch, bias=False),
+            # nn.InstanceNorm2d(input_ch),
             nn.ReLU(True),
-            nn.Conv2d(c2, c_3, kernel_size=10, stride=2, bias=False),
-            nn.InstanceNorm2d(c_3),
+            nn.Conv2d(input_ch, input_ch, kernel_size=10, stride=2, bias=False),
+            # nn.InstanceNorm2d(input_ch),
             nn.ReLU(True),
-            nn.Conv2d(c_3, c_3 // 2, kernel_size=5, stride=2, bias=False),
-            nn.InstanceNorm2d(c_3 // 2),
+            nn.Conv2d(input_ch, input_ch // 2, kernel_size=5, stride=2, bias=False),
+            # nn.InstanceNorm2d(input_ch // 2),
             nn.ReLU(True),
         )
+        output_h, output_w = calculate_conv2d_sequence_output_size(input_h, input_w, self.feature_matcher)
         self.linear = nn.Sequential(
-            nn.Linear((c_3 // 2) * lin_dims, lin_size),
+            nn.Linear(output_h * output_w, 256),
             nn.ReLU(),
-            nn.Linear(lin_size, lin_size),
+            nn.Linear(256, 128),
             nn.ReLU(),
-            nn.Linear(lin_size, 5),
+            nn.Linear(128, 3),
         )
         self.lie_so3 = LieSO3()
+        self.estimated_noise = None
+        self.estimated = False
+    
+    def refresh(self, agent_count, device):
+        self.estimated = False
+        self.estimated_noise = torch.zeros(size=(agent_count, agent_count, 3, 3),
+                                           dtype=torch.float32,
+                                           device=device)
 
-    def forward(self, feat_x, feat_y, ppm):
+    def forward(self, feat_x, feat_y, agent_index, ppm, center_x, center_y):
         # feat_x: C x 80 x 108
-        # feat_y: B x C x 80 x 108
-        # interleaved: B x 2C x 80 x 108
-        batch_size, channels, feat_h, feat_w = feat_y.shape
-        rep_feat_x = feat_x.unsqueeze(0).repeat(batch_size, 1, 1, 1)
-        x = torch.stack((rep_feat_x, feat_y), dim=2).view(batch_size, channels * 2, feat_h, feat_w)
+        # feat_y: A x C x 80 x 108
+        agent_count, channels, feat_h, feat_w = feat_y.shape
+        # rep_feat_x: A x C x 80 x 108
+        rep_feat_x = feat_x.unsqueeze(0).repeat(agent_count, 1, 1, 1)
+        # interleaved: A x 2C x 80 x 108
+        x = torch.stack((rep_feat_x, feat_y), dim=2).view(agent_count, channels * 2, feat_h, feat_w)
         x = self.feature_matcher(x)
-        x = self.linear(x.view(batch_size, -1))
-        rot_matrices = self.lie_so3(x[:, 2:].view(batch_size, 1, 1, 3)).view(batch_size, 3, 3)
-        rot_matrices[:, 0, 2] = x[:, 0] * ppm
-        rot_matrices[:, 1, 2] = x[:, 1] * ppm
-        # zero out other rotations
-        rot_matrices[:, 2, :] = 0
-        rot_matrices[:, 2, 2] = 1
-        return rot_matrices
+        # flatten features and pass through linear layer
+        x = self.linear(torch.mean(x, dim=1).view(agent_count, -1))
+        # get lie_so3 transform
+        lie_input = torch.zeros(size=(agent_count, 1, 1, 3), dtype=feat_x.dtype, device=feat_x.device)
+        lie_input[:, :, :, 2] = self.rotation_scale * x[:, 2].view(agent_count, 1, 1)
+        rot_matrices = self.lie_so3(lie_input).view(agent_count, 3, 3)
+        rot_matrices[:, 0, 2] = x[:, 0]
+        rot_matrices[:, 1, 2] = x[:, 1]
+        self.estimated_noise[agent_index] = self._get_centered_img_transforms(rot_matrices, ppm, center_x, center_y)
+        return self.estimated_noise[agent_index]
+    
+    @staticmethod
+    def _get_centered_img_transforms(tf: torch.Tensor, pixels_per_meter, center_x, center_y) -> torch.Tensor:
+        """
+        turns a location-based transform into an image-centered pixel-based transform,
+        to be used for warping. the x & y
+        input: tensor of shape A x 3 x 3, relative transforms of agents
+        output: tensor of shape A x 2 x 3, image-centered transforms of agents w.r.t. a specific agent
+        """
+        centered_tf = tf.clone().detach()
+        # image rotation = inverse of cartesian rotation. for some reason tranpose doesn't work
+        centered_tf[:, :2, :2] = tf[:, :2, :2].inverse()
+        # image +x = cartesian -y, image +y = cartesian -x
+        centered_tf[:, 0, 2] = -tf[:, 1, 2] * pixels_per_meter
+        centered_tf[:, 1, 2] = -tf[:, 0, 2] * pixels_per_meter
+        porg = torch.tensor([[1.0, 0.0, center_x],
+                             [0.0, 1.0, center_y],
+                             [0.0, 0.0,      1.0]],
+                             dtype=tf.dtype, device=tf.device).unsqueeze(0)
+        norg = torch.tensor([[1.0, 0.0, -center_x],
+                             [0.0, 1.0, -center_y],
+                             [0.0, 0.0,       1.0]],
+                             dtype=tf.dtype, device=tf.device)
+        return (porg @ centered_tf @ norg)
+
+
+
+def calculate_conv2d_output_size(fsize_h, fsize_w, kernel_size_h, kernel_size_w,
+                                 padding_h, padding_w, stride_h, stride_w):
+    output_size_h = math.floor((fsize_h + 2 * padding_h - kernel_size_h) / stride_h) + 1
+    output_size_w = math.floor((fsize_w + 2 * padding_w - kernel_size_w) / stride_w) + 1
+    return output_size_h, output_size_w
+
+def calculate_conv2d_sequence_output_size(fsize_h, fsize_w, nn_sequential):
+    """
+    calculate the output size of a sequence of conv2d layers. it is assumed
+    that the sequence does not contain any other resizing layers.
+    """
+    for layer in nn_sequential:
+        if isinstance(layer, nn.Conv2d):
+            fsize_h, fsize_w = calculate_conv2d_output_size(fsize_h, fsize_w,
+                                                            layer.kernel_size[0],
+                                                            layer.kernel_size[1],
+                                                            layer.padding[0],
+                                                            layer.padding[1],
+                                                            layer.stride[0],
+                                                            layer.stride[1])
+    return fsize_h, fsize_w
