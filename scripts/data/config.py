@@ -81,7 +81,7 @@ class TrainingConfig:
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
         self.strategy = str(conf['curriculum']['strategy'])
         self.strategy_parameter = conf['curriculum']['strategy-parameter']
-        self.enforce_max_calc = bool(conf['curriculum']['enforce-max-calc'])
+        self.enforce_adj_calc = bool(conf['curriculum']['enforce-adj-calc'])
         # hyperparameters
         self.drop_prob = float(conf['hyperparameters']['drop-prob'])
         self.learning_rate = float(conf['hyperparameters']['learning-rate'])
@@ -208,7 +208,7 @@ class TrainingConfig:
             print(f'curriculum maximum difficulty: {self.maximum_difficulty}')
         else:
             print(f'curriculum: deactivated')
-            print(f'enforce adj. calculation: {self.enforce_max_calc}')
+            print(f'enforce adj. calculation: {self.enforce_adj_calc}')
         # hyperparameters
         print(f'connection drop probability: {self.drop_prob}')
         if self.gaussian_mask_std == 0:

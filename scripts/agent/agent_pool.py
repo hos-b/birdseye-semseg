@@ -11,7 +11,7 @@ class CurriculumPool:
     as the training progresses, the number of agents that are allowed
     to propagate messages increases, starting with 1.
     """
-    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count, enforce_max_calc, device):
+    def __init__(self, starting_difficulty, maximum_difficulty, maximum_agent_count, enforce_adj_calc, device):
         self.device = device
         self.agent_count = 0
         # connection strategy
@@ -20,7 +20,7 @@ class CurriculumPool:
         self.combined_masks = None
         self.adjacency_matrix = None
         self.max_agent_count = maximum_agent_count
-        self.enforce_max_calc = enforce_max_calc
+        self.enforce_adj_calc = enforce_adj_calc
 
     def generate_connection_strategy(self, masks, transforms, pixels_per_meter, h, w, center_x, center_y):
         """
@@ -36,7 +36,7 @@ class CurriculumPool:
         # --------------------------------------------------------------------------------------------------
         elif self.difficulty == self.max_agent_count:
             # calculate adjacency matrix for maximum difficulty
-            if self.enforce_max_calc:
+            if self.enforce_adj_calc:
                 new_masks = masks.clone()
                 for i in range(self.agent_count):
                     new_masks[i] *= 1 << i

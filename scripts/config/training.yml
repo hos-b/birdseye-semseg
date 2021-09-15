@@ -1,5 +1,5 @@
 logging:
-  name: 'debug' # mcnnT3xNoisy-1e-4LR-[4.|.6|.6]-ce-0.1
+  name: 'mcnnT3x-[4.|.6|.6]-ce-0.1'
   group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
@@ -7,7 +7,7 @@ logging:
 
 training:
   device: 'cuda'
-  torch-seed: 10
+  torch-seed: 101
   loss: 'cross-entropy'
   ce-weights: [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
@@ -19,7 +19,7 @@ se2-noise:
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'mcnnT3xNoisy'
+  model-name: 'mcnnT3x'
   aggregation-type: 'bilinear'
 
 hyperparameters:
@@ -40,7 +40,7 @@ validation:
   mask-det-threshold: 0.6
 
 dataloader:
-  dataloder-workers: 1
+  dataloder-workers: 0
   shuffle-data: true
 
 dataset:
@@ -58,14 +58,14 @@ curriculum:
   initial-difficulty: 8
   maximum-difficulty: 8
   maximum-agent-count: 8
-  enforce-max-calc: true
+  enforce-max-calc: false
   strategy: 'metric'
   strategy-parameter: 0.66
 
 resume:
-  flag: false
+  flag: true
   tag: 'resume'
   resume-optimizer-state: true
-  starting-epoch: 21
+  starting-epoch: 12
   difficulty: 8
   model-version: 'last'
