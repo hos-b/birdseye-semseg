@@ -58,7 +58,7 @@ curriculum:
   initial-difficulty: 8
   maximum-difficulty: 8
   maximum-agent-count: 8
-  enforce-max-calc: false
+  enforce-adj-calc: false
   strategy: 'metric'
   strategy-parameter: 0.66
 
