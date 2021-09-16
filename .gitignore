@@ -16,3 +16,6 @@ scripts/runs
 scripts/model/modules/lie_so3/lie_so3.egg-info
 scripts/model/modules/lie_so3/dist
 .gitignore
+scripts/model/lie_so3/lie_so3.egg-info
+scripts/model/lie_so3/lie_so3.egg-info
+scripts/model/lie_so3/dist
