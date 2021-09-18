@@ -454,7 +454,7 @@ std::vector<std::string> MassAgent::GetBlueprintNames() {
 		"vehicle.toyota.prius",
 		"vehicle.bmw.grandtourer",
 		"vehicle.tesla.model3",
-		"vehicle.nissan.patrol",
+		// "vehicle.nissan.patrol",
 		"vehicle.jeep.wrangler_rubicon",
 		"vehicle.dodge_charger.police",
 		"vehicle.chevrolet.impala",
