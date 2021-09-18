@@ -5,19 +5,17 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['mcnnt3x-0.1-ce-final']
-  model-names: ['mcnnT3x']
-  model-versions: ['best']
-  aggregation-types: ['bilinear']
+  runs: ['mcnnt2x-nodrop-ce-baseline', 'mcnnT3xNoisy-[4-.6-.6]-ce-0.1']
+  graph-networks: [false, true]
+  model-names: ['mcnnT2x', 'mcnnT3xNoisy']
+  model-versions: ['best', 'best']
+  aggregation-types: ['bilinear', 'bilinear']
 
 gui:
   evalutate-at-start: true
-  mask-threshold: 0.7
-  baseline-run: 'mcnnt2x-nodrop-ce-baseline'
-  baseline-model-name: 'mcnnT2x'
-  baseline-model-version: 'best'
+  mask-threshold: 0.6
 
-# only available for mcnnNoisy and onwards
+# only tackled in mcnnNoisy and onwards
 se2-noise:
   enable: false
   se2-noise-theta-std: 3.0 # degrees
@@ -36,7 +34,7 @@ dataset:
   dataset-name: 'validation_set'
 
 curriculum:
-  difficulty: 1
+  difficulty: 8
   maximum-agent-count: 8
 
 plot:

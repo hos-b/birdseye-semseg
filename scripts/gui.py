@@ -22,6 +22,7 @@ class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
         # network stuff
         self.networks = {}
+        self.graph_flags = {}
         self.output_h = new_size[0]
         self.output_w = new_size[1]
         self.center_x = center[0]
@@ -35,6 +36,7 @@ class SampleWindow:
         self.adjacency_matrix = None
         self.baseline_masking_en = False
         self.show_masks = False
+        self.noise_correction_en = True
         self.agent_index = 0
         self.agent_count = 8
         self.window = tkinter.Tk()
@@ -84,7 +86,6 @@ class SampleWindow:
         self.th_noise_entry. grid(column=24, row=9, columnspan=2)
         self.apply_noise     = tkinter.Button(self.window, command=self.apply_noise_params, text='undertaker')
         self.apply_noise.    grid(column=22, row=10, columnspan=4)
-
         # adjacency matrix buttons
         self.sep_2 = tkinter.Label(self.window, text='  ')
         self.sep_2.grid(row=0, rowspan=10, column=26)
@@ -102,12 +103,14 @@ class SampleWindow:
         # ious
         self.mskd_ious = {}
         self.full_ious = {}
+        self.noiz_ious = {}
 
-    def add_network(self, network: torch.nn.Module, label: str):
+    def add_network(self, network: torch.nn.Module, label: str, graph_net: bool):
         id = len(self.networks)
-        net_row = 2 + len(self.networks) * 12
+        net_row = 2 + len(self.networks) * 13
         network.eval()
         self.networks[label] = network
+        self.graph_flags[label] = graph_net
         self.mskd_ious[label] = torch.zeros((self.eval_cfg.num_classes, 1), dtype=torch.float64).to(self.device)
         self.full_ious[label] = torch.zeros((self.eval_cfg.num_classes, 1), dtype=torch.float64).to(self.device)
         exec(f"self.network_label_{id}        = tkinter.Label(self.window, text='[{label}]')")
@@ -117,6 +120,7 @@ class SampleWindow:
         exec(f"self.aggr_trgt_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.masked_iou_label_{id}     = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.full_iou_label_{id}       = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.noiz_iou_label_{id}       = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.seperator_{id}            = tkinter.Label(self.window, text='{'-' * 105}')")
         exec(f"self.network_label_{id}.         grid(column=0, row={net_row - 1}, columnspan=1)")
         exec(f"self.rgb_panel_{id}.             grid(column=0, row={net_row}, columnspan=5, rowspan=8)")
@@ -125,15 +129,15 @@ class SampleWindow:
         exec(f"self.aggr_trgt_panel_{id}.       grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.masked_iou_label_{id}.      grid(column=0, row={net_row + 8}, columnspan=20)")
         exec(f"self.full_iou_label_{id}.        grid(column=0, row={net_row + 9}, columnspan=20)")
-        exec(f"self.seperator_{id}.             grid(column=0, row={net_row + 10}, columnspan=20)")
+        exec(f"self.noiz_iou_label_{id}.        grid(column=0, row={net_row + 10}, columnspan=20)")
+        exec(f"self.seperator_{id}.             grid(column=0, row={net_row + 11}, columnspan=20)")
 
     def assign_dataset_iterator(self, dset_iterator):
         self.dset_iterator = dset_iterator
 
     def start(self):
-        if 'baseline' not in self.networks:
-            print("missing 'baseline' network")
-            exit()
+        if True not in self.graph_flags.values():
+            print("warning: no baseline network has been added")
         self.change_sample()
         self.window.mainloop()
 
@@ -196,6 +200,7 @@ class SampleWindow:
             for i, (network) in enumerate(self.networks.keys()):
                 exec(f"self.full_iou_label_{i}.configure(text='network not evaluated')")
                 exec(f"self.masked_iou_label_{i}.configure(text='network not evaluated')")
+                exec(f"self.noiz_iou_label_{i}.configure(text='network not evaluated')")
             return
 
         sample_count = 0
@@ -225,9 +230,9 @@ class SampleWindow:
             
             for name, network in self.networks.items():
                 batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
-                    self.segclass_dict, name, rgbs, car_masks, fov_masks,
+                    self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks,
                     car_transforms, labels, self.ppm, self.output_h, self.output_w,
-                    self.center_x, self.center_y, self.eval_cfg.mask_thresh
+                    self.center_x, self.center_y, self.eval_cfg.mask_thresh, self.noise_correction_en
                 )
                 self.mskd_ious[name] += batch_mskd_ious
                 self.full_ious[name] += batch_full_ious
@@ -314,10 +319,10 @@ class SampleWindow:
 
             solo_sseg_pred, solo_mask_pred, \
             aggr_sseg_pred, aggr_mask_pred = network.get_eval_output(
-                self.segclass_dict, name, rgbs, car_masks, fov_masks, car_transforms,
+                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks, car_transforms,
                 self.adjacency_matrix, self.ppm, self.output_h, self.output_w,
                 self.center_x, self.center_y, self.agent_index, self.baseline_masking_en,
-                torch.device('cpu')
+                torch.device('cpu'), self.noise_correction_en
             )
             # thresholding masks
             solo_mask_pred[solo_mask_pred < self.eval_cfg.mask_thresh] = 0
@@ -369,17 +374,6 @@ def main():
                         guassian_kernel_size=eval_cfg.gaussian_kernel_size)
     loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
     gui.assign_dataset_iterator(iter(loader))
-    # baseline stuff ---------------------------------------------------------------------------------------
-    baseline_dir = eval_cfg.snapshot_dir.format(eval_cfg.baseline_run)
-    baseline_path = baseline_dir + f'/{eval_cfg.baseline_model_version}_model.pth'
-    baseline_model = get_model(eval_cfg.baseline_model_name, eval_cfg.num_classes, NEW_SIZE,
-                               sem_cfg, eval_cfg.aggregation_types[0]).to(device)
-    try:
-        baseline_model.load_state_dict(torch.load(baseline_path))
-    except:
-        print(f'{eval_cfg.baseline_model_name} implementation is incompatible with {eval_cfg.baseline_run}')
-        exit()
-    gui.add_network(baseline_model, 'baseline')
     # other network stuff ----------------------------------------------------------------------------------
     for i in range(len(eval_cfg.runs)):
         snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[i])
@@ -387,7 +381,7 @@ def main():
         snapshot_path = snapshot_dir + '/' + snapshot_path
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
-            exit()
+            exit(-1)
         model = get_model(eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
                           sem_cfg, eval_cfg.aggregation_types[i]).to(device)
         print(f'loading {snapshot_path}')
@@ -396,7 +390,7 @@ def main():
         except:
             print(f'{eval_cfg.model_names[i]} implementation is incompatible with {eval_cfg.runs}')
             exit()
-        gui.add_network(model, eval_cfg.runs[i])
+        gui.add_network(model, eval_cfg.runs[i], eval_cfg.model_gnn_flags[i])
     # evaluate the added networks --------------------------------------------------------------------------
     gui.calculate_ious(test_set)
     # start the gui ----------------------------------------------------------------------------------------

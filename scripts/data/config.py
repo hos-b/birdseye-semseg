@@ -250,15 +250,13 @@ class EvaluationConfig:
         self.snapshot_dir = str(conf['snapshot-dir'])
         # model parameters
         self.runs = list(conf['models']['runs'])
+        self.model_gnn_flags = list(conf['models']['graph-networks'])
         self.model_names = list(conf['models']['model-names'])
         self.model_versions = list(conf['models']['model-versions'])
         self.aggregation_types = list(conf['models']['aggregation-types'])
-        # gui baseline parameteres
+        # gui parameteres
         self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
         self.mask_thresh = float(conf['gui']['mask-threshold'])
-        self.baseline_run = str(conf['gui']['baseline-run'])
-        self.baseline_model_name = str(conf['gui']['baseline-model-name'])
-        self.baseline_model_version = str(conf['gui']['baseline-model-version'])
         # noise parameters
         self.se2_noise_enable = conf['se2-noise']['enable']
         if self.se2_noise_enable:
@@ -320,16 +318,17 @@ class EvaluationConfig:
         if self.mask_thresh < 0 or self.mask_thresh > 1:
             print(f'sanity-check-error: mask threshold must be between 0 and 1.')
             exit()
+        if len(self.runs) != len(self.model_names) or len(self.runs) != len(self.model_versions) or \
+           len(self.runs) != len(self.aggregation_types) or len(self.runs) != len(self.model_gnn_flags):
+            print(f'sanity-check-error: model lists should have the same length.')
+            
         for i in range(len(self.model_versions)):
             if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':
-                print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version')
+                print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version.')
                 exit()
-        if self.baseline_model_version != 'best' and self.baseline_model_version != 'last':
-            print(f'sanity-check-error: {self.baseline_model_version} is not a valid model version')
-            exit()
         for i in range(len(self.aggregation_types)):
             if self.aggregation_types[i] != 'bilinear' and self.aggregation_types[i] != 'nearest':
-                print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type')
+                print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type.')
                 exit()
 
 
@@ -392,11 +391,11 @@ class ReportConfig:
             exit()
         for i in range(len(self.model_versions)):
             if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':
-                print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version')
+                print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version.')
                 exit()
         for i in range(len(self.aggregation_types)):
             if self.aggregation_types[i] != 'bilinear' and self.aggregation_types[i] != 'nearest':
-                print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type')
+                print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type.')
                 exit()
         if self.se2_noise_enable:
             if self.se2_noise_dx_std == 0 and self.se2_noise_dy_std == 0 and self.se2_noise_th_std == 0:
