@@ -60,7 +60,7 @@ class GraphBEVNet(DoubleSemantic):
         self.model_type = 'semantic-only'
         self.notes = 'very large & slow'
 
-    def forward(self, x, transforms, adjacency_matrix, car_masks):
+    def forward(self, x, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(x)

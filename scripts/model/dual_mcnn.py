@@ -34,7 +34,7 @@ class DualTransposedMCNN4x(SoloAggrSemanticsMask):
         self.model_type = 'semantic+mask'
         self.notes = 'not small, probably not fast but all in one'
 
-    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         sseg_shared = self.sseg_mcnn.learning_to_downsample(rgbs)
@@ -118,7 +118,7 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
         self.model_type = 'semantic+mask'
         self.notes = 'not small, probably not fast but all in one'
 
-    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.sseg_mcnn.learning_to_downsample(rgbs)
@@ -189,7 +189,7 @@ class DualMCNNT3Expansive(DualTransposedMCNN3x):
         self.model_type = 'semantic+mask'
         self.notes = 'not small, probably not fast but all in one'
 
-    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.sseg_mcnn.learning_to_downsample(rgbs)
@@ -291,7 +291,7 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
         self.model_type = 'semantic+mask'
         self.notes = 'small, fast, solo mask for latent masking'
 
-    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(rgbs)

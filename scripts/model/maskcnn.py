@@ -38,7 +38,7 @@ class MaskCNN(torch.nn.Module):
         self.model_type = 'mask-only'
         self.notes = 'small, fast'
 
-    def forward(self, x, transforms, adjacency_matrix, car_masks):
+    def forward(self, x, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(x)

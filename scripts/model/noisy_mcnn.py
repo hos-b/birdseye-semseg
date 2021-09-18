@@ -28,7 +28,8 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         self.model_type = 'semantic+mask'
         self.notes = 'using lie-so3 to counter noise'
 
-    def forward(self, rgbs, transforms, adjacency_matrix, car_masks):
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
+        noise_correction_en = kwargs.get('noise_correction_en', True)
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.sseg_mcnn.learning_to_downsample(rgbs)
@@ -42,16 +43,17 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         # tf noise
-        self.feat_matching_net.refresh(transforms.shape[0], transforms.device)
+        if noise_correction_en:
+            self.feat_matching_net.refresh(transforms.shape[0], transforms.device)
         # B, 128, 80, 108
         # 2 stage message passing for semantics
         aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix,
                                               self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
-                                              self.sem_center_x, self.sem_center_y)
+                                              self.sem_center_x, self.sem_center_y, noise_correction_en)
         aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
         aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, adjacency_matrix,
                                               self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
-                                              self.sem_center_x, self.sem_center_y)
+                                              self.sem_center_x, self.sem_center_y, noise_correction_en)
         aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
         # solo mask estimation
         # B, 1, 80, 108
@@ -62,7 +64,7 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         # B, 1, 256, 205
         aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix,
                                               self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
-                                              self.msk_center_x, self.msk_center_y)
+                                              self.msk_center_x, self.msk_center_y, noise_correction_en)
         aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
         # B, 7, 256, 205
         solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
@@ -70,25 +72,29 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
 
     def aggregate_features(self, x, transforms, adjacency_matrix, ppm,
-                           cf_h, cf_w, center_x, center_y) -> torch.Tensor:
+                           cf_h, cf_w, center_x, center_y, noise_correction_en) -> torch.Tensor:
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == False)[0]
             relative_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y, False).to(transforms.device)
-            # if so2 noise is already estimated for current batch
-            if self.feat_matching_net.estimated:
-                corrected_tf = self.feat_matching_net.get_centered_img_transforms(i, ppm, center_x, center_y) @ relative_tfs
-                warped_features = kornia.warp_affine(x, corrected_tf[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
-            # otherwise estimate relative noise
+            if noise_correction_en:
+                # if so2 noise is already estimated for current batch
+                if self.feat_matching_net.estimated:
+                    corrected_tf = self.feat_matching_net.get_centered_img_transforms(i, ppm, center_x, center_y) @ relative_tfs
+                    warped_features = kornia.warp_affine(x, corrected_tf[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+                # otherwise estimate relative noise
+                else:
+                    warped_features = kornia.warp_affine(x, relative_tfs[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+                    estimated_noise = self.feat_matching_net(warped_features[i], warped_features, i, ppm, center_x, center_y)
+                    warped_features = kornia.warp_affine(warped_features, estimated_noise[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
             else:
                 warped_features = kornia.warp_affine(x, relative_tfs[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
-                estimated_noise = self.feat_matching_net(warped_features[i], warped_features, i, ppm, center_x, center_y)
-                warped_features = kornia.warp_affine(warped_features, estimated_noise[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
             # applying the adjacency matrix
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
-        # set noise estimation to true
+
+        # set estimated flag to true
         self.feat_matching_net.estimated = True
         return aggregated_features
 
@@ -126,6 +132,8 @@ class LatentFeatureMatcher(nn.Module):
     
     def refresh(self, agent_count, device):
         self.estimated = False
+        if self.estimated_noise is not None:
+            del self.estimated_noise
         self.estimated_noise = torch.zeros(size=(agent_count, agent_count, 3, 3),
                                            dtype=torch.float32,
                                            device=device)
