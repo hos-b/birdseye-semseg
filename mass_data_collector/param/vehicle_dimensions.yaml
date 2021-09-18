@@ -5,25 +5,25 @@ vehicle.audi.a2:
   back: 1.82387
   left: 0.773324
   right: 0.743914
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.audi.etron:
   front: 2.41829
   back: 2.41587
   left: 0.95259
   right: 0.963972
-  camera-shift: 0.2
+  camera-shift: 0.25
 vehicle.audi.tt:
   front: 2.09138
   back: 2.05938
   left: 1.00515
   right: 0.974999
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.bmw.grandtourer:
   front: 2.30527
   back: 2.2697
   left: 0.995986
   right: 0.959075
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.chevrolet.impala:
   front: 2.68861
   back: 2.65012
@@ -35,71 +35,71 @@ vehicle.citroen.c3:
   back: 1.97027
   left: 0.846419
   right: 0.819541
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.dodge_charger.police:
   front: 2.47321
   back: 2.44592
   left: 0.942774
   right: 0.913317
-  camera-shift: 0.15
+  camera-shift: 0.25
 vehicle.jeep.wrangler_rubicon:
   front: 1.92163
   back: 1.89052
   left: 0.829766
   right: 0.800036
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.lincoln.mkz2017:
   front: 2.43892
   back: 2.40475
   left: 0.927776
   right: 0.898797
-  camera-shift: 0.1
+  camera-shift: 0.25
 vehicle.mercedes-benz.coupe:
   front: 2.50548
   back: 2.46365
   left: 1.0249
   right: 0.986128
-  camera-shift: 0.1
+  camera-shift: 0.25
 vehicle.mini.cooperst:
   front: 1.90962
   back: 1.87918
   left: 0.94272
   right: 0.861632
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.mustang.mustang:
   front: 2.38321
   back: 2.2945
   left: 0.908862
   right: 0.880147
-  camera-shift: 0.1
+  camera-shift: 0.25
 # weird on l & r
 vehicle.nissan.micra:
   front: 1.79581
   back: 1.7953
   left: 0.907892
   right: 0.753315
-  camera-shift: 0.0
-vehicle.nissan.patrol:
-  front: 2.25833
-  back: 2.30084
-  left: 0.969844
-  right: 0.939545
-  camera-shift: 0.45
+  camera-shift: 0.25
+# vehicle.nissan.patrol: too far ahead
+#   front: 2.25833
+#   back: 2.30084
+#   left: 0.969844
+#   right: 0.939545
+#   camera-shift: 0.45
 vehicle.seat.leon:
   front: 2.10501
   back: 1.90186
   left: 0.861856
   right: 0.806926
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.tesla.model3:
   front: 2.421
   back: 2.31269
   left: 0.967148
   right: 0.938444
-  camera-shift: 0.0
+  camera-shift: 0.25
 vehicle.toyota.prius:
   front: 2.26598
   back: 2.23607
   left: 0.890203
   right: 0.861665
-  camera-shift: 0.0
+  camera-shift: 0.25
