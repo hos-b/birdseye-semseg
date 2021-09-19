@@ -285,17 +285,11 @@ class SampleWindow:
 
     def update_prediction(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms) = self.current_data
-        
-        car_transforms = get_noisy_transforms(car_transforms,
-                                              self.eval_cfg.se2_noise_dx_std,
-                                              self.eval_cfg.se2_noise_dy_std,
-                                              self.eval_cfg.se2_noise_th_std)
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
         rgb = cv2.resize(rgb, (342, 256), cv2.INTER_LINEAR)
         rgb_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(rgb), 'RGB')
-
         # target image
         ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), self.semantic_classes)
         
@@ -307,6 +301,12 @@ class SampleWindow:
             ).cpu().numpy()
             ss_gt_img[aggr_gt_mask == 0, :] = 0
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
+
+        # add noise (important to do after the gt aggr. mask is calculated)
+        car_transforms = get_noisy_transforms(car_transforms,
+                                              self.eval_cfg.se2_noise_dx_std,
+                                              self.eval_cfg.se2_noise_dy_std,
+                                              self.eval_cfg.se2_noise_th_std)
 
         for i, (name, network) in enumerate(self.networks.items()):
             # >>> front RGB image
