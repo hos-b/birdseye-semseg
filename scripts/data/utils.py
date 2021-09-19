@@ -1,9 +1,7 @@
-import cv2
-from numpy.core.fromnumeric import size
+import gc
 import torch
 import numpy as np
 from typing import Tuple
-from matplotlib import pyplot as plt
 
 def drop_agent_data(drop_probability, *args) -> Tuple[torch.Tensor]:
     """
@@ -70,6 +68,70 @@ def separate_masks(masks: torch.Tensor, boundary_pixel: int = 172):
     vehicle_masks[:, :boundary_pixel] = 0
     masks[:, boundary_pixel:] = 0
     return vehicle_masks, masks
+
+def mem_report(source: str='cpu'):
+    '''
+    Report the memory usage of the tensor.storage in pytorch
+    Both on CPUs and GPUs are reported
+    https://gist.github.com/Stonesjtu/368ddf5d9eb56669269ecdf9b0d21cbe
+    source can be 'cpu', 'gpu' or 'all'
+    '''
+
+    def _mem_report(tensors, mem_type):
+        '''Print the selected tensors of type
+        There are two major storage types in our major concern:
+            - GPU: tensors transferred to CUDA devices
+            - CPU: tensors remaining on the system memory (usually unimportant)
+        Args:
+            - tensors: the tensors of specified type
+            - mem_type: 'CPU' or 'GPU' in current implementation '''
+        print(f'Storage on {mem_type}')
+        print('-' * LEN)
+        total_numel = 0
+        total_mem = 0
+        visited_data = []
+        for tensor in tensors:
+            if tensor.is_sparse:
+                continue
+            # a data_ptr indicates a memory block allocated
+            data_ptr = tensor.storage().data_ptr()
+            if data_ptr in visited_data:
+                continue
+            visited_data.append(data_ptr)
+
+            numel = tensor.storage().size()
+            total_numel += numel
+            element_size = tensor.storage().element_size()
+            mem = numel*element_size /1024/1024 # 32bit=4Byte, MByte
+            total_mem += mem
+            element_type = type(tensor).__name__
+            size = tuple(tensor.size())
+
+            print(f'{element_type}\t\t{size}\t\t{mem:.2f}')
+        print('-' * LEN)
+        print(f'Total Tensors: {total_numel} \tUsed Memory Space: {total_mem:.2f} MBytes')
+        print('-' * LEN)
+
+    LEN = 65
+    print('=' * LEN)
+    objects = gc.get_objects()
+    print('Element type\tSize\t\t\tUsed MEM(MBytes)')
+    tensors = [obj for obj in objects if isinstance(obj, torch.Tensor)]
+    source = source.lower()
+    if source == 'cpu':
+        host_tensors = [t for t in tensors if not t.is_cuda]    
+        _mem_report(host_tensors, 'CPU')
+    elif source == 'gpu':
+        cuda_tensors = [t for t in tensors if t.is_cuda]
+        _mem_report(cuda_tensors, 'GPU')
+    elif source == 'all':
+        host_tensors = [t for t in tensors if not t.is_cuda]
+        cuda_tensors = [t for t in tensors if t.is_cuda]
+        _mem_report(host_tensors, 'CPU')
+        _mem_report(cuda_tensors, 'GPU')
+    else:
+        raise ValueError(f'unknown source: {source}')
+    print('=' * LEN)
 
 # dicts for plotting batches based on agent count
 newline_dict = {
