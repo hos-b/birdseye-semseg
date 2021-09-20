@@ -14,7 +14,7 @@ from data.config import SemanticCloudConfig, EvaluationConfig
 from data.color_map import convert_semantics_to_rgb
 from data.mask_warp import get_single_adjacent_aggregate_mask
 from data.utils import squeeze_all, to_device
-from data.utils import get_noisy_transforms
+from data.utils import get_noisy_transforms, get_relative_noise
 from model.factory import get_model
 
 class NetworkMetrics:
@@ -375,10 +375,11 @@ class SampleWindow:
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         # add noise (important to do after the gt aggr. mask is calculated)
-        car_transforms = get_noisy_transforms(car_transforms,
-                                              self.eval_cfg.se2_noise_dx_std,
-                                              self.eval_cfg.se2_noise_dy_std,
-                                              self.eval_cfg.se2_noise_th_std)
+        nz_car_transforms = get_noisy_transforms(car_transforms,
+                                                 self.eval_cfg.se2_noise_dx_std,
+                                                 self.eval_cfg.se2_noise_dy_std,
+                                                 self.eval_cfg.se2_noise_th_std)
+        injected_noise_params = get_relative_noise(car_transforms, nz_car_transforms)[self.agent_index]
 
         for i, (name, network) in enumerate(self.networks.items()):
             # >>> front RGB image
@@ -391,7 +392,7 @@ class SampleWindow:
 
             solo_sseg_pred, solo_mask_pred, \
             aggr_sseg_pred, aggr_mask_pred = network.get_eval_output(
-                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks, car_transforms,
+                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks, nz_car_transforms,
                 self.adjacency_matrix, self.ppm, self.output_h, self.output_w,
                 self.center_x, self.center_y, self.agent_index, self.baseline_masking_en,
                 torch.device('cpu'), self.noise_correction_en
@@ -401,7 +402,21 @@ class SampleWindow:
             solo_mask_pred[solo_mask_pred >= self.eval_cfg.mask_thresh] = 1
             aggr_mask_pred[aggr_mask_pred < self.eval_cfg.mask_thresh] = 0
             aggr_mask_pred[aggr_mask_pred >= self.eval_cfg.mask_thresh] = 1
-
+            # log estimated noise
+            if hasattr(network, 'feat_matching_net'):
+                estimated_noise_tf = network.feat_matching_net.estimated_noise[self.agent_index]
+                estimated_noise_params = torch.zeros((rgbs.shape[0], 3), dtype=car_transforms.dtype,
+                                                     device=car_transforms.device)
+                estimated_noise_params[:, :2] = estimated_noise_tf[:, :2, 2]
+                estimated_noise_params[:,  2] = torch.atan2(estimated_noise_tf[:, 1, 0],
+                                                            estimated_noise_tf[:, 0, 0])
+                print(f'agent {self.agent_index} noise parameters in {name} ------- ')
+                for a in range(rgbs.shape[0]):
+                    print(f'w.r.t. agent {a}')
+                    print(f'xx-noise: {injected_noise_params[a, 0].item():.4f} estimated {estimated_noise_params[i, 0].item():.4f}')
+                    print(f'yy-noise: {injected_noise_params[a, 1].item():.4f} estimated {estimated_noise_params[i, 1].item():.4f}')
+                    print(f'th-noise: {(injected_noise_params[a, 2] * 180 / np.pi).item():.2f}   '
+                          f'estimated {(estimated_noise_params[a, 2] * 180 / np.pi).item():.2f}')
             solo_sseg_pred_img = convert_semantics_to_rgb(solo_sseg_pred.argmax(dim=0), self.semantic_classes)
             if self.show_masks:
                 solo_sseg_pred_img[solo_mask_pred == 0, :] = 0

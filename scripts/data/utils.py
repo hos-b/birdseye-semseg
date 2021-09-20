@@ -58,6 +58,34 @@ def get_noisy_transforms(transforms: torch.Tensor, dx_std, dy_std, th_std) -> to
     se2_noise[:, 3, 3] = 1
     return transforms @ se2_noise
 
+def get_relative_noise(gt_transforms: torch.Tensor, noisy_transforms: torch.Tensor) -> torch.Tensor:
+    """
+    return the relative noise of the noisy transforms compared to the gt transforms
+    """
+    agent_count = gt_transforms.shape[0]
+    relative_noise_params = torch.zeros((agent_count, agent_count, 3),
+                                        dtype=gt_transforms.dtype,
+                                        device=gt_transforms.device)
+    # extracting relative 2D gt transforms
+    gt_rel_3d_tf = gt_transforms.repeat(agent_count, 1, 1)
+    gt_rel_3d_tf = gt_transforms.inverse().repeat_interleave(agent_count, dim=0) @ gt_rel_3d_tf
+    gt_rel_2d_tf = torch.eye(3).unsqueeze(0).repeat(agent_count * agent_count, 1, 1)
+    gt_rel_2d_tf[:, :2,  2] = gt_rel_3d_tf[:, :2,  3]
+    gt_rel_2d_tf[:, :2, :2] = gt_rel_3d_tf[:, :2, :2]
+    gt_rel_2d_tf = gt_rel_2d_tf.reshape(agent_count, agent_count, 3, 3)
+    # extracting relative 2D noisy transforms
+    nz_rel_3d_tf = noisy_transforms.repeat(agent_count, 1, 1)
+    nz_rel_3d_tf = noisy_transforms.inverse().repeat_interleave(agent_count, dim=0) @ nz_rel_3d_tf
+    nz_rel_2d_tf = torch.eye(3).unsqueeze(0).repeat(agent_count * agent_count, 1, 1)
+    nz_rel_2d_tf[:, :2,  2] = nz_rel_3d_tf[:, :2,  3]
+    nz_rel_2d_tf[:, :2, :2] = nz_rel_3d_tf[:, :2, :2]
+    nz_rel_2d_tf = nz_rel_2d_tf.reshape(agent_count, agent_count, 3, 3)
+    # calculating noise parameters
+    relative_noise_params[:, :, :2] = gt_rel_2d_tf[:, :, :2, 2] - nz_rel_2d_tf[:, :, :2, 2]
+    relative_noise_params[:, :,  2] = torch.atan2(gt_rel_2d_tf[:, :, 1, 0], gt_rel_2d_tf[:, :, 0, 0]) - \
+                                      torch.atan2(nz_rel_2d_tf[:, :, 1, 0], nz_rel_2d_tf[:, :, 0, 0])
+    return relative_noise_params
+
 def separate_masks(masks: torch.Tensor, boundary_pixel: int = 172):
     """
     seperates the mask into vehicle and FoV masks.

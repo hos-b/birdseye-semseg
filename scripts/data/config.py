@@ -290,10 +290,6 @@ class EvaluationConfig:
         if self.device != 'cuda' and self.device != 'cpu':
             print(f'sanity-check-error: unknown device {self.device}.')
             exit()
-        if self.se2_noise_enable:
-            if self.se2_noise_dx_std == 0 and self.se2_noise_dy_std == 0 and self.se2_noise_th_std == 0:
-                print(f'sanity-check-error: noise std cannot be 0 if se2 noise is enabled.')
-                exit() 
         if self.difficulty < 1 or self.difficulty > self.max_agent_count:
             print(f'sanity-check-error: invalid difficulty {self.difficulty}.')
             exit()
