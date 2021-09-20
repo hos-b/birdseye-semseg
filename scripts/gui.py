@@ -17,6 +17,99 @@ from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms
 from model.factory import get_model
 
+class NetworkMetrics:
+    def __init__(self, networks: dict, class_dict: dict, device: torch.device):
+        self.metrics = {}
+        self.class_dict = class_dict
+        class_count = len(class_dict)
+        for key in networks.keys():
+            self.metrics[key] = {
+                'no_noise': {
+                    'mskd': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
+                    'full': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
+                    'mask_iou': 0.0
+                },
+                'pa_noise': {
+                    'mskd': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
+                    'full': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
+                    'mask_iou': 0.0
+                },
+                'ac_noise': {
+                    'mskd': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
+                    'full': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
+                    'mask_iou': 0.0
+                }
+            }
+        self.sample_count = 0
+
+    def update_network(self, network_label: str, network: torch.nn.Module,
+                       graph_flag, rgbs, car_masks, fov_masks, gt_transforms,
+                       labels, ppm, output_h, output_w, center_x, center_y,
+                       mask_thresh, noise_std_x, noise_std_y, noise_std_theta):
+        
+        self.sample_count += rgbs.shape[0]
+        noisy_transforms = get_noisy_transforms(gt_transforms,
+                                                noise_std_x,
+                                                noise_std_y,
+                                                noise_std_theta)
+        # no noise, no correction
+        batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
+            self.class_dict, graph_flag, rgbs, car_masks, fov_masks,
+            gt_transforms, gt_transforms, labels, ppm, output_h, output_w,
+            center_x, center_y, mask_thresh, False
+        )
+        self.metrics[network_label]['no_noise']['mask_iou'] += mask_iou
+        self.metrics[network_label]['no_noise']['mskd'] += batch_mskd_ious
+        self.metrics[network_label]['no_noise']['full'] += batch_full_ious
+        # with noise, no correction
+        batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
+            self.class_dict, graph_flag, rgbs, car_masks, fov_masks,
+            gt_transforms, noisy_transforms, labels, ppm, output_h, output_w,
+            center_x, center_y, mask_thresh, False
+        )
+        self.metrics[network_label]['pa_noise']['mask_iou'] += mask_iou
+        self.metrics[network_label]['pa_noise']['mskd'] += batch_mskd_ious
+        self.metrics[network_label]['pa_noise']['full'] += batch_full_ious
+        # with noise, with correction
+        batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
+            self.class_dict, graph_flag, rgbs, car_masks, fov_masks,
+            gt_transforms, noisy_transforms, labels, ppm, output_h, output_w,
+            center_x, center_y, mask_thresh, True
+        )
+        self.metrics[network_label]['ac_noise']['mask_iou'] += mask_iou
+        self.metrics[network_label]['ac_noise']['mskd'] += batch_mskd_ious
+        self.metrics[network_label]['ac_noise']['full'] += batch_full_ious
+    
+    def finish(self):
+        for network in self.metrics.keys():
+            for key in self.metrics[network].keys():
+                self.metrics[network][key]['mskd'] /= (self.sample_count / len(self.metrics.keys()))
+                self.metrics[network][key]['full'] /= (self.sample_count / len(self.metrics.keys()))
+                self.metrics[network][key]['mask_iou'] /= (self.sample_count / len(self.metrics.keys()))
+                self.metrics[network][key]['mskd'] *= 100.0
+                self.metrics[network][key]['full'] *= 100.0
+                self.metrics[network][key]['mask_iou'] *= 100.0
+        self.sample_count = 0
+
+    def write_to_file(self, file_path: str):
+        headers = [cls.lower()[:4] for cls in self.class_dict.values()]
+        if 'mask' not in headers:
+            headers.append('mask')
+        file = open(file_path, 'w')
+        file.write(f'network\t\t\t{" || ".join(headers)}\n')
+        for (net_label, net_dict) in self.metrics.items():
+            lines = [net_label + ' ' + '=' * (76 - len(net_label)) + '\n']
+            for (noise_type, ious) in net_dict.items():
+                noise_type = noise_type.replace('_', ' ')
+                for mask_type in ['full', 'mskd']:
+                    line = f'{noise_type}:{mask_type}\t'
+                    for semantic_idx in self.class_dict:
+                        line += f'{ious[mask_type][semantic_idx].item():.2f}\t'
+                    if 'Mask' not in self.class_dict.values():
+                        line += f'{ious["mask_iou"]:.2f}'
+                    lines.append(line + '\n')
+            file.writelines(lines)
+        file.close()
 
 class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
@@ -100,10 +193,6 @@ class SampleWindow:
                 exec(f"self.mbutton_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
-        # ious
-        self.mskd_ious = {}
-        self.full_ious = {}
-        self.noiz_ious = {}
 
     def add_network(self, network: torch.nn.Module, label: str, graph_net: bool):
         id = len(self.networks)
@@ -111,25 +200,23 @@ class SampleWindow:
         network.eval()
         self.networks[label] = network
         self.graph_flags[label] = graph_net
-        self.mskd_ious[label] = torch.zeros((self.eval_cfg.num_classes, 1), dtype=torch.float64).to(self.device)
-        self.full_ious[label] = torch.zeros((self.eval_cfg.num_classes, 1), dtype=torch.float64).to(self.device)
         exec(f"self.network_label_{id}        = tkinter.Label(self.window, text='[{label}]')")
         exec(f"self.rgb_panel_{id}            = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.solo_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.aggr_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
         exec(f"self.aggr_trgt_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.masked_iou_label_{id}     = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.full_iou_label_{id}       = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.noiz_iou_label_{id}       = tkinter.Label(self.window, text='placeholder')")
+        exec(f"self.zero_noiz_iou_label_{id}  = tkinter.Label(self.window, text='network not evaluated')")
+        exec(f"self.pass_noiz_iou_label_{id}  = tkinter.Label(self.window, text='network not evaluated')")
+        exec(f"self.actv_noiz_iou_label_{id}  = tkinter.Label(self.window, text='network not evaluated')")
         exec(f"self.seperator_{id}            = tkinter.Label(self.window, text='{'-' * 105}')")
         exec(f"self.network_label_{id}.         grid(column=0, row={net_row - 1}, columnspan=1)")
         exec(f"self.rgb_panel_{id}.             grid(column=0, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.solo_pred_panel_{id}.       grid(column=6, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.aggr_pred_panel_{id}.       grid(column=11, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.aggr_trgt_panel_{id}.       grid(column=16, row={net_row}, columnspan=5, rowspan=8)")
-        exec(f"self.masked_iou_label_{id}.      grid(column=0, row={net_row + 8}, columnspan=20)")
-        exec(f"self.full_iou_label_{id}.        grid(column=0, row={net_row + 9}, columnspan=20)")
-        exec(f"self.noiz_iou_label_{id}.        grid(column=0, row={net_row + 10}, columnspan=20)")
+        exec(f"self.zero_noiz_iou_label_{id}.   grid(column=0, row={net_row + 8}, columnspan=20)")
+        exec(f"self.pass_noiz_iou_label_{id}.   grid(column=0, row={net_row + 9}, columnspan=20)")
+        exec(f"self.actv_noiz_iou_label_{id}.   grid(column=0, row={net_row + 10}, columnspan=20)")
         exec(f"self.seperator_{id}.             grid(column=0, row={net_row + 11}, columnspan=20)")
 
     def assign_dataset_iterator(self, dset_iterator):
@@ -197,20 +284,11 @@ class SampleWindow:
     def calculate_ious(self, dataset: MassHDF5):
         if not self.eval_cfg.evaluate_at_start:
             print('full dataset evaluation disabled in yaml file')
-            for i, (network) in enumerate(self.networks.keys()):
-                exec(f"self.full_iou_label_{i}.configure(text='network not evaluated')")
-                exec(f"self.masked_iou_label_{i}.configure(text='network not evaluated')")
-                exec(f"self.noiz_iou_label_{i}.configure(text='network not evaluated')")
             return
-
-        sample_count = 0
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
-        # mask iou
-        mask_iou_dict = {}
-        for key in self.networks:
-            mask_iou_dict[key] = 0.0
+        metrics = NetworkMetrics(self.networks, self.segclass_dict, self.device)
 
         for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
             print(f'\r{idx + 1}/{total_length}', end='')
@@ -220,38 +298,32 @@ class SampleWindow:
             rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
                                                                              fov_masks, car_transforms)
 
-            if self.eval_cfg.se2_noise_enable:
-                car_transforms = get_noisy_transforms(car_transforms,
-                                                      self.eval_cfg.se2_noise_dx_std,
-                                                      self.eval_cfg.se2_noise_dy_std,
-                                                      self.eval_cfg.se2_noise_th_std)
-            agent_count = rgbs.shape[0]
-            sample_count += agent_count
             
             for name, network in self.networks.items():
-                batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
-                    self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks,
-                    car_transforms, labels, self.ppm, self.output_h, self.output_w,
-                    self.center_x, self.center_y, self.eval_cfg.mask_thresh, self.noise_correction_en
-                )
-                self.mskd_ious[name] += batch_mskd_ious
-                self.full_ious[name] += batch_full_ious
-                mask_iou_dict[name] += mask_iou
+                metrics.update_network(
+                    name, network, self.graph_flags[name], rgbs,
+                    car_masks, fov_masks, car_transforms, labels, self.ppm,
+                    self.output_h, self.output_w, self.center_x, self.center_y,
+                    self.eval_cfg.mask_thresh, self.eval_cfg.se2_noise_dx_std,
+                    self.eval_cfg.se2_noise_dy_std, self.eval_cfg.se2_noise_th_std)
+
+        metrics.finish()
 
         for i, (network) in enumerate(self.networks.keys()):
-            full_iou_txt = 'full IoU  '
-            mskd_iou_txt = 'mskd IoU  '
-            for semantic_idx, semantic_class in self.segclass_dict.items():
-                full_iou_txt += f'{semantic_class.lower()}: {(self.full_ious[network][semantic_idx] / sample_count).item() * 100.0:.02f} '
-                mskd_iou_txt += f'{semantic_class.lower()}: {(self.mskd_ious[network][semantic_idx] / sample_count).item() * 100.0:.02f} '
-            # if mask is not a semantic class, get the serparately calculated value (or 0 if n/a)
-            if 'Mask' not in self.segclass_dict.values():
-                full_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count) * 100.0:.02f} '
-                mskd_iou_txt += f'mask: {(mask_iou_dict[network] / sample_count) * 100.0:.02f} '
+            lines = []
+            for (noise_type, ious) in metrics.metrics[network].items():
+                noise_type = noise_type.replace('_', ' ')
+                line = f'{noise_type}: '
+                for semantic_idx, semantic_cls in self.segclass_dict.items():
+                    line += f'{semantic_cls.lower()}:{ious["mskd"][semantic_idx].item():.2f} '
+                if 'Mask' not in self.segclass_dict.values():
+                    line += f'mask: {ious["mask_iou"]:.2f}'
+                lines.append(line)
+            exec(f"self.zero_noiz_iou_label_{i}.configure(text='{lines[0]}')")
+            exec(f"self.pass_noiz_iou_label_{i}.configure(text='{lines[1]}')")
+            exec(f"self.actv_noiz_iou_label_{i}.configure(text='{lines[2]}')")
 
-            exec(f"self.full_iou_label_{i}.configure(text='{full_iou_txt}')")
-            exec(f"self.masked_iou_label_{i}.configure(text='{mskd_iou_txt}')")
-
+        metrics.write_to_file('metrics.txt')
         print('\ndone, starting gui...')
 
     def change_sample(self):

@@ -17,7 +17,6 @@ gui:
 
 # only tackled in mcnnNoisy and onwards
 se2-noise:
-  enable: false
   se2-noise-theta-std: 3.0 # degrees
   se2-noise-dx-std: 0.4    # meters
   se2-noise-dy-std: 0.4    # meters

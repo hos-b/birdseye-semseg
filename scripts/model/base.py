@@ -103,19 +103,20 @@ class DoubleSemantic(nn.Module):
 
     @torch.no_grad()
     def get_batch_ious(self, semantic_classes: dict, graph_network: bool, rgbs: torch.Tensor,
-                       car_masks: torch.Tensor, fov_masks: torch.Tensor, car_transforms: torch.Tensor,
-                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y,
-                       mask_detect_thresh, noise_correction_en: bool):
+                       car_masks: torch.Tensor, fov_masks: torch.Tensor, gt_transforms: torch.Tensor,
+                       car_transforms: torch.Tensor, labels: torch.Tensor, ppm, output_h, output_w,
+                       center_x, center_y, mask_detect_thresh, noise_correction_en: bool):
         """
         the function returns the ious for a batch.
         """
         num_classes = len(semantic_classes.keys())
         agent_count = rgbs.shape[0]
         solo_gt_masks = car_masks + fov_masks
-        # only calculated for baseline networks with mask as semantic id
-        # for others, it is automtaically calculated with get_iou_per_class
+        # for this type of network, mask iou is only calculated for baseline
+        # networks with mask as semantic id. for others, it is automtaically
+        # calculated with get_iou_per_class
         mask_iou = 0.0
-        aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, car_transforms, ppm,
+        aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, gt_transforms, ppm,
                                                 output_h, output_w, center_x, center_y,
                                                 merge_masks=True)
         # manual aggregation for baseline network
@@ -237,16 +238,16 @@ class AggrSemanticsSoloMask(nn.Module):
 
     @torch.no_grad()
     def get_batch_ious(self, semantic_classes: dict, graph_network: bool, rgbs: torch.Tensor,
-                       car_masks: torch.Tensor, fov_masks: torch.Tensor, car_transforms: torch.Tensor,
-                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y,
-                       mask_detect_thresh, noise_correction_en: bool):
+                       car_masks: torch.Tensor, fov_masks: torch.Tensor, gt_transforms: torch.Tensor,
+                       car_transforms: torch.Tensor, labels: torch.Tensor, ppm, output_h, output_w,
+                       center_x, center_y, mask_detect_thresh, noise_correction_en: bool):
         """
         the function returns the ious for a batch.
         """
         num_classes = len(semantic_classes.keys())
         agent_count = rgbs.shape[0]
         solo_gt_masks = car_masks + fov_masks
-        aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, car_transforms, ppm,
+        aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, gt_transforms, ppm,
                                                 output_h, output_w, center_x, center_y,
                                                 merge_masks=True)
         # aggr. mask is not directly estimated but calculated
@@ -321,9 +322,9 @@ class SoloAggrSemanticsMask(nn.Module):
 
     @torch.no_grad()
     def get_batch_ious(self, semantic_classes: dict, graph_network: bool, rgbs: torch.Tensor,
-                       car_masks: torch.Tensor, fov_masks: torch.Tensor, car_transforms: torch.Tensor,
-                       labels: torch.Tensor, ppm, output_h, output_w, center_x, center_y,
-                       mask_detect_thresh, noise_correction_en: bool):
+                       car_masks: torch.Tensor, fov_masks: torch.Tensor, gt_transforms: torch.Tensor,
+                       car_transforms: torch.Tensor, labels: torch.Tensor, ppm, output_h, output_w,
+                       center_x, center_y, mask_detect_thresh, noise_correction_en: bool):
         """
         the function returns the ious for a batch.
         """
@@ -331,7 +332,7 @@ class SoloAggrSemanticsMask(nn.Module):
         agent_count = rgbs.shape[0]
         num_classes = len(semantic_classes.keys())
         solo_gt_masks = car_masks + fov_masks
-        aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, car_transforms, ppm,
+        aggr_gt_masks = get_all_aggregate_masks(solo_gt_masks, gt_transforms, ppm,
                                                 output_h, output_w, center_x, center_y,
                                                 merge_masks=True)
         _, _, aggr_sseg_preds, aggr_mask_preds = \
