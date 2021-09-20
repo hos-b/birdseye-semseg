@@ -258,15 +258,9 @@ class EvaluationConfig:
         self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
         self.mask_thresh = float(conf['gui']['mask-threshold'])
         # noise parameters
-        self.se2_noise_enable = conf['se2-noise']['enable']
-        if self.se2_noise_enable:
-            self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
-            self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
-            self.se2_noise_dy_std = float(conf['se2-noise']['se2-noise-dy-std'])
-        else:
-            self.se2_noise_th_std = 0.0
-            self.se2_noise_dx_std = 0.0
-            self.se2_noise_dy_std = 0.0
+        self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
+        self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
+        self.se2_noise_dy_std = float(conf['se2-noise']['se2-noise-dy-std'])
         # plotting parameters
         self.plot_count = int(conf['plot']['count'])
         self.plot_type = str(conf['plot']['plot-type'])
