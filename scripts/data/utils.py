@@ -1,9 +1,7 @@
-import cv2
-from numpy.core.fromnumeric import size
+import gc
 import torch
 import numpy as np
 from typing import Tuple
-from matplotlib import pyplot as plt
 
 def drop_agent_data(drop_probability, *args) -> Tuple[torch.Tensor]:
     """
