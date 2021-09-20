@@ -30,7 +30,7 @@ from evaluate import plot_full_batch
 def train(**kwargs):
     train_cfg: TrainingConfig = kwargs.get('train_cfg')
     NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
-    log_enable = kwargs.get('log_enable')
+    debug_mode = kwargs.get('debug_mode')
     # network & cuda
     device = kwargs.get('device')
     model = kwargs.get('model')
@@ -117,7 +117,7 @@ def train(**kwargs):
 
             # log batch loss
             if (batch_idx + 1) % train_cfg.log_every == 0:
-                if log_enable:
+                if not debug_mode:
                     wandb.log({
                         'loss/batch train mask': batch_train_m_loss,
                         'loss/batch train sseg': batch_train_s_loss
@@ -129,7 +129,7 @@ def train(**kwargs):
             # end of batch
 
         # log train epoch loss
-        if log_enable:
+        if not debug_mode:
             wandb.log({
                 'loss/total train mask': total_train_m_loss / sample_count,
                 'loss/total train sseg': total_train_s_loss / sample_count,
@@ -197,7 +197,7 @@ def train(**kwargs):
                                                   title=f'E: {ep + 1}, B#: {dataset_idx.item()}')
                 validation_img_log_dict['media/results'] = \
                     wandb.Image(first_batch_img, caption='full batch predictions')
-                if log_enable:
+                if not debug_mode:
                     wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
@@ -254,10 +254,10 @@ def train(**kwargs):
                                             agent_pool.maximum_difficulty)
                 print(f'\n=======>> difficulty increased to {agent_pool.difficulty} <<=======')
         log_dict['curriculum/difficulty'] = agent_pool.difficulty
-        if log_enable:
+        if not debug_mode:
             wandb.log(log_dict)
     # end
-    if log_enable:
+    if not debug_mode:
         wandb.finish()
 
 def parse_and_execute():
@@ -348,8 +348,8 @@ def parse_and_execute():
     git_diff = subprocess.Popen(['/usr/bin/git', 'diff', '--quiet'], stdout=subprocess.PIPE)
     ret_code = git_diff.wait()
     name += '-dirty' if ret_code != 0 else ''
-    log_enable = train_cfg.training_name != 'debug'
-    if log_enable:
+    debug_mode = train_cfg.training_name == 'debug'
+    if not debug_mode:
         init_wandb(name, train_cfg)
     else:
         torch.autograd.set_detect_anomaly(True)
@@ -368,7 +368,7 @@ def parse_and_execute():
         mask_loss = mask_loss.to(device)
     # begin -------------------------------------------------------------------------------------
     train_cfg.print_config()
-    train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
+    train(train_cfg=train_cfg, device=device, debug_mode=debug_mode, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,
           mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight, start_ep=start_ep,
