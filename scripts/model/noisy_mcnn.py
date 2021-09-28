@@ -2,7 +2,6 @@ import math
 import torch
 import kornia
 from torch import nn
-from torch._C import device
 import torch.nn.functional as F
 from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
