@@ -187,7 +187,7 @@ def train(**kwargs):
                                            train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(aggr_mask_preds.squeeze(1), agent_pool.combined_masks,
                                       train_cfg.mask_detection_thresh)
-            # visualize a random batch and all hard batches [if enabled]
+            # visualize a random batch
             if not visualized:
                 validation_img_log_dict = {'misc/epoch': ep + 1}
                 first_batch_img = plot_full_batch(rgbs, labels, solo_sseg_preds, aggr_sseg_preds,
@@ -300,7 +300,7 @@ def parse_and_execute():
     elif train_cfg.classes == 'ours':
         segmentation_classes = color_map.__our_classes
     elif train_cfg.classes == 'ours+mask':
-        print('ours+mask should not be used with this script');exit()
+        print('ours+mask should not be used with this script'); exit()
     elif train_cfg.classes == 'diminished':
         segmentation_classes = color_map.__diminished_classes
     # snapshot dir -----------------------------------------------------------------------------
@@ -327,14 +327,12 @@ def parse_and_execute():
         snapshot_path = train_cfg.snapshot_dir + \
             f'/{train_cfg.resume_model_version}_model.pth'
         if not os.path.exists(snapshot_path):
-            print(f'{snapshot_path} does not exist')
-            exit()
+            print(f'{snapshot_path} does not exist'); exit()
         if train_cfg.resume_optimizer_state:
             optimizer_path = train_cfg.snapshot_dir + \
                 f'/{train_cfg.resume_model_version}_optimizer'
             if not os.path.exists(optimizer_path):
-                print(f'{optimizer_path} does not exist')
-                exit()
+                print(f'{optimizer_path} does not exist'); exit()
             optimizer.load_state_dict(torch.load(optimizer_path))
         model.load_state_dict(torch.load(snapshot_path))
         agent_pool.difficulty = train_cfg.resume_difficulty
@@ -354,7 +352,7 @@ def parse_and_execute():
     else:
         torch.autograd.set_detect_anomaly(True)
         print(f'disabled logging')
-    # losses ------------------------------------------------------------------------------------
+    # losses -----------------------------------------------------------------------------------
     if train_cfg.loss_function == 'cross-entropy':
         semseg_loss = nn.CrossEntropyLoss(reduction='none')
     elif train_cfg.loss_function == 'weighted-cross-entropy':
@@ -366,7 +364,7 @@ def parse_and_execute():
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)
         mask_loss = mask_loss.to(device)
-    # begin -------------------------------------------------------------------------------------
+    # begin ------------------------------------------------------------------------------------
     train_cfg.print_config()
     train(train_cfg=train_cfg, device=device, debug_mode=debug_mode, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
