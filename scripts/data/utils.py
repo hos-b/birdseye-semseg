@@ -1,6 +1,7 @@
 import torch
 import numpy as np
 from typing import Tuple
+from data.mask_warp import get_single_relative_img_transform
 
 def drop_agent_data(drop_probability, *args) -> Tuple[torch.Tensor]:
     """
@@ -95,6 +96,22 @@ def separate_masks(masks: torch.Tensor, boundary_pixel: int = 172):
     vehicle_masks[:, :boundary_pixel] = 0
     masks[:, boundary_pixel:] = 0
     return vehicle_masks, masks
+
+def get_transform_loss(gt_transforms: torch.Tensor, nz_transforms: torch.Tensor,
+                       matching_net: torch.nn.Module, ppm, center_x, center_y, loss_func):
+    """
+    takes the gt and noisy transforms and returns the loss based on the estimated noise
+    """
+    agent_count = gt_transforms.shape[0]
+    target = torch.zeros((agent_count, agent_count, 3, 3),
+                         dtype=gt_transforms.dtype,
+                         device=gt_transforms.device)
+    estimate = target.clone()
+    for i in range(agent_count):
+        target[i] = get_single_relative_img_transform(gt_transforms, i, ppm, center_x, center_y, False).to(gt_transforms.device)
+        relative_nz = get_single_relative_img_transform(nz_transforms, i, ppm, center_x, center_y, False).to(gt_transforms.device)
+        estimate[i] = matching_net.get_centered_img_transforms(i, ppm, center_x, center_y) @ relative_nz
+    return loss_func(estimate, target)
 
 # dicts for plotting batches based on agent count
 newline_dict = {
