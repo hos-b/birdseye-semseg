@@ -325,6 +325,7 @@ class SampleWindow:
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
+        self.visualized_data['rgb'] = rgb.copy()
         rgb = cv2.resize(rgb, (342, 256), cv2.INTER_LINEAR)
         rgb_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(rgb), 'RGB')
         # target image
