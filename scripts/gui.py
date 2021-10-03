@@ -1,5 +1,4 @@
 import os
-from typing import Dict
 import cv2
 import torch
 import tkinter
@@ -38,6 +37,8 @@ class SampleWindow:
         self.noise_correction_en = True
         self.agent_index = 0
         self.agent_count = 8
+        self.batch_index = 0
+        self.visualized_data = {}
         self.window = tkinter.Tk()
         # image panels captions
         self.rgb_panel_caption         = tkinter.Label(self.window, text='front rgb')
@@ -57,12 +58,14 @@ class SampleWindow:
             exec(f"self.abutton_{i}.configure(command=lambda: self.agent_clicked({i}))", locals(), locals())
             exec(f"self.abutton_{i}.grid(column={22 + (i % buttons_per_row)}, row={i // buttons_per_row})")
         # misc. buttons
-        self.next_sample      = tkinter.Button(self.window, command=self.change_sample, text='next sample')
         self.smask_button     = tkinter.Button(self.window, command=self.toggle_baseline_self_masking, text=f'filter baseline: {int(self.baseline_masking_en)}')
         self.viz_masks_button = tkinter.Button(self.window, command=self.toggle_mask_visualization, text=f'visualize masks: {int(self.show_masks)}')
+        self.next_sample      = tkinter.Button(self.window, command=self.change_sample, text='next')
+        self.save_sample      = tkinter.Button(self.window, command=self.write_sample, text='save')
         self.smask_button.      grid(column=22, row=2, columnspan=4)
         self.viz_masks_button.  grid(column=22, row=3, columnspan=4)
-        self.next_sample.       grid(column=22, row=4, columnspan=4)
+        self.next_sample.       grid(column=22, row=4, columnspan=2)
+        self.save_sample.       grid(column=24, row=4, columnspan=2)
         # noise parameters
         self.noise_label     = tkinter.Label(self.window, text=f'noise parameters')
         self.noise_label.    grid(column=22, row=5, columnspan=4)
@@ -104,6 +107,31 @@ class SampleWindow:
                 exec(f"self.abutton_{i}.configure(font=('Verdana', 10, 'bold', 'underline'))")
             else:
                 exec(f"self.abutton_{i}.configure(font=('Verdana', 10))")
+
+    def write_sample(self):
+        if len(self.visualized_data) == 0:
+            return
+        root_dir = os.path.join(self.eval_cfg.sample_save_dir, 'batch_' + str(self.batch_index.item()))
+        agent_dir = os.path.join(root_dir, f'agent_{self.agent_index}')
+        os.makedirs(agent_dir, exist_ok=True)
+        os.makedirs(agent_dir, exist_ok=True)
+        for key, value in self.visualized_data.items():
+            if isinstance(value, dict):
+                network_dir = os.path.join(agent_dir, key)
+                os.makedirs(network_dir, exist_ok=True)
+                for k, v in value.items():
+                    if k.endswith('_mask'):
+                        cv2.imwrite(os.path.join(network_dir, f'{k}.png'), v * 255)
+                    else:
+                        v = cv2.cvtColor(v, cv2.COLOR_RGB2BGR)
+                        cv2.imwrite(os.path.join(network_dir, f'{k}.png'), v)
+            else:
+                if key.endswith('_mask'):
+                    cv2.imwrite(os.path.join(root_dir, f'{key}.png'), value * 255)
+                else:
+                    value = cv2.cvtColor(value, cv2.COLOR_RGB2BGR)
+                    cv2.imwrite(os.path.join(root_dir, f'{key}.png'), value)
+        self.visualized_data.clear()
 
     def add_network(self, network: torch.nn.Module, label: str, graph_net: bool):
         id = len(self.networks)
@@ -167,7 +195,7 @@ class SampleWindow:
         self.baseline_masking_en = not self.baseline_masking_en
         self.smask_button.configure(text=f'filter baseline: {int(self.baseline_masking_en)}')
         self.update_prediction()
-    
+
     def apply_noise_params(self):
         th_std = self.eval_cfg.se2_noise_th_std
         dy_std = self.eval_cfg.se2_noise_dx_std
@@ -209,7 +237,7 @@ class SampleWindow:
             rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
                                                                              fov_masks, car_transforms)
 
-            
+
             for name, network in self.networks.items():
                 metrics.update_network(
                     name, network, self.graph_flags[name], rgbs,
@@ -246,6 +274,7 @@ class SampleWindow:
                                                                          fov_masks, car_transforms)
         self.current_data = (rgbs, labels, car_masks, fov_masks, car_transforms)
         self.agent_count = rgbs.shape[0]
+        self.batch_index = batch_index
         self.adjacency_matrix = torch.eye(self.agent_count)
         self.window.title(f'batch #{batch_index.squeeze().item()}')
         self.agent_index = 0
@@ -268,6 +297,8 @@ class SampleWindow:
 
     def update_prediction(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms) = self.current_data
+        # keep track of visualization state for saving the images
+        self.visualized_data.clear()
         # front RGB image
         rgb = rgbs[self.agent_index, ...].permute(1, 2, 0)
         rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
@@ -275,14 +306,16 @@ class SampleWindow:
         rgb_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(rgb), 'RGB')
         # target image
         ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), self.semantic_classes)
-        
+        self.visualized_data['target_semantics'] = ss_gt_img.copy()
         if self.show_masks:
             aggr_gt_mask = get_single_adjacent_aggregate_mask(
                 car_masks + fov_masks, car_transforms, self.agent_index, self.ppm,
                 self.output_h, self.output_w, self.center_x, self.center_y,
                 self.adjacency_matrix, True
             ).cpu().numpy()
+            self.visualized_data['target_aggregated_mask'] = aggr_gt_mask
             ss_gt_img[aggr_gt_mask == 0, :] = 0
+            self.visualized_data['masked_target_semantics'] = ss_gt_img
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         # add noise (important to do after the gt aggr. mask is calculated)
@@ -293,6 +326,7 @@ class SampleWindow:
         injected_noise_params = get_relative_noise(car_transforms, nz_car_transforms)[self.agent_index]
 
         for i, (name, network) in enumerate(self.networks.items()):
+            self.visualized_data[name] = {}
             # >>> front RGB image
             exec(f"self.rgb_panel_{i}.configure(image=rgb_tk)")
             exec(f"self.rgb_panel_{i}.image = rgb_tk")
@@ -329,8 +363,12 @@ class SampleWindow:
                     print(f'th-noise: {(injected_noise_params[a, 2] * 180 / np.pi).item():.2f}   '
                           f'estimated {(estimated_noise_params[a, 2] * 180 / np.pi).item():.2f}')
             solo_sseg_pred_img = convert_semantics_to_rgb(solo_sseg_pred.argmax(dim=0), self.semantic_classes)
+            self.visualized_data[name]['solo_semantics'] = solo_sseg_pred_img.copy()
+            self.visualized_data[name]['solo_mask'] = solo_mask_pred.numpy()
+            self.visualized_data[name]['aggregated_mask'] = aggr_mask_pred.numpy()
             if self.show_masks:
                 solo_sseg_pred_img[solo_mask_pred == 0, :] = 0
+                self.visualized_data[name]['masked_solo_semantics'] = solo_sseg_pred_img
             solo_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(solo_sseg_pred_img), 'RGB')
             # >>> masked predicted semseg w/o external influence
             exec(f"self.solo_pred_panel_{i}.configure(image=solo_sseg_pred_tk)")
@@ -338,8 +376,10 @@ class SampleWindow:
             # >>> full predicted semseg w/ influence from adjacency matrix
             aggr_sseg_pred_img = convert_semantics_to_rgb(aggr_sseg_pred.argmax(dim=0),
                                                           self.semantic_classes)
+            self.visualized_data[name]['aggregated_semantics'] = aggr_sseg_pred_img.copy()
             if self.show_masks:
                 aggr_sseg_pred_img[aggr_mask_pred == 0, :] = 0
+                self.visualized_data[name]['masked_aggregated_semantics'] = aggr_sseg_pred_img
             aggr_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(aggr_sseg_pred_img), 'RGB')
             exec(f"self.aggr_pred_panel_{i}.configure(image=aggr_sseg_pred_tk)")
             exec(f"self.aggr_pred_panel_{i}.image = aggr_sseg_pred_tk")

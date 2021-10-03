@@ -1,5 +1,4 @@
 **/.vscode/
-**/.ccls-cache/
 **/__pycache__/
 **/build/
 **/Debug/
@@ -13,9 +12,7 @@
 **/log
 scripts/plots
 scripts/runs
+scripts/samples
 scripts/model/modules/lie_so3/lie_so3.egg-info
 scripts/model/modules/lie_so3/dist
 .gitignore
-scripts/model/lie_so3/lie_so3.egg-info
-scripts/model/lie_so3/lie_so3.egg-info
-scripts/model/lie_so3/dist

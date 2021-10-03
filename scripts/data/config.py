@@ -1,3 +1,4 @@
+import os
 import yaml
 
 num_classes_dict = {
@@ -257,6 +258,8 @@ class EvaluationConfig:
         # gui parameteres
         self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
         self.mask_thresh = float(conf['gui']['mask-threshold'])
+        self.sample_save_dir = str(conf['gui']['sample-save-dir'])
+        self.full_metrics_save_dir = str(conf['gui']['full-metrics-save-dir'])
         # noise parameters
         self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
         self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
@@ -311,7 +314,12 @@ class EvaluationConfig:
         if len(self.runs) != len(self.model_names) or len(self.runs) != len(self.model_versions) or \
            len(self.runs) != len(self.aggregation_types) or len(self.runs) != len(self.model_gnn_flags):
             print(f'sanity-check-error: model lists should have the same length.')
-            
+        if not os.path.exists(self.sample_save_dir):
+            print(f'sanity-check-error: sample save directory {self.sample_save_dir} does not exist.')
+            exit()
+        if not os.path.exists(self.full_metrics_save_dir):
+            print(f'sanity-check-error: full metrics save directory {self.full_metrics_save_dir} does not exist.')
+            exit()
         for i in range(len(self.model_versions)):
             if self.model_versions[i] != 'best' and self.model_versions[i] != 'last':
                 print(f'sanity-check-error: {self.model_versions[i]} is not a valid model version.')
