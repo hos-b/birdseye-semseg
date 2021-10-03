@@ -150,10 +150,10 @@ class SampleWindow:
                         cv2.imwrite(os.path.join(network_dir, f'{k}.png'), v)
             else:
                 if key.endswith('_mask'):
-                    cv2.imwrite(os.path.join(root_dir, f'{key}.png'), value * 255)
+                    cv2.imwrite(os.path.join(agent_dir, f'{key}.png'), value * 255)
                 else:
                     value = cv2.cvtColor(value, cv2.COLOR_RGB2BGR)
-                    cv2.imwrite(os.path.join(root_dir, f'{key}.png'), value)
+                    cv2.imwrite(os.path.join(agent_dir, f'{key}.png'), value)
         self.visualized_data.clear()
 
     def add_network(self, network: torch.nn.Module, label: str, graph_net: bool):
