@@ -2,7 +2,6 @@ import os
 from typing import Dict
 import cv2
 import torch
-import kornia
 import tkinter
 import numpy as np
 import PIL.ImageTk
@@ -16,100 +15,7 @@ from data.mask_warp import get_single_adjacent_aggregate_mask
 from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms, get_relative_noise
 from model.factory import get_model
-
-class NetworkMetrics:
-    def __init__(self, networks: dict, class_dict: dict, device: torch.device):
-        self.metrics = {}
-        self.class_dict = class_dict
-        class_count = len(class_dict)
-        for key in networks.keys():
-            self.metrics[key] = {
-                'no_noise': {
-                    'mskd': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
-                    'full': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
-                    'mask_iou': 0.0
-                },
-                'pa_noise': {
-                    'mskd': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
-                    'full': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
-                    'mask_iou': 0.0
-                },
-                'ac_noise': {
-                    'mskd': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
-                    'full': torch.zeros((class_count, 1), dtype=torch.float64).to(device),
-                    'mask_iou': 0.0
-                }
-            }
-        self.sample_count = 0
-
-    def update_network(self, network_label: str, network: torch.nn.Module,
-                       graph_flag, rgbs, car_masks, fov_masks, gt_transforms,
-                       labels, ppm, output_h, output_w, center_x, center_y,
-                       mask_thresh, noise_std_x, noise_std_y, noise_std_theta):
-        
-        self.sample_count += rgbs.shape[0]
-        noisy_transforms = get_noisy_transforms(gt_transforms,
-                                                noise_std_x,
-                                                noise_std_y,
-                                                noise_std_theta)
-        # no noise, no correction
-        batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
-            self.class_dict, graph_flag, rgbs, car_masks, fov_masks,
-            gt_transforms, gt_transforms, labels, ppm, output_h, output_w,
-            center_x, center_y, mask_thresh, False
-        )
-        self.metrics[network_label]['no_noise']['mask_iou'] += mask_iou
-        self.metrics[network_label]['no_noise']['mskd'] += batch_mskd_ious
-        self.metrics[network_label]['no_noise']['full'] += batch_full_ious
-        # with noise, no correction
-        batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
-            self.class_dict, graph_flag, rgbs, car_masks, fov_masks,
-            gt_transforms, noisy_transforms, labels, ppm, output_h, output_w,
-            center_x, center_y, mask_thresh, False
-        )
-        self.metrics[network_label]['pa_noise']['mask_iou'] += mask_iou
-        self.metrics[network_label]['pa_noise']['mskd'] += batch_mskd_ious
-        self.metrics[network_label]['pa_noise']['full'] += batch_full_ious
-        # with noise, with correction
-        batch_mskd_ious, batch_full_ious, mask_iou = network.get_batch_ious(
-            self.class_dict, graph_flag, rgbs, car_masks, fov_masks,
-            gt_transforms, noisy_transforms, labels, ppm, output_h, output_w,
-            center_x, center_y, mask_thresh, True
-        )
-        self.metrics[network_label]['ac_noise']['mask_iou'] += mask_iou
-        self.metrics[network_label]['ac_noise']['mskd'] += batch_mskd_ious
-        self.metrics[network_label]['ac_noise']['full'] += batch_full_ious
-    
-    def finish(self):
-        for network in self.metrics.keys():
-            for key in self.metrics[network].keys():
-                self.metrics[network][key]['mskd'] /= (self.sample_count / len(self.metrics.keys()))
-                self.metrics[network][key]['full'] /= (self.sample_count / len(self.metrics.keys()))
-                self.metrics[network][key]['mask_iou'] /= (self.sample_count / len(self.metrics.keys()))
-                self.metrics[network][key]['mskd'] *= 100.0
-                self.metrics[network][key]['full'] *= 100.0
-                self.metrics[network][key]['mask_iou'] *= 100.0
-        self.sample_count = 0
-
-    def write_to_file(self, file_path: str):
-        headers = [cls.lower()[:4] for cls in self.class_dict.values()]
-        if 'mask' not in headers:
-            headers.append('mask')
-        file = open(file_path, 'w')
-        file.write(f'network\t\t\t{" || ".join(headers)}\n')
-        for (net_label, net_dict) in self.metrics.items():
-            lines = [net_label + ' ' + '=' * (76 - len(net_label)) + '\n']
-            for (noise_type, ious) in net_dict.items():
-                noise_type = noise_type.replace('_', ' ')
-                for mask_type in ['full', 'mskd']:
-                    line = f'{noise_type}:{mask_type}\t'
-                    for semantic_idx in self.class_dict:
-                        line += f'{ious[mask_type][semantic_idx].item():.2f}\t'
-                    if 'Mask' not in self.class_dict.values():
-                        line += f'{ious["mask_iou"]:.2f}'
-                    lines.append(line + '\n')
-            file.writelines(lines)
-        file.close()
+from metrics.iou import NetworkMetrics
 
 class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
@@ -147,38 +53,36 @@ class SampleWindow:
         self.sep_1.grid(row=1, rowspan=10, column=21)
         buttons_per_row = 4
         for i in range(8):
-            exec(f"self.abutton_{i} = tkinter.Button(self.window, text={i + 1})")
+            exec(f"self.abutton_{i} = tkinter.Button(self.window, text='{i + 1}')")
             exec(f"self.abutton_{i}.configure(command=lambda: self.agent_clicked({i}))", locals(), locals())
-            exec(f"self.abutton_{i}.grid(column={22 + (i % buttons_per_row)}, row={1 + (i // buttons_per_row)})")
+            exec(f"self.abutton_{i}.grid(column={22 + (i % buttons_per_row)}, row={i // buttons_per_row})")
         # misc. buttons
-        self.agent_label      = tkinter.Label(self.window, text=f'agent {self.agent_index}/{self.agent_count}')
         self.next_sample      = tkinter.Button(self.window, command=self.change_sample, text='next sample')
         self.smask_button     = tkinter.Button(self.window, command=self.toggle_baseline_self_masking, text=f'filter baseline: {int(self.baseline_masking_en)}')
         self.viz_masks_button = tkinter.Button(self.window, command=self.toggle_mask_visualization, text=f'visualize masks: {int(self.show_masks)}')
-        self.agent_label.       grid(column=22, row=0, columnspan=4)
-        self.smask_button.      grid(column=22, row=3, columnspan=4)
-        self.viz_masks_button.  grid(column=22, row=4, columnspan=4)
-        self.next_sample.       grid(column=22, row=5, columnspan=4)
+        self.smask_button.      grid(column=22, row=2, columnspan=4)
+        self.viz_masks_button.  grid(column=22, row=3, columnspan=4)
+        self.next_sample.       grid(column=22, row=4, columnspan=4)
         # noise parameters
         self.noise_label     = tkinter.Label(self.window, text=f'noise parameters')
-        self.noise_label.    grid(column=22, row=6, columnspan=4)
+        self.noise_label.    grid(column=22, row=5, columnspan=4)
         self.dx_noise_label  = tkinter.Label(self.window, text=f'std-x:')
-        self.dx_noise_label. grid(column=22, row=7, columnspan=2)
+        self.dx_noise_label. grid(column=22, row=6, columnspan=2)
         self.dx_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dx_std}')
         self.dx_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dx_noise_text)
-        self.dx_noise_entry. grid(column=24, row=7, columnspan=2)
+        self.dx_noise_entry. grid(column=24, row=6, columnspan=2)
         self.dy_noise_label  = tkinter.Label(self.window, text=f'std-y:')
-        self.dy_noise_label. grid(column=22, row=8, columnspan=2)
+        self.dy_noise_label. grid(column=22, row=7, columnspan=2)
         self.dy_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dy_std}')
         self.dy_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dy_noise_text)
-        self.dy_noise_entry. grid(column=24, row=8, columnspan=2)
+        self.dy_noise_entry. grid(column=24, row=7, columnspan=2)
         self.th_noise_label  = tkinter.Label(self.window, text=f'std-yaw:')
-        self.th_noise_label. grid(column=22, row=9, columnspan=2)
+        self.th_noise_label. grid(column=22, row=8, columnspan=2)
         self.th_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_th_std}')
         self.th_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.th_noise_text)
-        self.th_noise_entry. grid(column=24, row=9, columnspan=2)
+        self.th_noise_entry. grid(column=24, row=8, columnspan=2)
         self.apply_noise     = tkinter.Button(self.window, command=self.apply_noise_params, text='undertaker')
-        self.apply_noise.    grid(column=22, row=10, columnspan=4)
+        self.apply_noise.    grid(column=22, row=9, columnspan=4)
         # adjacency matrix buttons
         self.sep_2 = tkinter.Label(self.window, text='  ')
         self.sep_2.grid(row=0, rowspan=10, column=26)
@@ -193,6 +97,13 @@ class SampleWindow:
                 exec(f"self.mbutton_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
+
+    def _refresh_agent_buttons(self):
+        for i in range(8):
+            if i == self.agent_index:
+                exec(f"self.abutton_{i}.configure(font=('Verdana', 10, 'bold', 'underline'))")
+            else:
+                exec(f"self.abutton_{i}.configure(font=('Verdana', 10))")
 
     def add_network(self, network: torch.nn.Module, label: str, graph_net: bool):
         id = len(self.networks)
@@ -244,7 +155,7 @@ class SampleWindow:
     def agent_clicked(self, agent_id: int):
         if agent_id < self.agent_count:
             self.agent_index = agent_id
-            self.agent_label.configure(text=f'agent {self.agent_index + 1}/{self.agent_count}')
+            self._refresh_agent_buttons()
             self.update_prediction()
 
     def toggle_mask_visualization(self):
@@ -338,7 +249,7 @@ class SampleWindow:
         self.adjacency_matrix = torch.eye(self.agent_count)
         self.window.title(f'batch #{batch_index.squeeze().item()}')
         self.agent_index = 0
-        self.agent_label.configure(text=f'agent {self.agent_index + 1}/{self.agent_count}')
+        self._refresh_agent_buttons()
         # enable/disable adjacency matrix buttons, reset their labels
         for j in range(8):
             for i in range(8):
