@@ -1,5 +1,6 @@
 import os
 import yaml
+import datetime
 
 num_classes_dict = {
     'ours': 7,
@@ -231,12 +232,14 @@ class TrainingConfig:
         print(f'classes: {self.classes}')
         print(f'output size: {self.output_h}x{self.output_w}')
         # resume
+        print(f'datetime: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M")}')
         if self.resume_training:
             print(f'resuming training from {self.resume_model_version} checkpoint (epoch {self.resume_starting_epoch})')
             print(f'resume tag: {self.resume_tag}')
             print(f'resume difficulty: {self.resume_difficulty}')
             print(f'resume optimizer state: {self.resume_optimizer_state}')
         else:
+            #print date and time without seconds
             print('starting new training')
         print('-----------------------------------')
 

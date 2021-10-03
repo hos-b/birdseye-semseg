@@ -327,6 +327,7 @@ def parse_and_execute():
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)
     # begin -------------------------------------------------------------------------------------
+    train_cfg.print_config()
     train(train_cfg=train_cfg, device=device, log_enable=log_enable, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, semseg_loss=semseg_loss, start_ep=start_ep,
           geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,
