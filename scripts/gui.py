@@ -2,6 +2,7 @@ import os
 import cv2
 import torch
 import tkinter
+import tkinter.font as tkFont
 import numpy as np
 import PIL.ImageTk
 import PIL.Image as PILImage
@@ -50,8 +51,8 @@ class SampleWindow:
         self.aggr_pred_panel_caption.  grid(column=11, row=0, columnspan=5)
         self.aggr_trgt_panel_caption.  grid(column=16, row=0, columnspan=5)
         # agent selection buttons
-        self.sep_1 = tkinter.Label(self.window, text='  ')
-        self.sep_1.grid(row=1, rowspan=10, column=21)
+        self.sep_1 = tkinter.Label(self.window, text='    ')
+        self.sep_1.grid(row=0, rowspan=10, column=21)
         buttons_per_row = 4
         for i in range(8):
             exec(f"self.abutton_{i} = tkinter.Button(self.window, text='{i + 1}')")
@@ -87,7 +88,7 @@ class SampleWindow:
         self.apply_noise     = tkinter.Button(self.window, command=self.apply_noise_params, text='undertaker')
         self.apply_noise.    grid(column=22, row=9, columnspan=4)
         # adjacency matrix buttons
-        self.sep_2 = tkinter.Label(self.window, text='  ')
+        self.sep_2 = tkinter.Label(self.window, text='    ')
         self.sep_2.grid(row=0, rowspan=10, column=26)
         for j in range(8):
             for i in range(8):
@@ -100,13 +101,35 @@ class SampleWindow:
                 exec(f"self.mbutton_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
+        # relative injected noise table
+        self.relative_noise_table         = tkinter.Message(self.window, text='placeholder', anchor='w', width=600)
+        self.relative_noise_table.        grid(column=27, row=11, columnspan=8, rowspan=9)
+        # set default font
+        default_font = tkFont.nametofont("TkDefaultFont")
+        default_font.configure(size=12)
+        default_font.configure(family='Helvetica')
+        self.window.option_add("*Font", default_font)
 
     def _refresh_agent_buttons(self):
         for i in range(8):
             if i == self.agent_index:
-                exec(f"self.abutton_{i}.configure(font=('Verdana', 10, 'bold', 'underline'))")
+                exec(f"self.abutton_{i}.configure(font=('Helvetica', 10, 'bold', 'underline'))")
             else:
-                exec(f"self.abutton_{i}.configure(font=('Verdana', 10))")
+                exec(f"self.abutton_{i}.configure(font=('Helvetica', 10))")
+
+    def _update_relative_noise_table(self, noise):
+        noise_str = 'relative injected noise\n\n'
+        noise_str += f'# |    x    |    y    | theta \n'
+        noise_str += f'--+---------+---------+-------\n'
+        for i in range(self.agent_count):
+            theta = (noise[i, 2] * 180 / np.pi).item()
+            if theta <= -180: theta += 360
+            elif theta >= 180: theta -= 360
+            noise_str += f'{i} | ' + \
+                         f'{noise[i, 0].item():.3f}'.ljust(6) + '  | ' + \
+                         f'{noise[i, 1].item():.3f}'.ljust(6) + '  | ' + \
+                         f'{theta:.2f}'.ljust(6) + '\n'
+        self.relative_noise_table.configure(text=noise_str)
 
     def write_sample(self):
         if len(self.visualized_data) == 0:
@@ -324,7 +347,7 @@ class SampleWindow:
                                                  self.eval_cfg.se2_noise_dy_std,
                                                  self.eval_cfg.se2_noise_th_std)
         injected_noise_params = get_relative_noise(car_transforms, nz_car_transforms)[self.agent_index]
-
+        self._update_relative_noise_table(injected_noise_params)
         for i, (name, network) in enumerate(self.networks.items()):
             self.visualized_data[name] = {}
             # >>> front RGB image
@@ -350,16 +373,16 @@ class SampleWindow:
             # log estimated noise
             if hasattr(network, 'feat_matching_net'):
                 estimated_noise_tf = network.feat_matching_net.estimated_noise[self.agent_index]
-                estimated_noise_params = torch.zeros((rgbs.shape[0], 3), dtype=car_transforms.dtype,
+                estimated_noise_params = torch.zeros((self.agent_count, 3), dtype=car_transforms.dtype,
                                                      device=car_transforms.device)
                 estimated_noise_params[:, :2] = estimated_noise_tf[:, :2, 2]
                 estimated_noise_params[:,  2] = torch.atan2(estimated_noise_tf[:, 1, 0],
                                                             estimated_noise_tf[:, 0, 0])
                 print(f'agent {self.agent_index} noise parameters in {name} ------- ')
-                for a in range(rgbs.shape[0]):
+                for a in range(self.agent_count):
                     print(f'w.r.t. agent {a}')
-                    print(f'xx-noise: {injected_noise_params[a, 0].item():.4f} estimated {estimated_noise_params[i, 0].item():.4f}')
-                    print(f'yy-noise: {injected_noise_params[a, 1].item():.4f} estimated {estimated_noise_params[i, 1].item():.4f}')
+                    print(f'xx-noise: {injected_noise_params[a, 0].item():.4f} estimated {estimated_noise_params[a, 0].item():.4f}')
+                    print(f'yy-noise: {injected_noise_params[a, 1].item():.4f} estimated {estimated_noise_params[a, 1].item():.4f}')
                     print(f'th-noise: {(injected_noise_params[a, 2] * 180 / np.pi).item():.2f}   '
                           f'estimated {(estimated_noise_params[a, 2] * 180 / np.pi).item():.2f}')
             solo_sseg_pred_img = convert_semantics_to_rgb(solo_sseg_pred.argmax(dim=0), self.semantic_classes)
