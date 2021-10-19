@@ -110,8 +110,8 @@ def train(**kwargs):
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
             # weighted losses
-            (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
-             s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight).backward()
+            (0.5 * m_loss * torch.exp(-mask_loss_weight) + 0.5 * mask_loss_weight +
+                   s_loss * torch.exp(-sseg_loss_weight) + 0.5 * sseg_loss_weight).backward()
 
             optimizer.step()
 
