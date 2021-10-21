@@ -90,12 +90,24 @@ def separate_masks(masks: torch.Tensor, boundary_pixel: int = 172):
     """
     seperates the mask into vehicle and FoV masks.
     if there is a vehicle right in front of the current one, the boundary
-    pixel is violated. less that 5% ? who cares. masks size: Bx256x205
+    pixel is violated. less than 5% ? who cares. masks size: Bx256x205
     """
     vehicle_masks = masks.clone()
     vehicle_masks[:, :boundary_pixel] = 0
     masks[:, boundary_pixel:] = 0
     return vehicle_masks, masks
+
+def get_transform_loss(gt_transforms: torch.Tensor, noisy_transforms: torch.Tensor,
+                       estiamted_noise: torch.Tensor, loss_func, agent_count):
+    """
+    calculates the loss of the noisy transforms compared to the gt transforms
+    """
+    t_loss = 0
+    for i in range(agent_count):
+        gt_relative_tfs = gt_transforms[i].inverse() @ gt_transforms
+        estimated_relative_tfs = (noisy_transforms[i].inverse() @ noisy_transforms) @ estiamted_noise[i]
+        t_loss += loss_func(estimated_relative_tfs, gt_relative_tfs)
+    return t_loss
 
 # dicts for plotting batches based on agent count
 newline_dict = {
