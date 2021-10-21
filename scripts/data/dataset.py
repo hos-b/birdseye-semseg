@@ -85,7 +85,7 @@ class MassHDF5(torch.utils.data.Dataset):
             semsegs.append(torch.tensor(semseg, dtype=torch.long))
             # Car Transforms: 4 x 4
             car_transforms.append(torch.tensor(self.dataset[b_start_idx + i, 'transform']
-                    .view(dtype=np.float64).reshape(4, 4), dtype=torch.float64).transpose(0, 1))
+                    .view(dtype=np.float64).reshape(4, 4), dtype=torch.float32).transpose(0, 1))
         # cut the mask into two separate tensors
         veh_masks, fov_masks = separate_masks(torch.stack(masks))
         # add gaussian blurring to the fov masks
