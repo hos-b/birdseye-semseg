@@ -3,10 +3,10 @@ import torch
 import kornia
 from torch import nn
 import torch.nn.functional as F
-from data.mask_warp import get_single_relative_img_transform
+from data.mask_warp import get_single_relative_img_transform, get_rectified_single_relative_img_transform
 from data.config import SemanticCloudConfig
 from model.dual_mcnn import DualTransposedMCNN3x
-from model.modules.lie_so3.lie_so3_m import LieSO3
+from model.modules.lie_so3.lie_so3_m import LieSE3
 
 class NoisyMCNNT3x(DualTransposedMCNN3x):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
@@ -76,19 +76,19 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
             outside_fov = torch.where(adjacency_matrix[i] == False)[0]
-            relative_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y, False).to(transforms.device)
             if noise_correction_en:
-                # if so2 noise is already estimated for current batch
-                if self.feat_matching_net.estimated:
-                    corrected_tf = self.feat_matching_net.get_centered_img_transforms(i, ppm, center_x, center_y) @ relative_tfs
-                    warped_features = kornia.warp_affine(x, corrected_tf[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
-                # otherwise estimate relative noise
-                else:
-                    warped_features = kornia.warp_affine(x, relative_tfs[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
-                    estimated_noise = self.feat_matching_net(warped_features[i], warped_features, i, ppm, center_x, center_y)
-                    warped_features = kornia.warp_affine(warped_features, estimated_noise[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+                # if so2 noise is not estimated
+                if not self.feat_matching_net.estimated:
+                    noisy_relative_img_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y).to(transforms.device)
+                    noisy_warped_features = kornia.warp_affine(x, noisy_relative_img_tfs, dsize=(cf_h, cf_w), mode=self.aggregation_type)
+                    self.feat_matching_net(noisy_warped_features[i], noisy_warped_features, i)
+                # rectfiy the transform using estimated noise and warp (from scratch)
+                relative_img_tfs = get_rectified_single_relative_img_transform(transforms, self.feat_matching_net.estimated_noise[i],
+                                                                               i, ppm, center_x, center_y).to(transforms.device)
+                warped_features = kornia.warp_affine(x, relative_img_tfs, dsize=(cf_h, cf_w), mode=self.aggregation_type)
             else:
-                warped_features = kornia.warp_affine(x, relative_tfs[:, :2], dsize=(cf_h, cf_w), mode=self.aggregation_type)
+                noisy_relative_img_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y).to(transforms.device)
+                warped_features = kornia.warp_affine(x, noisy_relative_img_tfs, dsize=(cf_h, cf_w), mode=self.aggregation_type)
             # applying the adjacency matrix
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
@@ -125,7 +125,7 @@ class LatentFeatureMatcher(nn.Module):
             nn.ReLU(),
             nn.Linear(128, 3),
         )
-        self.lie_so3 = LieSO3()
+        self.lie_so3 = LieSE3()
         self.estimated_noise = None
         self.estimated = False
     
@@ -133,11 +133,11 @@ class LatentFeatureMatcher(nn.Module):
         self.estimated = False
         if self.estimated_noise is not None:
             del self.estimated_noise
-        self.estimated_noise = torch.zeros(size=(agent_count, agent_count, 3, 3),
+        self.estimated_noise = torch.zeros(size=(agent_count, agent_count, 4, 4),
                                            dtype=torch.float32,
                                            device=device)
 
-    def forward(self, feat_x, feat_y, agent_index, ppm, center_x, center_y):
+    def forward(self, feat_x, feat_y, agent_index):
         # feat_x: C x 80 x 108
         # feat_y: A x C x 80 x 108
         agent_count, channels, feat_h, feat_w = feat_y.shape
@@ -149,38 +149,8 @@ class LatentFeatureMatcher(nn.Module):
         # flatten features and pass through linear layer
         x = self.linear(torch.mean(x, dim=1).view(agent_count, -1))
         # get lie_so3 transform
-        lie_input = torch.zeros(size=(agent_count, 1, 1, 3), dtype=feat_x.dtype, device=feat_x.device)
-        lie_input[:, :, :, 2] = self.rotation_scale * x[:, 2].view(agent_count, 1, 1)
-        se2_noise = self.lie_so3(lie_input).view(agent_count, 3, 3)
-        se2_noise[:, 0, 2] = x[:, 0]
-        se2_noise[:, 1, 2] = x[:, 1]
-        self.estimated_noise[agent_index] = se2_noise
-        return self.get_centered_img_transforms(agent_index, ppm, center_x, center_y)
-
-    def get_centered_img_transforms(self, agent_index, pixels_per_meter, center_x, center_y) -> torch.Tensor:
-        """
-        turns a location-based transform into an image-centered pixel-based transform,
-        to be used for warping. the x & y
-        input: tensor of shape A x 3 x 3, relative transforms of agents
-        output: tensor of shape A x 2 x 3, image-centered transforms of agents w.r.t. a specific agent
-        """
-        centered_tf = self.estimated_noise[agent_index].clone().detach()
-        # image rotation = inverse of cartesian rotation. for some reason tranpose doesn't work
-        centered_tf[:, :2, :2] = self.estimated_noise[agent_index][:, :2, :2].inverse()
-        # image +x = cartesian -y, image +y = cartesian -x
-        centered_tf[:, 0, 2] = -self.estimated_noise[agent_index][:, 1, 2] * pixels_per_meter
-        centered_tf[:, 1, 2] = -self.estimated_noise[agent_index][:, 0, 2] * pixels_per_meter
-        porg = torch.tensor([[1.0, 0.0, center_x],
-                             [0.0, 1.0, center_y],
-                             [0.0, 0.0,      1.0]],
-                             dtype=centered_tf.dtype, device=centered_tf.device).unsqueeze(0)
-        norg = torch.tensor([[1.0, 0.0, -center_x],
-                             [0.0, 1.0, -center_y],
-                             [0.0, 0.0,       1.0]],
-                             dtype=centered_tf.dtype, device=centered_tf.device)
-        return (porg @ centered_tf @ norg)
-
-
+        self.estimated_noise[agent_index] = self.lie_so3(x)
+        # return self.estimated_noise[agent_index]
 
 def calculate_conv2d_output_size(fsize_h, fsize_w, kernel_size_h, kernel_size_w,
                                  padding_h, padding_w, stride_h, stride_w):
