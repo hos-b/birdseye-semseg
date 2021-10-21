@@ -13,9 +13,9 @@ def get_centered_img_transforms(transforms: torch.Tensor, pixels_per_meter,
     """
     assert len(transforms.shape) == 3, f"transforms should have the dimensions A x 3 x 3 but got {transforms.shape}"
     assert transforms.shape[1:3] == torch.Size([3, 3]), f"transforms should be 3 x 3 but they're {transforms.shape[1:3]}"
-    rectified_tf = transforms.clone()
+    rectified_tf = transforms.clone().detach()
     # image rotation = inverse of cartesian rotation. for some reason tranpose doesn't work
-    rectified_tf[:, :2, :2] = rectified_tf[:, :2, :2].inverse()
+    rectified_tf[:, :2, :2] = transforms[:, :2, :2].inverse()
     # image +x = cartesian -y, image +y = cartesian -x
     rectified_tf[:, 0, 2] = -transforms[:, 1, 2]
     rectified_tf[:, 1, 2] = -transforms[:, 0, 2]
@@ -29,7 +29,7 @@ def get_centered_img_transforms(transforms: torch.Tensor, pixels_per_meter,
                          [0.0, 1.0, -center_y],
                          [0.0, 0.0,       1.0]])
     if omit_last_row:
-        return (porg @ rectified_tf @ norg)[:, :2, :].clone()
+        return (porg @ rectified_tf @ norg)[:, :2, :]
     return (porg @ rectified_tf @ norg)
 
 def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels_per_meter,
