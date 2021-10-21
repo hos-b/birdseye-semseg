@@ -39,6 +39,7 @@ def train(**kwargs):
     scheduler: lr_scheduler.LambdaLR = kwargs.get('scheduler')
     optimizer: torch.optim.Adam = kwargs.get('optimizer')
     mask_loss: nn.L1Loss = kwargs.get('mask_loss')
+    transform_loss: nn.MSELoss = kwargs.get('transform_loss')
     semseg_loss = kwargs.get('semseg_loss')
     mask_loss_weight = kwargs.get('mask_loss_weight')
     sseg_loss_weight = kwargs.get('sseg_loss_weight')
@@ -100,17 +101,16 @@ def train(**kwargs):
                      torch.mean(semseg_loss(aggr_sseg_preds, labels) *
                                 torch.clamp(agent_pool.combined_masks + wallhack, 0.0, 1.0))
             t_loss = get_transform_loss(gt_transforms, car_transforms,
-                                        model.feat_matching_net, model.sem_ppm,
-                                        model.sem_center_x, model.sem_center_y,
-                                        mask_loss).mean()
+                                        model.feat_matching_net.estimated_noise,
+                                        transform_loss, rgbs.shape[0])
             # semseg & mask batch loss
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
             batch_train_t_loss = t_loss.item()
             # weighted losses
-            (m_loss * torch.exp(-mask_loss_weight) + mask_loss_weight +
-             s_loss * torch.exp(-sseg_loss_weight) + sseg_loss_weight +
-             t_loss * torch.exp(-trns_loss_weight) + trns_loss_weight).backward()
+            (0.5 * m_loss * torch.exp(-mask_loss_weight) + 0.5 * mask_loss_weight +
+             0.5 * t_loss * torch.exp(-trns_loss_weight) + 0.5 * trns_loss_weight +
+                   s_loss * torch.exp(-sseg_loss_weight) + 0.5 * sseg_loss_weight).backward()
 
             optimizer.step()
 
@@ -175,9 +175,8 @@ def train(**kwargs):
                 total_valid_s_loss += (torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) +
                                        torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)).item()
                 total_valid_t_loss += get_transform_loss(gt_transforms, car_transforms,
-                                                         model.feat_matching_net, model.sem_ppm,
-                                                         model.sem_center_x, model.sem_center_y,
-                                                         mask_loss).mean()
+                                                         model.feat_matching_net.estimated_noise,
+                                                         transform_loss, rgbs.shape[0])
             sseg_ious += get_iou_per_class(aggr_sseg_preds, labels, agent_pool.combined_masks,
                                            train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(aggr_mask_preds.squeeze(1), agent_pool.combined_masks,
@@ -365,16 +364,18 @@ def parse_and_execute():
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='mean')
     # send to gpu
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)
         mask_loss = mask_loss.to(device)
+        transform_loss = transform_loss.to(device)
     # begin ------------------------------------------------------------------------------------
     train_cfg.print_config()
     train(train_cfg=train_cfg, device=device, debug_mode=debug_mode, model=model, optimizer=optimizer,
           agent_pool=agent_pool, scheduler=scheduler, mask_loss=mask_loss, semseg_loss=semseg_loss,
-          geom_properties=(new_size, center, ppm), train_loader=train_loader, valid_loader=valid_loader,
-          mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight,
+          transform_loss=transform_loss, geom_properties=(new_size, center, ppm), train_loader=train_loader,
+          valid_loader=valid_loader, mask_loss_weight=mask_loss_weight, sseg_loss_weight=sseg_loss_weight,
           trns_loss_weight=trns_loss_weight, start_ep=start_ep, segmentation_classes=segmentation_classes)
 
 if __name__ == '__main__':
