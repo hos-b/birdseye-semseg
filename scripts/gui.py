@@ -40,75 +40,96 @@ class SampleWindow:
         self.agent_count = 8
         self.batch_index = 0
         self.visualized_data = {}
-        self.window = tkinter.Tk()
+        # root window
+        self.root = tkinter.Tk()
+        # visualization window
+        self.viz_frame = tkinter.Frame(self.root)
+        self.viz_frame.pack(side='left', fill='both', expand=True)
+        self.canvas = tkinter.Canvas(self.viz_frame)
+        self.canvas.pack(side='left', fill='both', expand=True)
+        self.scrollbar = tkinter.Scrollbar(self.viz_frame, orient='vertical', command=self.canvas.yview)
+        self.scrollbar.pack(side='right', fill='y')
+        self.canvas.configure(yscrollcommand=self.scrollbar.set)
+        self.canvas.bind('<Configure>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.canvas.bind('<MouseWheel>', lambda e: self.canvas.configure(scrollregion=self.canvas.bbox('all')))
+        self.viz_window = tkinter.Frame(self.canvas)
+        self.canvas.create_window((0, 0), window=self.viz_window, anchor='nw')
+        # control window
+        self.control_window = tkinter.Frame(self.root)
+        self.control_window.pack(side='right', fill='y', expand=False)
         # image panels captions
-        self.rgb_panel_caption         = tkinter.Label(self.window, text='front rgb')
-        self.solo_pred_panel_caption   = tkinter.Label(self.window, text='solo pred')
-        self.aggr_pred_panel_caption   = tkinter.Label(self.window, text='aggr pred')
-        self.aggr_trgt_panel_caption   = tkinter.Label(self.window, text='target')
+        self.rgb_panel_caption         = tkinter.Label(self.viz_window, text='front rgb')
+        self.solo_pred_panel_caption   = tkinter.Label(self.viz_window, text='solo pred')
+        self.aggr_pred_panel_caption   = tkinter.Label(self.viz_window, text='aggr pred')
+        self.aggr_trgt_panel_caption   = tkinter.Label(self.viz_window, text='target')
         self.rgb_panel_caption.        grid(column=0, row=0, columnspan=5)
         self.solo_pred_panel_caption.  grid(column=6, row=0, columnspan=5)
         self.aggr_pred_panel_caption.  grid(column=11, row=0, columnspan=5)
         self.aggr_trgt_panel_caption.  grid(column=16, row=0, columnspan=5)
+        # space separator for top side of control window
+        self.sep_1 = tkinter.Label(self.control_window, text='    ')
+        self.sep_1.grid(row=0, column=0, columnspan=16)
+        # space separator for left side of control window
+        self.sep_1 = tkinter.Label(self.control_window, text='    ')
+        self.sep_1.grid(row=1, column=0, rowspan=10, columnspan=2)
         # agent selection buttons
-        self.sep_1 = tkinter.Label(self.window, text='    ')
-        self.sep_1.grid(row=0, rowspan=10, column=21)
         buttons_per_row = 4
         for i in range(8):
-            exec(f"self.abutton_{i} = tkinter.Button(self.window, text='{i + 1}')")
+            exec(f"self.abutton_{i} = tkinter.Button(self.control_window, text='{i + 1}')")
             exec(f"self.abutton_{i}.configure(command=lambda: self.agent_clicked({i}))", locals(), locals())
-            exec(f"self.abutton_{i}.grid(column={22 + (i % buttons_per_row)}, row={i // buttons_per_row})")
+            exec(f"self.abutton_{i}.grid(column={2 + (i % buttons_per_row)}, row={1 + i // buttons_per_row})")
         # misc. buttons
-        self.smask_button     = tkinter.Button(self.window, command=self.toggle_baseline_self_masking, text=f'filter baseline: {int(self.baseline_masking_en)}')
-        self.viz_masks_button = tkinter.Button(self.window, command=self.toggle_mask_visualization, text=f'visualize masks: {int(self.show_masks)}')
-        self.next_sample      = tkinter.Button(self.window, command=self.change_sample, text='next')
-        self.save_sample      = tkinter.Button(self.window, command=self.write_sample, text='save')
-        self.smask_button.      grid(column=22, row=2, columnspan=4)
-        self.viz_masks_button.  grid(column=22, row=3, columnspan=4)
-        self.next_sample.       grid(column=22, row=4, columnspan=2)
-        self.save_sample.       grid(column=24, row=4, columnspan=2)
+        self.smask_button     = tkinter.Button(self.control_window, command=self.toggle_baseline_self_masking, text=f'filter baseline: {int(self.baseline_masking_en)}')
+        self.viz_masks_button = tkinter.Button(self.control_window, command=self.toggle_mask_visualization, text=f'visualize masks: {int(self.show_masks)}')
+        self.next_sample      = tkinter.Button(self.control_window, command=self.change_sample, text='next')
+        self.save_sample      = tkinter.Button(self.control_window, command=self.write_sample, text='save')
+        self.smask_button.      grid(column=2, row=3, columnspan=4)
+        self.viz_masks_button.  grid(column=2, row=4, columnspan=4)
+        self.next_sample.       grid(column=2, row=5, columnspan=2)
+        self.save_sample.       grid(column=4, row=5, columnspan=2)
         # noise parameters
-        self.noise_label     = tkinter.Label(self.window, text=f'noise parameters')
-        self.noise_label.    grid(column=22, row=5, columnspan=4)
-        self.dx_noise_label  = tkinter.Label(self.window, text=f'std-x:')
-        self.dx_noise_label. grid(column=22, row=6, columnspan=2)
+        self.noise_label     = tkinter.Label(self.control_window, text=f'noise parameters')
+        self.noise_label.    grid(column=2, row=6, columnspan=4)
+        self.dx_noise_label  = tkinter.Label(self.control_window, text=f'std-x:')
+        self.dx_noise_label. grid(column=2, row=7, columnspan=2)
         self.dx_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dx_std}')
-        self.dx_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dx_noise_text)
-        self.dx_noise_entry. grid(column=24, row=6, columnspan=2)
-        self.dy_noise_label  = tkinter.Label(self.window, text=f'std-y:')
-        self.dy_noise_label. grid(column=22, row=7, columnspan=2)
+        self.dx_noise_entry  = tkinter.Entry(self.control_window, width=5, textvariable=self.dx_noise_text)
+        self.dx_noise_entry. grid(column=4, row=7, columnspan=2)
+        self.dy_noise_label  = tkinter.Label(self.control_window, text=f'std-y:')
+        self.dy_noise_label. grid(column=2, row=8, columnspan=2)
         self.dy_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_dy_std}')
-        self.dy_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.dy_noise_text)
-        self.dy_noise_entry. grid(column=24, row=7, columnspan=2)
-        self.th_noise_label  = tkinter.Label(self.window, text=f'std-yaw:')
-        self.th_noise_label. grid(column=22, row=8, columnspan=2)
+        self.dy_noise_entry  = tkinter.Entry(self.control_window, width=5, textvariable=self.dy_noise_text)
+        self.dy_noise_entry. grid(column=4, row=8, columnspan=2)
+        self.th_noise_label  = tkinter.Label(self.control_window, text=f'std-yaw:')
+        self.th_noise_label. grid(column=2, row=9, columnspan=2)
         self.th_noise_text   = tkinter.StringVar(value=f'{self.eval_cfg.se2_noise_th_std}')
-        self.th_noise_entry  = tkinter.Entry(self.window, width=5, textvariable=self.th_noise_text)
-        self.th_noise_entry. grid(column=24, row=8, columnspan=2)
-        self.apply_noise     = tkinter.Button(self.window, command=self.apply_noise_params, text='undertaker')
-        self.apply_noise.    grid(column=22, row=9, columnspan=4)
+        self.th_noise_entry  = tkinter.Entry(self.control_window, width=5, textvariable=self.th_noise_text)
+        self.th_noise_entry. grid(column=4, row=9, columnspan=2)
+        self.apply_noise     = tkinter.Button(self.control_window, command=self.apply_noise_params, text='undertaker')
+        self.apply_noise.    grid(column=2, row=10, columnspan=4)
+        # space separator for left side of control window
+        self.sep_2 = tkinter.Label(self.control_window, text='    ')
+        self.sep_2.grid(row=1, rowspan=10, column=16, columnspan=2)
         # adjacency matrix buttons
-        self.sep_2 = tkinter.Label(self.window, text='    ')
-        self.sep_2.grid(row=0, rowspan=10, column=26)
         for j in range(8):
             for i in range(8):
                 if i == 0:
-                    exec(f"self.mlabel_{j}{i} = tkinter.Label(self.window, text={j + 1})")
-                    exec(f"self.mlabel_{j}{i}.grid(column={j + 28}, row={i})")
+                    exec(f"self.mlabel_{j}{i} = tkinter.Label(self.control_window, text={j + 1})")
+                    exec(f"self.mlabel_{j}{i}.grid(column={j + 8}, row={i + 1})")
                 if j == 0:
-                    exec(f"self.mlabel_{j}{i} = tkinter.Label(self.window, text={i + 1})")
-                    exec(f"self.mlabel_{j}{i}.grid(column={j + 27}, row={i + 1})")
-                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.window, text='1' if {i} == {j} else '0')")
+                    exec(f"self.mlabel_{j}{i} = tkinter.Label(self.control_window, text={i + 1})")
+                    exec(f"self.mlabel_{j}{i}.grid(column={j + 7}, row={i + 2})")
+                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.control_window, text='1' if {i} == {j} else '0')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
-                exec(f"self.mbutton_{j}{i}.grid(column={j + 28}, row={i + 1})")
+                exec(f"self.mbutton_{j}{i}.grid(column={j + 8}, row={i + 2})")
         # relative injected noise table
-        self.relative_noise_table         = tkinter.Message(self.window, text='placeholder', anchor='w', width=600)
-        self.relative_noise_table.        grid(column=27, row=11, columnspan=8, rowspan=9)
+        self.relative_noise_table         = tkinter.Message(self.control_window, text='placeholder', anchor='w', width=600)
+        self.relative_noise_table.        grid(column=7, row=12, columnspan=8, rowspan=9)
         # set default font
         default_font = tkFont.nametofont("TkDefaultFont")
         default_font.configure(size=12)
         default_font.configure(family='Helvetica')
-        self.window.option_add("*Font", default_font)
+        self.root.option_add("*Font", default_font)
 
     def _refresh_agent_buttons(self):
         for i in range(8):
@@ -158,19 +179,26 @@ class SampleWindow:
 
     def add_network(self, network: torch.nn.Module, label: str, graph_net: bool):
         id = len(self.networks)
+        if label in self.networks:
+            count = 2
+            while True:
+                if label + f'_v{count}' not in self.networks:
+                    label = label + f'_v{count}'
+                    break
+                count += 1
         net_row = 2 + len(self.networks) * 13
         network.eval()
         self.networks[label] = network
         self.graph_flags[label] = graph_net
-        exec(f"self.network_label_{id}        = tkinter.Label(self.window, text='[{label}]')")
-        exec(f"self.rgb_panel_{id}            = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.solo_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.aggr_pred_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.aggr_trgt_panel_{id}      = tkinter.Label(self.window, text='placeholder')")
-        exec(f"self.zero_noiz_iou_label_{id}  = tkinter.Label(self.window, text='network not evaluated')")
-        exec(f"self.pass_noiz_iou_label_{id}  = tkinter.Label(self.window, text='network not evaluated')")
-        exec(f"self.actv_noiz_iou_label_{id}  = tkinter.Label(self.window, text='network not evaluated')")
-        exec(f"self.seperator_{id}            = tkinter.Label(self.window, text='{'-' * 105}')")
+        exec(f"self.network_label_{id}        = tkinter.Label(self.viz_window, text='[{label}]')")
+        exec(f"self.rgb_panel_{id}            = tkinter.Label(self.viz_window, text='placeholder')")
+        exec(f"self.solo_pred_panel_{id}      = tkinter.Label(self.viz_window, text='placeholder')")
+        exec(f"self.aggr_pred_panel_{id}      = tkinter.Label(self.viz_window, text='placeholder')")
+        exec(f"self.aggr_trgt_panel_{id}      = tkinter.Label(self.viz_window, text='placeholder')")
+        exec(f"self.zero_noiz_iou_label_{id}  = tkinter.Label(self.viz_window, text='network not evaluated')")
+        exec(f"self.pass_noiz_iou_label_{id}  = tkinter.Label(self.viz_window, text='network not evaluated')")
+        exec(f"self.actv_noiz_iou_label_{id}  = tkinter.Label(self.viz_window, text='network not evaluated')")
+        exec(f"self.seperator_{id}            = tkinter.Label(self.viz_window, text='{'-' * 105}')")
         exec(f"self.network_label_{id}.         grid(column=0, row={net_row - 1}, columnspan=1)")
         exec(f"self.rgb_panel_{id}.             grid(column=0, row={net_row}, columnspan=5, rowspan=8)")
         exec(f"self.solo_pred_panel_{id}.       grid(column=6, row={net_row}, columnspan=5, rowspan=8)")
@@ -188,7 +216,7 @@ class SampleWindow:
         if True not in self.graph_flags.values():
             print("warning: no baseline network has been added")
         self.change_sample()
-        self.window.mainloop()
+        self.viz_window.mainloop()
 
     def matrix_clicked(self, i: int, j: int):
         if self.adjacency_matrix[j, i] == 1:
@@ -299,7 +327,7 @@ class SampleWindow:
         self.agent_count = rgbs.shape[0]
         self.batch_index = batch_index
         self.adjacency_matrix = torch.eye(self.agent_count)
-        self.window.title(f'batch #{batch_index.squeeze().item()}')
+        self.root.title(f'batch #{batch_index.squeeze().item()}')
         self.agent_index = 0
         self._refresh_agent_buttons()
         # enable/disable adjacency matrix buttons, reset their labels
