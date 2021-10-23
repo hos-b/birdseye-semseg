@@ -33,9 +33,10 @@ class SampleWindow:
         self.device = device
         self.current_data = None
         self.adjacency_matrix = None
-        self.baseline_masking_en = False
         self.show_masks = False
+        self.baseline_masking_en = False
         self.noise_correction_en = True
+        self.noisy_transforms = None
         self.agent_index = 0
         self.agent_count = 8
         self.batch_index = 0
@@ -229,23 +230,23 @@ class SampleWindow:
             self.adjacency_matrix[i, j] = 1
             exec(f"self.mbutton_{j}{i}.configure(text='1')")
             exec(f"self.mbutton_{i}{j}.configure(text='1')")
-        self.update_prediction()
+        self.update_prediction(False)
 
     def agent_clicked(self, agent_id: int):
         if agent_id < self.agent_count:
             self.agent_index = agent_id
             self._refresh_agent_buttons()
-            self.update_prediction()
+            self.update_prediction(False)
 
     def toggle_mask_visualization(self):
         self.show_masks = not self.show_masks
         self.viz_masks_button.configure(text=f'visualize masks: {int(self.show_masks)}')
-        self.update_prediction()
+        self.update_prediction(False)
 
     def toggle_baseline_self_masking(self):
         self.baseline_masking_en = not self.baseline_masking_en
         self.smask_button.configure(text=f'filter baseline: {int(self.baseline_masking_en)}')
-        self.update_prediction()
+        self.update_prediction(False)
 
     def apply_noise_params(self):
         th_std = self.eval_cfg.se2_noise_th_std
@@ -269,7 +270,7 @@ class SampleWindow:
         self.eval_cfg.se2_noise_th_std = th_std
         self.eval_cfg.se2_noise_dx_std = dx_std
         self.eval_cfg.se2_noise_dy_std = dy_std
-        self.update_prediction()
+        self.update_prediction(True)
 
     def calculate_ious(self, dataset: MassHDF5):
         if not self.eval_cfg.evaluate_at_start:
@@ -344,9 +345,9 @@ class SampleWindow:
                 exec(f"self.abutton_{i}['state'] = 'normal'")
             else:
                 exec(f"self.abutton_{i}['state'] = 'disabled'")
-        self.update_prediction()
+        self.update_prediction(True)
 
-    def update_prediction(self):
+    def update_prediction(self, resample_noise):
         (rgbs, labels, car_masks, fov_masks, car_transforms) = self.current_data
         # keep track of visualization state for saving the images
         self.visualized_data.clear()
@@ -371,11 +372,12 @@ class SampleWindow:
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
         # add noise (important to do after the gt aggr. mask is calculated)
-        nz_car_transforms = get_noisy_transforms(car_transforms,
-                                                 self.eval_cfg.se2_noise_dx_std,
-                                                 self.eval_cfg.se2_noise_dy_std,
-                                                 self.eval_cfg.se2_noise_th_std)
-        injected_noise_params = get_relative_noise(car_transforms, nz_car_transforms)[self.agent_index]
+        if resample_noise:
+            self.noisy_transforms = get_noisy_transforms(car_transforms,
+                                                         self.eval_cfg.se2_noise_dx_std,
+                                                         self.eval_cfg.se2_noise_dy_std,
+                                                         self.eval_cfg.se2_noise_th_std)
+        injected_noise_params = get_relative_noise(car_transforms, self.noisy_transforms)[self.agent_index]
         self._update_relative_noise_table(injected_noise_params)
         for i, (name, network) in enumerate(self.networks.items()):
             self.visualized_data[name] = {}
@@ -389,7 +391,7 @@ class SampleWindow:
 
             solo_sseg_pred, solo_mask_pred, \
             aggr_sseg_pred, aggr_mask_pred = network.get_eval_output(
-                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks, nz_car_transforms,
+                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks, self.noisy_transforms,
                 self.adjacency_matrix, self.ppm, self.output_h, self.output_w,
                 self.center_x, self.center_y, self.agent_index, self.baseline_masking_en,
                 torch.device('cpu'), self.noise_correction_en
