@@ -1,5 +1,5 @@
 logging:
-  name: 'mcnnT3x-[4.|.6|.6]-ce-0.1'
+  name: 'debug'
   group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
@@ -13,13 +13,13 @@ training:
 
 # currently only tackled in mcnnT3xNoisy
 se2-noise:
-  enable: true
+  enable: enable
   se2-noise-theta-std: 4.0 # degrees
   se2-noise-dx-std: 0.6    # meters
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'mcnnT3x'
+  model-name: 'mcnnT3xNoisy'
   aggregation-type: 'bilinear'
 
 hyperparameters:
@@ -40,17 +40,17 @@ validation:
   mask-det-threshold: 0.6
 
 dataloader:
-  dataloder-workers: 0
-  shuffle-data: true
+  dataloder-workers: 2
+  shuffle-data: false
 
 dataset:
   output-h: 256
   output-w: 205
   classes: 'ours' # carla, ours, ours+mask, diminished, diminished+mask
   dataset-dir: '/export/home/bahadorm/mass-data'
-  trainset-file: 'noisy_towns2345.hdf5'
+  trainset-file: 'noisy_town2345_uniform.hdf5'
   trainset-name: 'training_set'
-  validset-file: 'noisy_towns1.hdf5'
+  validset-file: 'noisy_town1_uniform.hdf5'
   validset-name: 'validation_set'
 
 curriculum:
@@ -63,7 +63,7 @@ curriculum:
   strategy-parameter: 0.66
 
 resume:
-  flag: true
+  flag: false
   tag: 'resume'
   resume-optimizer-state: true
   starting-epoch: 12
