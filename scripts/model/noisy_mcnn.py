@@ -108,14 +108,15 @@ class LatentFeatureMatcher(nn.Module):
         # feature matching network
         self.feature_matcher = nn.Sequential(
             nn.Conv2d(input_ch * 2, input_ch, kernel_size=10, stride=2, groups=input_ch, bias=False),
-            # nn.InstanceNorm2d(input_ch),
-            nn.ReLU(True),
-            nn.Conv2d(input_ch, input_ch, kernel_size=10, stride=2, bias=False),
-            # nn.InstanceNorm2d(input_ch),
-            nn.ReLU(True),
+            nn.PReLU(),
             nn.Conv2d(input_ch, input_ch // 2, kernel_size=5, stride=2, bias=False),
-            # nn.InstanceNorm2d(input_ch // 2),
-            nn.ReLU(True),
+            nn.PReLU(),
+            nn.Conv2d(input_ch // 2, input_ch // 4, kernel_size=5, stride=1, bias=False),
+            nn.PReLU(),
+            nn.Conv2d(input_ch // 4, input_ch // 8, kernel_size=3, stride=2, bias=False),
+            nn.PReLU(),
+            nn.Conv2d(input_ch // 8, input_ch // 16, kernel_size=3, stride=1, bias=False),
+            nn.PReLU()
         )
         output_h, output_w = calculate_conv2d_sequence_output_size(input_h, input_w, self.feature_matcher)
         self.linear = nn.Sequential(
@@ -145,11 +146,20 @@ class LatentFeatureMatcher(nn.Module):
         rep_feat_x = feat_x.unsqueeze(0).repeat(agent_count, 1, 1, 1)
         # interleaved: A x 2C x 80 x 108
         x = torch.stack((rep_feat_x, feat_y), dim=2).view(agent_count, channels * 2, feat_h, feat_w)
-        x = self.feature_matcher(x)
-        # flatten features and pass through linear layer
-        x = self.linear(torch.mean(x, dim=1).view(agent_count, -1))
+        # testing interleaved features
+        # for i in range(agent_count):
+        #     for c in range(128):
+        #         if (x[i, c * 2] == feat_x[c]).unique() != torch.tensor([True], device=x.device):
+        #             import pdb; pdb.set_trace()
+        # for i in range(agent_count):
+        #     for c in range(128):
+        #         if (x[i, c * 2  + 1] == feat_y[i, c]).unique() != torch.tensor([True], device=x.device):
+        #             import pdb; pdb.set_trace()
+        # A x 3 (for x, y and theta)
+        x = self.feature_matcher(x).mean(dim=(1, 3))
         # get lie_so3 transform
         self.estimated_noise[agent_index] = self.lie_so3(x)
+        import pdb; pdb.set_trace()
         # return self.estimated_noise[agent_index]
 
 def calculate_conv2d_output_size(fsize_h, fsize_w, kernel_size_h, kernel_size_w,
