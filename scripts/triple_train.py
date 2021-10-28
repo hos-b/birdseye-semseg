@@ -138,7 +138,7 @@ def train(**kwargs):
                 'misc/epoch': ep + 1
             })
         print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
-              f'{(total_train_s_loss / sample_count)} segmentation'
+              f'{(total_train_s_loss / sample_count)} segmentation '
               f'{(total_train_t_loss / sample_count)} transform')
         # validation ---------------------------------------------------------------------------
         model.eval()
