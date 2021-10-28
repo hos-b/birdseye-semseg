@@ -118,14 +118,6 @@ class LatentFeatureMatcher(nn.Module):
             nn.Conv2d(input_ch // 8, input_ch // 16, kernel_size=3, stride=1, bias=False),
             nn.PReLU()
         )
-        output_h, output_w = calculate_conv2d_sequence_output_size(input_h, input_w, self.feature_matcher)
-        self.linear = nn.Sequential(
-            nn.Linear(output_h * output_w, 256),
-            nn.ReLU(),
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 3),
-        )
         self.lie_so3 = LieSE3()
         self.estimated_noise = None
         self.estimated = False
@@ -159,7 +151,6 @@ class LatentFeatureMatcher(nn.Module):
         x = self.feature_matcher(x).mean(dim=(1, 3))
         # get lie_so3 transform
         self.estimated_noise[agent_index] = self.lie_so3(x)
-        import pdb; pdb.set_trace()
         # return self.estimated_noise[agent_index]
 
 def calculate_conv2d_output_size(fsize_h, fsize_w, kernel_size_h, kernel_size_w,
