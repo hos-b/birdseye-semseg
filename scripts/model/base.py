@@ -288,7 +288,7 @@ class AggrSemanticsSoloMask(nn.Module):
 
 class SoloAggrSemanticsMask(nn.Module):
     """
-    base class for networs that predict solo & aggregated masks semantics.
+    base class for networs that predict solo & aggregated masks and semantics.
     implements methods for evaluation. must not be used as baseline.
     """
     def __init__(self):

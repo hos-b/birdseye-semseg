@@ -3,7 +3,7 @@ from model.noisy_mcnn import NoisyMCNNT3x
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
 from model.graph_bevnet import GraphBEVNet
 from model.dual_mcnn import DualTransposedMCNN4x, DualTransposedMCNN3x, DualMCNNT3Expansive, DualTransposedMCNN2x
-
+from model.dual_mcnn import DualTransposedMCNN3x_1x, DualTransposedMCNN3x_1xPost
 
 def get_model(model_name: str, *args):
     """
@@ -30,6 +30,10 @@ def get_model(model_name: str, *args):
         return DualTransposedMCNN2x(*args)
     elif model_name == 'mcnnT3x':
         return DualTransposedMCNN3x(*args)
+    elif model_name == 'mcnnT3x1x':
+        return DualTransposedMCNN3x_1x(*args)
+    elif model_name == 'mcnnT3x1xPost':
+        return DualTransposedMCNN3x_1xPost(*args)
     elif model_name == 'mcnnT3xE':
         return DualMCNNT3Expansive(*args)
     elif model_name == 'mcnnT4x':

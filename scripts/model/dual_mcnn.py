@@ -172,6 +172,87 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
         return aggregated_features
 
 
+class DualTransposedMCNN3x_1x(DualTransposedMCNN3x):
+    """
+    DualTransposedMCNN3x but with a single aggregation step, no post-processing
+    for evaluation purposes
+    """
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.sseg_mcnn.learning_to_downsample(rgbs)
+        # B, 128, 80, 108
+        sseg_x = self.sseg_mcnn.global_feature_extractor(shared)
+        mask_x = self.mask_feature_extractor(shared)
+        # B, 128, 80, 108
+        sseg_x = self.sseg_mcnn.feature_fusion(shared, sseg_x)
+        mask_x = self.mask_feature_fusion(shared, mask_x)
+        # add ego car masks
+        sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        # B, 128, 80, 108
+        # 2 stage message passing for semantics
+        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix,
+                                              self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
+                                              self.sem_center_x, self.sem_center_y)
+        # solo mask estimation
+        # B, 1, 80, 108
+        solo_mask_x = torch.sigmoid(self.mask_classifier(mask_x))
+        # B, 1, 256, 205
+        solo_mask_x = F.interpolate(solo_mask_x, self.output_size, mode='bilinear', align_corners=True)
+        # mask aggregation on full size
+        # B, 1, 256, 205
+        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix,
+                                              self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
+                                              self.msk_center_x, self.msk_center_y)
+        aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
+        # B, 7, 256, 205
+        solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
+
+
+class DualTransposedMCNN3x_1xPost(DualTransposedMCNN3x):
+    """
+    DualTransposedMCNN3x but with a single aggregation step + post-processing
+    for evaluation purposes
+    """
+    def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
+        # B, 3, 480, 640: input size
+        # B, 64, 80, 108
+        shared = self.sseg_mcnn.learning_to_downsample(rgbs)
+        # B, 128, 80, 108
+        sseg_x = self.sseg_mcnn.global_feature_extractor(shared)
+        mask_x = self.mask_feature_extractor(shared)
+        # B, 128, 80, 108
+        sseg_x = self.sseg_mcnn.feature_fusion(shared, sseg_x)
+        mask_x = self.mask_feature_fusion(shared, mask_x)
+        # add ego car masks
+        sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        # B, 128, 80, 108
+        # 2 stage message passing for semantics
+        aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix,
+                                              self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
+                                              self.sem_center_x, self.sem_center_y)
+        aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
+        # solo mask estimation
+        # B, 1, 80, 108
+        solo_mask_x = torch.sigmoid(self.mask_classifier(mask_x))
+        # B, 1, 256, 205
+        solo_mask_x = F.interpolate(solo_mask_x, self.output_size, mode='bilinear', align_corners=True)
+        # mask aggregation on full size
+        # B, 1, 256, 205
+        aggr_mask_x = self.aggregate_features(solo_mask_x.detach(), transforms, adjacency_matrix,
+                                              self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
+                                              self.msk_center_x, self.msk_center_y)
+        aggr_mask_x = torch.sigmoid(self.mask_aggr_conv(aggr_mask_x))
+        # B, 7, 256, 205
+        solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
+        return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
+
+
 class DualMCNNT3Expansive(DualTransposedMCNN3x):
     """
     aggregation in output size to save details.
