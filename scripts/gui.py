@@ -480,7 +480,7 @@ def main():
         try:
             model.load_state_dict(torch.load(snapshot_path))
         except:
-            print(f'{eval_cfg.model_names[i]} implementation is incompatible with {eval_cfg.runs}')
+            print(f'{eval_cfg.model_names[i]} implementation is incompatible with {eval_cfg.runs[i]}')
             exit()
         gui.add_network(model, eval_cfg.runs[i], eval_cfg.model_gnn_flags[i])
     # evaluate the added networks --------------------------------------------------------------------------
