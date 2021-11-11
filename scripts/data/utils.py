@@ -58,6 +58,33 @@ def get_noisy_transforms(transforms: torch.Tensor, dx_std, dy_std, th_std) -> to
     se2_noise[:, 3, 3] = 1
     return transforms @ se2_noise
 
+def get_se2_noise_transforms(batch_size, device, dx_std, dy_std, th_std) -> torch.Tensor:
+    """
+    returns a batch_size x batch_size x 4 x 4 tensor of SE2 noise
+    the ego-transforms are the identity.
+    """
+    bs_sq = batch_size * batch_size
+    se2_noise = torch.zeros((bs_sq, 4, 4), dtype=torch.float32, device=device)
+    if th_std != 0.0:
+        rand_t = torch.normal(mean=0.0, std=th_std, size=(bs_sq,)) * (np.pi / 180.0)
+        se2_noise[:, 0, 0] = torch.cos(rand_t)
+        se2_noise[:, 0, 1] = -torch.sin(rand_t)
+        se2_noise[:, 1, 0] = torch.sin(rand_t)
+        se2_noise[:, 1, 1] = torch.cos(rand_t)
+    else:
+        se2_noise[:, 0, 0] = 1
+        se2_noise[:, 1, 1] = 1
+    if dx_std != 0.0:
+        se2_noise[:, 0, 3] = torch.normal(mean=0.0, std=dx_std, size=(bs_sq,))
+    if dy_std != 0.0:
+        se2_noise[:, 1, 3] = torch.normal(mean=0.0, std=dy_std, size=(bs_sq,))
+    se2_noise[:, 2, 2] = 1
+    se2_noise[:, 3, 3] = 1
+    # set the diagonal to eye
+    indices = [i + (i * batch_size) for i in range(batch_size)]
+    se2_noise[indices] = torch.eye(4, dtype=torch.float32, device=device)
+    return se2_noise.reshape((batch_size, batch_size, 4, 4))
+
 def get_relative_noise(gt_transforms: torch.Tensor, noisy_transforms: torch.Tensor) -> torch.Tensor:
     """
     return the relative noise of the noisy transforms compared to the gt transforms
