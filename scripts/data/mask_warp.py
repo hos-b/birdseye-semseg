@@ -60,8 +60,8 @@ def get_single_relative_img_transform(transforms: torch.Tensor, agent_id, pixels
     # top-left corner transform -> center transform + conversion from meters to pixels
     return get_centered_img_transforms(rel_2d_tf, pixels_per_meter, center_x, center_y, omit_last_row)
 
-def get_rectified_single_relative_img_transform(transforms: torch.Tensor, estimated_noise, agent_id,
-                                                pixels_per_meter, center_x, center_y, omit_last_row=True) -> torch.Tensor:
+def get_modified_single_relative_img_transform(transforms: torch.Tensor, mod: torch.Tensor, agent_id,
+                                               pixels_per_meter, center_x, center_y, omit_last_row=True) -> torch.Tensor:
     """
     input: 
         - tensor of shape A x 4 x 4, transforms of agents w.r.t. origin
@@ -79,7 +79,7 @@ def get_rectified_single_relative_img_transform(transforms: torch.Tensor, estima
     assert transforms.shape[1:3] == torch.Size([4, 4]), f"transforms should be 4x4 but they're {transforms.shape[1:3]}"
     agent_count = transforms.shape[0]
     # 3D transforms w.r.t. origin -> 3D transforms w.r.t. one agent
-    rel_3d_tf = (transforms[agent_id].inverse() @ transforms) @ estimated_noise
+    rel_3d_tf = (transforms[agent_id].inverse() @ transforms) @ mod
     # 3D relative transforms -> 2D relative transforms
     rel_2d_tf = torch.eye(3).unsqueeze(0).repeat(agent_count, 1, 1)
     # copying over the translation
