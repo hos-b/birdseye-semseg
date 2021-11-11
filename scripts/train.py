@@ -55,12 +55,12 @@ def train(**kwargs):
         # training
         model.train()
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
-            sample_count += rgbs.shape[1]
             rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
                                                         fov_masks, car_transforms)
             # simulate connection drops
             rgbs, labels, car_masks, fov_masks, car_transforms = drop_agent_data(train_cfg.drop_prob,
                                                         rgbs, labels, car_masks, fov_masks, car_transforms)
+            sample_count += rgbs.shape[0]
             solo_masks = car_masks + fov_masks
             agent_pool.generate_connection_strategy(solo_masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],

@@ -102,11 +102,11 @@ def train(**kwargs):
             if (batch_idx + 1) % train_cfg.log_every == 0:
                 print(f'\repoch: {ep + 1}/{epochs}, '
                     f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
-            sample_count += rgbs.shape[1]
             rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
                                                                         fov_masks, car_transforms)
             rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
                                                                         fov_masks, car_transforms)
+            sample_count += rgbs.shape[0]
             solo_masks = car_masks + fov_masks
             agent_pool.generate_connection_strategy(solo_masks, car_transforms,
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
