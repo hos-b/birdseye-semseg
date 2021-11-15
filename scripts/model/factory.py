@@ -33,7 +33,7 @@ def get_model(model_name: str, *args):
     elif model_name == 'mcnnT3x1x':
         return DualTransposedMCNN3x_1x(*args)
     elif model_name == 'mcnnT3xFlat':
-        return DualTransposedMCNN3x_1x(*args)
+        return DualTransposedMCNN3xFlatMasking(*args)
     elif model_name == 'mcnnT3x1xPost':
         return DualTransposedMCNN3x_1xPost(*args)
     elif model_name == 'mcnnT3xE':
