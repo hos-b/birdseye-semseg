@@ -3,7 +3,7 @@ import torch
 import kornia
 from torch import nn
 import torch.nn.functional as F
-from data.mask_warp import get_single_relative_img_transform, get_rectified_single_relative_img_transform
+from data.mask_warp import get_single_relative_img_transform, get_modified_single_relative_img_transform
 from data.config import SemanticCloudConfig
 from model.dual_mcnn import DualTransposedMCNN3x
 from model.modules.lie_so3.lie_so3_m import LieSE3
@@ -83,7 +83,7 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
                     noisy_warped_features = kornia.warp_affine(x, noisy_relative_img_tfs, dsize=(cf_h, cf_w), mode=self.aggregation_type)
                     self.feat_matching_net(noisy_warped_features[i], noisy_warped_features, i)
                 # rectfiy the transform using estimated noise and warp (from scratch)
-                relative_img_tfs = get_rectified_single_relative_img_transform(transforms, self.feat_matching_net.estimated_noise[i],
+                relative_img_tfs = get_modified_single_relative_img_transform(transforms, self.feat_matching_net.estimated_noise[i],
                                                                                i, ppm, center_x, center_y).to(transforms.device)
                 warped_features = kornia.warp_affine(x, relative_img_tfs, dsize=(cf_h, cf_w), mode=self.aggregation_type)
             else:
