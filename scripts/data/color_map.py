@@ -1,6 +1,6 @@
-import numpy as np
+import cv2
 import torch
-
+import numpy as np
 
 # Semantic IDs to RGB -------------------------------------------------------------
 __carla_to_rgb_palette = {
@@ -216,3 +216,36 @@ def convert_semantics_to_rgb(semantic_ids : torch.Tensor, semantic_classes: str)
     else:
         raise NotImplementedError(f'unknown semantic classes {semantic_classes}')
     return semantic_rgb
+
+def visualize_tensor_channels(tensor: torch.Tensor, channels_per_row: int,
+                              seperator_width: int, path: str, border_color = (127, 127, 127)):
+    """
+    plot the tensor channels in a grid and save it to a file
+    """
+    assert len(tensor.shape) == 3, f'expected CxHxW, got {tensor.shape}'
+    row_count = int(np.ceil(tensor.shape[0] / channels_per_row))
+    vsep = tensor.shape[1]
+    hsep = (tensor.shape[2] + seperator_width) * channels_per_row + seperator_width
+    all_rows = []
+    all_rows.append(np.zeros((seperator_width, hsep, 3), dtype=np.uint8))
+    all_rows[-1][:] = border_color
+    for i in range(row_count):
+        current_row = []
+        current_row.append(np.zeros((vsep, seperator_width, 3), dtype=np.uint8))
+        current_row[-1][:] = border_color
+        for j in range(channels_per_row):
+            channel = tensor[i * channels_per_row + j]
+            # normalize channel to 0-255
+            channel = (((channel - channel.min()) / (channel.max() - channel.min())) * 255).cpu().numpy().astype(np.uint8)
+            channel = cv2.cvtColor(channel, cv2.COLOR_GRAY2RGB)
+            current_row.append(channel)
+            current_row.append(np.zeros((vsep, seperator_width, 3), dtype=np.uint8))
+            current_row[-1][:] = border_color
+        # import pdb; pdb.set_trace()
+        all_rows.append(np.concatenate(current_row, axis=1))
+        all_rows.append(np.zeros((seperator_width, hsep, 3), dtype=np.uint8))
+        all_rows[-1][:] = border_color
+
+    full_image = np.concatenate(all_rows, axis=0)
+    cv2.imwrite(path, full_image)
+            
