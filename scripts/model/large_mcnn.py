@@ -8,10 +8,10 @@ import kornia
 
 from data.config import SemanticCloudConfig
 from data.mask_warp import get_single_relative_img_transform
+from model.base import DoubleSemantic
 
 
-
-class TransposedMCNN(nn.Module):
+class TransposedMCNN(DoubleSemantic):
     """
     large and wide MCNN with extra deconv layers in the segmentation decoder
     """
@@ -127,7 +127,7 @@ class ExtendedMCNNT(TransposedMCNN):
         self.model_type = 'semantic-only'
         self.notes = 'small, fast'
     
-    def forward(self, x, transforms, adjacency_matrix, car_masks):
+    def forward(self, x, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(x)
@@ -166,7 +166,7 @@ class ExtendedMCNNT2xAggr(TransposedMCNN):
         self.model_type = 'semantic-only'
         self.notes = 'small, fast i hope'
     
-    def forward(self, x, transforms, adjacency_matrix, car_masks):
+    def forward(self, x, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.learning_to_downsample(x)

@@ -457,6 +457,10 @@ def main():
         segmentation_classes = color_map.__our_classes_plus_mask
     elif eval_cfg.classes == 'diminished':
         segmentation_classes = color_map.__diminished_classes
+    elif eval_cfg.classes == 'diminished+mask':
+        segmentation_classes = color_map.__diminished_classes_plus_mask
+    else:
+        raise ValueError('Unknown class set')
     gui = SampleWindow(eval_cfg, segmentation_classes, device, NEW_SIZE, CENTER, PPM)
     # dataloader stuff -------------------------------------------------------------------------------------
     test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
