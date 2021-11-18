@@ -144,7 +144,7 @@ class ExtendedMCNNT(TransposedMCNN):
         aggr_x = F.interpolate(self.classifier(aggr_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_x, aggr_x
 
-class ExtendedMCNNT2xAggr(TransposedMCNN):
+class ExtendedMCNNTDoubleAggr(TransposedMCNN):
     """
     Transposed MCNN with extra layers for the graph decoder. global feature extractor is enlarged.
     """
