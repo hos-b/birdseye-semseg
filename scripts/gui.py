@@ -361,13 +361,17 @@ class SampleWindow:
         ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), self.semantic_classes)
         self.visualized_data['target_semantics'] = ss_gt_img.copy()
         if self.show_masks:
+            # import pdb; pdb.set_trace()
             aggr_gt_mask = get_single_adjacent_aggregate_mask(
                 car_masks + fov_masks, car_transforms, self.agent_index, self.ppm,
                 self.output_h, self.output_w, self.center_x, self.center_y,
                 self.adjacency_matrix, True
             ).cpu().numpy()
             self.visualized_data['target_aggregated_mask'] = aggr_gt_mask
-            ss_gt_img[aggr_gt_mask == 0, :] = 0
+            if self.eval_cfg.transparent_masks:
+                ss_gt_img[aggr_gt_mask == 0, :] = ss_gt_img[aggr_gt_mask == 0, :] / 1.5
+            else:
+                ss_gt_img[aggr_gt_mask == 0, :] = 0
             self.visualized_data['masked_target_semantics'] = ss_gt_img
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
 
@@ -421,7 +425,10 @@ class SampleWindow:
             self.visualized_data[name]['solo_mask'] = solo_mask_pred.numpy()
             self.visualized_data[name]['aggregated_mask'] = aggr_mask_pred.numpy()
             if self.show_masks:
-                solo_sseg_pred_img[solo_mask_pred == 0, :] = 0
+                if self.eval_cfg.transparent_masks:
+                    solo_sseg_pred_img[solo_mask_pred == 0, :] = solo_sseg_pred_img[solo_mask_pred == 0, :] / 1.5
+                else:
+                    solo_sseg_pred_img[solo_mask_pred == 0, :] = 0
                 self.visualized_data[name]['masked_solo_semantics'] = solo_sseg_pred_img
             solo_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(solo_sseg_pred_img), 'RGB')
             # >>> masked predicted semseg w/o external influence
@@ -432,7 +439,10 @@ class SampleWindow:
                                                           self.semantic_classes)
             self.visualized_data[name]['aggregated_semantics'] = aggr_sseg_pred_img.copy()
             if self.show_masks:
-                aggr_sseg_pred_img[aggr_mask_pred == 0, :] = 0
+                if self.eval_cfg.transparent_masks and self.graph_flags[name]:
+                    aggr_sseg_pred_img[aggr_mask_pred == 0, :] = aggr_sseg_pred_img[aggr_mask_pred == 0, :] / 1.5
+                else:
+                    aggr_sseg_pred_img[aggr_mask_pred == 0, :] = 0
                 self.visualized_data[name]['masked_aggregated_semantics'] = aggr_sseg_pred_img
             aggr_sseg_pred_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(aggr_sseg_pred_img), 'RGB')
             exec(f"self.aggr_pred_panel_{i}.configure(image=aggr_sseg_pred_tk)")

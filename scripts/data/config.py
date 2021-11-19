@@ -263,6 +263,7 @@ class EvaluationConfig:
         self.mask_thresh = float(conf['gui']['mask-threshold'])
         self.sample_save_dir = str(conf['gui']['sample-save-dir'])
         self.full_metrics_save_dir = str(conf['gui']['full-metrics-save-dir'])
+        self.transparent_masks = bool(conf['gui']['transparent-masks'])
         # noise parameters
         self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
         self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
