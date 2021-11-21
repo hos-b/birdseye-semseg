@@ -249,3 +249,12 @@ def visualize_tensor_channels(tensor: torch.Tensor, channels_per_row: int,
     full_image = np.concatenate(all_rows, axis=0)
     cv2.imwrite(path, full_image)
             
+def visualize_tensor_mean(tensor: torch.Tensor, path: str):
+    """
+    compute the tensor mean and visualize it
+    """
+    assert len(tensor.shape) == 3, f'expected CxHxW, got {tensor.shape}'
+    mean = tensor.mean(dim=0).cpu().numpy()
+    # normalize channel to 0-255
+    mean = (((mean - mean.min()) / (mean.max() - mean.min())) * 255).astype(np.uint8)
+    cv2.imwrite(path, mean)
