@@ -76,7 +76,6 @@ class DualTransposedMCNN4x(SoloAggrSemanticsMask):
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
 
-
 class DualTransposedMCNN3x(SoloAggrSemanticsMask):
     """
     two MCNNTs, one for mask, other for semantics. outputs solo & aggr versions of both.
@@ -210,7 +209,6 @@ class DualTransposedMCNN3x_1x(DualTransposedMCNN3x):
         solo_sseg_x = F.interpolate(self.sseg_mcnn.classifier(     sseg_x), self.output_size, mode='bilinear', align_corners=True)
         aggr_sseg_x = F.interpolate(self.sseg_mcnn.classifier(aggr_sseg_x), self.output_size, mode='bilinear', align_corners=True)
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
-
 
 class DualTransposedMCNN3x_1xPost(DualTransposedMCNN3x):
     """
@@ -364,7 +362,6 @@ class DualMCNNT3Expansive(DualTransposedMCNN3x):
             warped_features[outside_fov] = 0
             aggregated_features[i] = warped_features.sum(dim=0)
         return aggregated_features
-
 
 class DualTransposedMCNN2x(AggrSemanticsSoloMask):
     """
