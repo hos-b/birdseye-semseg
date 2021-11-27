@@ -1,5 +1,5 @@
 logging:
-  name: 'mcnnT3x-slim64-ce-0.1-0noise-unidata'
+  name: 'mcnnT3x-slim32-ce-0.1-0noise-unidata'
   group: 'advanced'
   log-dir: './log'
   log-every: 10 # batch
@@ -13,17 +13,18 @@ training:
 
 # currently only tackled in mcnnT3xNoisy
 se2-noise:
-  enable: false
+  enable: true
   se2-noise-theta-std: 4.0 # degrees
   se2-noise-dx-std: 0.6    # meters
   se2-noise-dy-std: 0.6    # meters
 
 network:
-  model-name: 'slimcnnT3x64'
+  model-name: 'slimcnnT3x32'
+  extra-arg: './runs/eval/mcnnT3x-ce-0.1-uniform-math/snapshots/best_model.pth'
   aggregation-type: 'bilinear'
 
 hyperparameters:
-  learning-rate: 1e-3
+  learning-rate: 1e-4
   epochs: 500
   # probability that an agent stops transmitting
   drop-prob: 0.1

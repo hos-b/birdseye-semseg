@@ -75,6 +75,7 @@ class TrainingConfig:
             self.se2_noise_dy_std = 0.0
         # network
         self.model_name = str(conf['network']['model-name'])
+        self.aggregation_type = str(conf['network']['extra-arg'])
         self.aggregation_type = str(conf['network']['aggregation-type'])
         # curriculum config
         self.curriculum_activate = bool(conf['curriculum']['activate'])

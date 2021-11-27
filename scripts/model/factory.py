@@ -5,7 +5,7 @@ from model.dual_mcnn import DualTransposedMCNN4x, DualTransposedMCNN3x, DualMCNN
 from model.dual_mcnn import DualTransposedMCNN3x_1x, DualTransposedMCNN3x_1xPost, DualTransposedMCNN3xFlatMasking
 from model.slim_mcnn import SlimMCNNT3x
 
-def get_model(model_name: str, *args):
+def get_model(model_name: str, *args, **kwargs):
     """
     Get a model by name.
     :param model_name: Name of the model.
@@ -22,6 +22,8 @@ def get_model(model_name: str, *args):
         return ExtendedMCNNTDoubleAggr(*args)
     elif model_name == 'mcnnT3xNoisy':
         return NoisyMCNNT3x(*args)
+    elif model_name == 'mcnnT3xNoisyRT':
+        return NoisyMCNNT3x(*args, kwargs.get('mcnnt3x_path', ''))
     elif model_name == 'pyrocc':
         return PyramidOccupancyNetwork(*args)
     elif model_name == 'mcnnT2x':
@@ -34,6 +36,8 @@ def get_model(model_name: str, *args):
         return SlimMCNNT3x(*args, 32)
     elif model_name == 'slimcnnT3x16':
         return SlimMCNNT3x(*args, 16)
+    elif model_name == 'slimcnnT3x8':
+        return SlimMCNNT3x(*args, 8)
     elif model_name == 'mcnnT3x1x':
         return DualTransposedMCNN3x_1x(*args)
     elif model_name == 'mcnnT3xFlat':
