@@ -107,7 +107,7 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
     same as NoisyMCNNT3x but resumed from a checkpoint and detached, apart from the
     noise canceling network.
     """
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str, mcnnt3x_path: str, evaluation=False):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str, mcnnt3x_path: str):
         super().__init__()
         self.feat_matching_net = LatentFeatureMatcher(128, 80, 108, 0.01)
         self.mcnnt3x = DualTransposedMCNN3x(num_classes, output_size, sem_cfg, aggr_type)

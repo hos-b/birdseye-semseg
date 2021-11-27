@@ -1,5 +1,5 @@
 from model.large_mcnn import TransposedMCNN, TransposedMCNNXL, ExtendedMCNNT, ExtendedMCNNTDoubleAggr
-from model.noisy_mcnn import NoisyMCNNT3x
+from model.noisy_mcnn import NoisyMCNNT3x, NoisyMCNNT3xRT
 from model.pyrocc.pyrocc import PyramidOccupancyNetwork
 from model.dual_mcnn import DualTransposedMCNN4x, DualTransposedMCNN3x, DualMCNNT3Expansive, DualTransposedMCNN2x
 from model.dual_mcnn import DualTransposedMCNN3x_1x, DualTransposedMCNN3x_1xPost, DualTransposedMCNN3xFlatMasking
@@ -23,7 +23,7 @@ def get_model(model_name: str, *args, **kwargs):
     elif model_name == 'mcnnT3xNoisy':
         return NoisyMCNNT3x(*args)
     elif model_name == 'mcnnT3xNoisyRT':
-        return NoisyMCNNT3x(*args, kwargs.get('mcnnt3x_path', ''))
+        return NoisyMCNNT3xRT(*args, kwargs.get('mcnnt3x_path', ''))
     elif model_name == 'pyrocc':
         return PyramidOccupancyNetwork(*args)
     elif model_name == 'mcnnT2x':
