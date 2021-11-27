@@ -107,7 +107,7 @@ def train(**kwargs):
         # log train epoch loss
         if not debug_mode:
             wandb.log({
-                'loss/total train sseg': total_train_t_loss / sample_count,
+                'loss/total train trns': total_train_t_loss / sample_count,
                 'misc/epoch': ep + 1
             })
         print(f'\nepoch loss: {(total_train_t_loss / sample_count)} transform')
