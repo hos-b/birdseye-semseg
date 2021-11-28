@@ -16,6 +16,7 @@ from data.utils import squeeze_all, to_device
 from data.utils import get_noisy_transforms, get_relative_noise
 from model.factory import get_model
 from metrics.iou import NetworkMetrics
+from metrics.inference_time import InferenceMetrics
 
 class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
@@ -274,7 +275,7 @@ class SampleWindow:
 
     def calculate_ious(self, dataset: MassHDF5):
         if not self.eval_cfg.evaluate_at_start:
-            print('full dataset evaluation disabled in yaml file')
+            print('iou calculation disabled in yaml file')
             return
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
@@ -315,7 +316,30 @@ class SampleWindow:
             exec(f"self.actv_noiz_iou_label_{i}.configure(text='{lines[2]}')")
 
         metrics.write_to_file('metrics.txt')
-        print('\ndone, starting gui...')
+        print('done')
+
+    def calculate_inference_time(self, dataset: MassHDF5):
+        if not self.eval_cfg.profile_at_start:
+            print('inference time profiling disabled in yaml file')
+            return
+        dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
+        total_length = len(dloader)
+        print('calculating network inference times...')
+        metrics = InferenceMetrics(self.networks, self.eval_cfg.max_agent_count)
+
+        for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
+            print(f'\r{idx + 1}/{total_length}', end='')
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
+                                                                           car_masks, fov_masks,
+                                                                           car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                                             fov_masks, car_transforms)
+            for name, network in self.networks.items():
+                metrics.update_network(name, network, rgbs, car_masks, car_transforms)
+
+        metrics.finish()
+        metrics.write_to_file('./inference.txt')
+        print('done')
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
@@ -499,7 +523,9 @@ def main():
         gui.add_network(model, eval_cfg.runs[i], eval_cfg.model_gnn_flags[i])
     # evaluate the added networks --------------------------------------------------------------------------
     gui.calculate_ious(test_set)
+    gui.calculate_inference_time(test_set)
     # start the gui ----------------------------------------------------------------------------------------
+    print('starting gui...')
     gui.start()
 
 if __name__ == '__main__':

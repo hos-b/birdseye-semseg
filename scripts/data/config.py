@@ -260,6 +260,7 @@ class EvaluationConfig:
         self.aggregation_types = list(conf['models']['aggregation-types'])
         # gui parameteres
         self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
+        self.profile_at_start = bool(conf['gui']['profile-at-start'])
         self.mask_thresh = float(conf['gui']['mask-threshold'])
         self.sample_save_dir = str(conf['gui']['sample-save-dir'])
         self.full_metrics_save_dir = str(conf['gui']['full-metrics-save-dir'])
@@ -318,6 +319,7 @@ class EvaluationConfig:
         if len(self.runs) != len(self.model_names) or len(self.runs) != len(self.model_versions) or \
            len(self.runs) != len(self.aggregation_types) or len(self.runs) != len(self.model_gnn_flags):
             print(f'sanity-check-error: model lists should have the same length.')
+            exit()
         if not os.path.exists(self.sample_save_dir):
             print(f'sanity-check-error: sample save directory {self.sample_save_dir} does not exist.')
             exit()

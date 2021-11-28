@@ -5,19 +5,36 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
-  runs: ['mcnnt2x-nodrop-ce-baseline', 'mcnnT3x-[4-.6-.6]-ce-0.1']
-  graph-networks: [false, true]
-  model-names: ['mcnnT2x', 'mcnnT3x']
-  model-versions: ['best', 'best']
-  aggregation-types: ['bilinear', 'bilinear']
+  runs: [
+         'mcnnT2x-ce-nodim-noisybaseline-unidata',
+         'mcnnT3x-ce-0.1-uniform-math',
+        ]
+  graph-networks: [
+                   false,
+                   true,
+                  ]
+  model-names: [
+                'mcnnT2x',
+                'mcnnT3x',
+               ]
+  model-versions: [
+                   'best',
+                   'best',
+                  ]
+  aggregation-types: [
+                      'bilinear',
+                      'bilinear',
+                     ]
 
 gui:
   evalutate-at-start: false
+  profile-at-start: true
   sample-save-dir: './samples'
   full-metrics-save-dir: '.'
   mask-threshold: 0.6
+  transparent-masks: True
 
-# only tackled in mcnnNoisy and onwards
+# only [unsuccessfully] tackled in mcnnT3xNoisy
 se2-noise:
   se2-noise-theta-std: 4.0 # degrees
   se2-noise-dx-std: 0.6    # meters
@@ -31,7 +48,7 @@ dataset:
   gaussian-blur-std: 0.0
   gaussian-kernel-size: 11
   dataset-dir: '/export/home/aiscar4/mass-data'
-  dataset-file: 'noisy_towns1.hdf5'
+  dataset-file: 'noisy_town1_uniform.hdf5'
   dataset-name: 'validation_set'
 
 curriculum:
