@@ -207,6 +207,59 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
         # set estimated flag to true
         self.feat_matching_net.estimated = True
         return aggregated_features
+    
+    @torch.no_grad()
+    def infer_preaggr(self, rgb, car_mask, **kwargs):
+        """
+        only used for inference profiling. output may be invalid.
+        """
+        # 1, 3, 480, 640: input size
+        # 1, 64, 80, 108
+        shared = self.mcnnt3x.sseg_mcnn.learning_to_downsample(rgb)
+        # 1, 128, 80, 108
+        sseg_x = self.mcnnt3x.sseg_mcnn.global_feature_extractor(shared)
+        mask_x = self.mcnnt3x.mask_feature_extractor(shared)
+        # 1, 128, 80, 108
+        sseg_x = self.mcnnt3x.sseg_mcnn.feature_fusion(shared, sseg_x)
+        mask_x = self.mcnnt3x.mask_feature_fusion(shared, mask_x)
+        # add ego car mask
+        sseg_x = sseg_x + F.interpolate(car_mask.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        mask_x = mask_x + F.interpolate(car_mask.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
+        # 1, 128, 80, 108
+        ego_mask = F.interpolate(torch.sigmoid(self.mcnnt3x.mask_classifier(mask_x)), self.mcnnt3x.output_size, mode='bilinear', align_corners=True)
+        # return latenlty masked features and ego mask
+        return sseg_x * mask_x, ego_mask
+
+    @torch.no_grad()
+    def infer_aggregate(self, agent_index, latent_features, ego_masks, transforms, **kwargs):
+        """
+        only used for inference profiling. output may be invalid.
+        """
+        agent_count = latent_features.shape[0]
+        # B, 128, 80, 108
+        # first message passing stage (done for all agents)
+        aggr_features = torch.zeros_like(latent_features)
+        for i in range(agent_count):
+            noisy_relative_tfs = get_single_relative_img_transform(transforms, i, self.sem_ppm, self.sem_center_x, self.sem_center_y).to(transforms.device)
+            noisy_warped_features = kornia.warp_affine(latent_features, noisy_relative_tfs, dsize=(self.sem_cf_h, self.sem_cf_w), mode=self.mcnnt3x.aggregation_type)
+            # estimate the noise
+            self.feat_matching_net(noisy_warped_features[i], noisy_warped_features, i)
+            # rewarp
+            inverted_noise = self.feat_matching_net.estimated_noise[i].inverse()
+            denoised_img_tfs = get_modified_single_relative_img_transform(transforms, inverted_noise, i, self.sem_ppm, self.sem_center_x, self.sem_center_y).to(transforms.device)
+            denoised_warped_features = kornia.warp_affine(latent_features, denoised_img_tfs, dsize=(self.sem_cf_h, self.sem_cf_w), mode=self.mcnnt3x.aggregation_type)
+            aggr_features[i] = denoised_warped_features.sum(dim=0)
+        aggr_features = self.mcnnt3x.graph_aggr_conv1(aggr_features)
+        # second message passing stage (only done for ego agent)
+        denoised_img_tfs = get_modified_single_relative_img_transform(transforms, inverted_noise, agent_index, self.sem_ppm, self.sem_center_x, self.sem_center_y).to(transforms.device)
+        warped_features = kornia.warp_affine(aggr_features, denoised_img_tfs, dsize=(self.sem_cf_h, self.sem_cf_w), mode=self.mcnnt3x.aggregation_type)
+        final_features = self.mcnnt3x.graph_aggr_conv2(warped_features.sum(dim=0).unsqueeze(0))
+        final_semantics = F.interpolate(self.mcnnt3x.sseg_mcnn.classifier(final_features), self.mcnnt3x.output_size, mode='bilinear', align_corners=True)
+        # mask aggregation on full size (only done for ego agent)
+        denoised_img_tfs = get_modified_single_relative_img_transform(transforms, inverted_noise, agent_index, self.msk_ppm, self.msk_center_x, self.msk_center_y).to(transforms.device)
+        warped_masks = kornia.warp_affine(ego_masks, denoised_img_tfs, dsize=(self.msk_cf_h, self.msk_cf_w), mode=self.mcnnt3x.aggregation_type)
+        final_mask = torch.sigmoid(self.mcnnt3x.mask_aggr_conv(warped_masks.sum(dim=0).unsqueeze(0)))
+        return final_semantics, final_mask
 
 
 class LatentFeatureMatcher(nn.Module):

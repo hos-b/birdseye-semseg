@@ -172,6 +172,9 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
 
     @torch.no_grad()
     def infer_preaggr(self, rgb, car_mask, **kwargs):
+        """
+        only used for inference profiling. output may be invalid.
+        """
         # 1, 3, 480, 640: input size
         # 1, 64, 80, 108
         shared = self.sseg_mcnn.learning_to_downsample(rgb)
@@ -191,6 +194,9 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
 
     @torch.no_grad()
     def infer_aggregate(self, agent_index, latent_features, ego_masks, transforms, **kwargs):
+        """
+        only used for inference profiling. output may be invalid.
+        """
         agent_count = latent_features.shape[0]
         # B, 128, 80, 108
         # first message passing stage (done for all agents)
@@ -203,7 +209,6 @@ class DualTransposedMCNN3x(SoloAggrSemanticsMask):
         # second message passing stage (only done for ego agent)
         relative_tfs = get_single_relative_img_transform(transforms, agent_index, self.sem_ppm, self.sem_center_x, self.sem_center_y).to(transforms.device)
         warped_features = kornia.warp_affine(aggr_features, relative_tfs, dsize=(self.sem_cf_h, self.sem_cf_w), mode=self.aggregation_type)
-        # applying the adjacency matrix (difficulty)
         final_features = self.graph_aggr_conv2(warped_features.sum(dim=0).unsqueeze(0))
         final_semantics = F.interpolate(self.sseg_mcnn.classifier(final_features), self.output_size, mode='bilinear', align_corners=True)
         # mask aggregation on full size (only done for ego agent)
@@ -503,6 +508,9 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
     
     @torch.no_grad()
     def infer_preaggr(self, rgb, car_mask, **kwargs):
+        """
+        only used for inference profiling. output may be invalid.
+        """
         # 1, 3, 480, 640: input size
         shared = self.learning_to_downsample(rgb)
         x_mask = self.mask_global_feature_extractor(shared)
@@ -525,6 +533,9 @@ class DualTransposedMCNN2x(AggrSemanticsSoloMask):
 
     @torch.no_grad()
     def infer_aggregate(self, agent_index, ego_semantics, ego_masks, transforms, **kwargs):
+        """
+        only used for inference profiling. output may be invalid.
+        """
         # hard masking
         ego_semantics *= ego_masks
         # mask aggregation
