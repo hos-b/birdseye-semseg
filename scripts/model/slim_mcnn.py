@@ -27,11 +27,11 @@ class SlimMCNNT3x(DualTransposedMCNN3x):
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         # simulate compression/decompression
-        sseg_x_comp = self.compression_encoder(sseg_x)
-        sseg_x_comp = self.compression_decoder(sseg_x_comp)
+        msg_x_comp = self.compression_encoder(mask_x * sseg_x)
+        msg_x_decomp = self.compression_decoder(msg_x_comp)
         # B, 128, 80, 108
         # 2 stage message passing for semantics
-        aggr_sseg_x = self.aggregate_compressed_features(mask_x * sseg_x, mask_x * sseg_x_comp, transforms, adjacency_matrix)
+        aggr_sseg_x = self.aggregate_compressed_features(mask_x * sseg_x, msg_x_decomp, transforms, adjacency_matrix)
         aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
         aggr_sseg_x = self.aggregate_compressed_features(aggr_sseg_x, aggr_sseg_x, transforms, adjacency_matrix)
         aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
