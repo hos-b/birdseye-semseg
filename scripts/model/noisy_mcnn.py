@@ -136,7 +136,6 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
 
     def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         noise_correction_en = kwargs.get('noise_correction_en', True)
-        gt_relative_noise = kwargs.get('gt_relative_noise', None)
         # B, 3, 480, 640: input size
         # B, 64, 80, 108
         shared = self.mcnnt3x.sseg_mcnn.learning_to_downsample(rgbs)
@@ -157,12 +156,12 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
         aggr_sseg_x = self.aggregate_features(mask_x * sseg_x, transforms, adjacency_matrix,
                                               self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
                                               self.sem_center_x, self.sem_center_y,
-                                              gt_relative_noise, noise_correction_en)
+                                              noise_correction_en)
         aggr_sseg_x = self.mcnnt3x.graph_aggr_conv1(aggr_sseg_x)
         aggr_sseg_x = self.aggregate_features(aggr_sseg_x, transforms, adjacency_matrix,
                                               self.sem_ppm, self.sem_cf_h, self.sem_cf_w,
                                               self.sem_center_x, self.sem_center_y,
-                                              gt_relative_noise, noise_correction_en)
+                                              noise_correction_en)
         aggr_sseg_x = self.mcnnt3x.graph_aggr_conv2(aggr_sseg_x)
         # solo mask estimation
         # B, 1, 80, 108
@@ -174,7 +173,7 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
         aggr_mask_x = self.aggregate_features(solo_mask_x, transforms, adjacency_matrix,
                                               self.msk_ppm, self.msk_cf_h, self.msk_cf_w,
                                               self.msk_center_x, self.msk_center_y,
-                                              gt_relative_noise, noise_correction_en)
+                                              noise_correction_en)
         aggr_mask_x = torch.sigmoid(self.mcnnt3x.mask_aggr_conv(aggr_mask_x))
         # B, 7, 256, 205
         solo_sseg_x = F.interpolate(self.mcnnt3x.sseg_mcnn.classifier(     sseg_x), self.mcnnt3x.output_size, mode='bilinear', align_corners=True)
@@ -182,7 +181,7 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
         return solo_sseg_x, solo_mask_x, aggr_sseg_x, aggr_mask_x
 
     def aggregate_features(self, x, transforms, adjacency_matrix, ppm, cf_h, cf_w,
-                           center_x, center_y, gt_relative_noise, noise_correction_en) -> torch.Tensor:
+                           center_x, center_y, noise_correction_en) -> torch.Tensor:
         agent_count = transforms.shape[0]
         aggregated_features = torch.zeros_like(x)
         for i in range(agent_count):
@@ -190,15 +189,15 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
             if noise_correction_en:
                 # if so2 noise is not estimated
                 if not self.feat_matching_net.estimated:
-                    noisy_img_tfs = get_modified_single_relative_img_transform(transforms, gt_relative_noise[i], i, ppm, center_x, center_y).to(transforms.device)
+                    noisy_img_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y).to(transforms.device)
                     noisy_warped_features = kornia.warp_affine(x, noisy_img_tfs, dsize=(cf_h, cf_w), mode=self.mcnnt3x.aggregation_type)
                     self.feat_matching_net(noisy_warped_features[i], noisy_warped_features, i)
+                    self.feat_matching_net.estimated_noise[i, outside_fov] = torch.eye(4, dtype=torch.float32, device=transforms.device)
                 # rectfiy the transform using estimated noise and warp (from scratch)
-                fixed_noise = gt_relative_noise[i] @ self.feat_matching_net.estimated_noise[i].inverse()
-                denoised_img_tfs = get_modified_single_relative_img_transform(transforms, fixed_noise, i, ppm, center_x, center_y).to(transforms.device)
+                denoised_img_tfs = get_modified_single_relative_img_transform(transforms, self.feat_matching_net.estimated_noise[i].inverse(), i, ppm, center_x, center_y).to(transforms.device)
                 warped_features = kornia.warp_affine(x, denoised_img_tfs, dsize=(cf_h, cf_w), mode=self.mcnnt3x.aggregation_type)
             else:
-                noisy_img_tfs = get_modified_single_relative_img_transform(transforms, gt_relative_noise[i], i, ppm, center_x, center_y).to(transforms.device)
+                noisy_img_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y).to(transforms.device)
                 warped_features = kornia.warp_affine(x, noisy_img_tfs, dsize=(cf_h, cf_w), mode=self.mcnnt3x.aggregation_type)
             # applying the adjacency matrix
             warped_features[outside_fov] = 0

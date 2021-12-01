@@ -20,7 +20,7 @@ import data.color_map as color_map
 from data.dataset import MassHDF5
 from data.logging import init_wandb
 from metrics.iou import get_iou_per_class, get_mask_iou
-from data.utils import drop_agent_data, squeeze_all
+from data.utils import drop_agent_data, get_noisy_transforms, get_transform_loss, squeeze_all
 from data.utils import get_se2_noise_transforms
 from data.utils import to_device
 from model.factory import get_model
@@ -74,10 +74,10 @@ def train(**kwargs):
             # fwd-bwd
             optimizer.zero_grad()
             # generate se2 noise
-            noise_transforms = get_se2_noise_transforms(batch_size, device,
-                                                        train_cfg.se2_noise_dx_std,
-                                                        train_cfg.se2_noise_dy_std,
-                                                        train_cfg.se2_noise_th_std)
+            noisy_transforms = get_noisy_transforms(car_transforms,
+                                                    train_cfg.se2_noise_dx_std,
+                                                    train_cfg.se2_noise_dy_std,
+                                                    train_cfg.se2_noise_th_std)
             # add mask wallhack for semantics
             if random.uniform(0, 1) < train_cfg.wallhack_prob:
                 wallhack = wallhack_mask
@@ -85,9 +85,10 @@ def train(**kwargs):
                 wallhack = torch.zeros_like(wallhack_mask, device=device)
             # forward pass
             solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks, 
-                      gt_relative_noise=noise_transforms)
-            t_loss = transform_loss(model.feat_matching_net.estimated_noise, noise_transforms)
+                model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
+            t_loss = get_transform_loss(car_transforms, noisy_transforms,
+                                        model.feat_matching_net.estimated_noise,
+                                        transform_loss)
             # backward pass
             t_loss.backward()
             batch_train_t_loss = t_loss.item()
@@ -132,15 +133,16 @@ def train(**kwargs):
                                                     PPM, NEW_SIZE[0], NEW_SIZE[1],
                                                     CENTER[0], CENTER[1])
             # generate se2 noise
-            noise_transforms = get_se2_noise_transforms(batch_size, device,
-                                                        train_cfg.se2_noise_dx_std,
-                                                        train_cfg.se2_noise_dy_std,
-                                                        train_cfg.se2_noise_th_std)
+            noisy_transforms = get_noisy_transforms(car_transforms,
+                                                    train_cfg.se2_noise_dx_std,
+                                                    train_cfg.se2_noise_dy_std,
+                                                    train_cfg.se2_noise_th_std)
             with torch.no_grad():
                 solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                    model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks,
-                          gt_relative_noise=noise_transforms)
-                total_valid_t_loss += transform_loss(model.feat_matching_net.estimated_noise, noise_transforms).item()
+                    model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
+                total_valid_t_loss += get_transform_loss(car_transforms, noisy_transforms,
+                                                         model.feat_matching_net.estimated_noise,
+                                                         transform_loss)
             sseg_ious += get_iou_per_class(aggr_sseg_preds, labels, agent_pool.combined_masks,
                                            train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(aggr_mask_preds.squeeze(1), agent_pool.combined_masks,

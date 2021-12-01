@@ -65,20 +65,19 @@ def test(**kwargs):
             # fwd-bwd
             optimizer.zero_grad()
             # add se2 noise
-            gt_transforms = car_transforms.clone()
-            noise_transforms = get_se2_noise_transforms(batch_size, device,
-                                                        train_cfg.se2_noise_dx_std,
-                                                        train_cfg.se2_noise_dy_std,
-                                                        train_cfg.se2_noise_th_std)
+            noisy_transforms = get_noisy_transforms(car_transforms,
+                                                    train_cfg.se2_noise_dx_std,
+                                                    train_cfg.se2_noise_dy_std,
+                                                    train_cfg.se2_noise_th_std)
             # forward pass
             solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks,
-                      gt_relative_noise=noise_transforms)
+                model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
             m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
                 mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
             s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) + \
                      torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
-            t_loss = transform_loss(model.feat_matching_net.estimated_noise, noise_transforms)
+            t_loss = get_transform_loss(car_transforms, noisy_transforms,
+                                        model.feat_matching_net.estimated_noise, transform_loss)
             # weighted losses
             # (0.5 * m_loss * torch.exp(-mask_loss_weight) + 0.5 * mask_loss_weight +
             #  0.5 * t_loss * torch.exp(-trns_loss_weight) + 0.5 * trns_loss_weight +
