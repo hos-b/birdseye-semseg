@@ -109,7 +109,7 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
     """
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str, mcnnt3x_path: str):
         super().__init__()
-        self.feat_matching_net = LatentFeatureMatcher(128, 80, 108, 0.01)
+        self.feat_matching_net = LatentFeatureMatcher(128, 80, 108)
         self.mcnnt3x = DualTransposedMCNN3x(num_classes, output_size, sem_cfg, aggr_type)
         # if training, load the checkpoint
         try:
@@ -267,11 +267,11 @@ class LatentFeatureMatcher(nn.Module):
     latent feature matcher takes two feature maps and
     returns their relative transform.
     """
-    def __init__(self, input_ch, input_h, input_w, rotation_scale):
+    def __init__(self, input_ch, input_h, input_w):
         super(LatentFeatureMatcher, self).__init__()
         # feature matching network
         self.feature_matcher = nn.Sequential(
-            nn.Conv2d(input_ch * 2, input_ch, kernel_size=10, stride=2, bias=False),
+            nn.Conv2d(input_ch * 2, input_ch, kernel_size=10, stride=2, groups=2, bias=False),
             nn.Conv2d(input_ch, input_ch // 2, kernel_size=5, stride=2, bias=False),
             nn.Conv2d(input_ch // 2, input_ch // 4, kernel_size=5, stride=1, bias=False),
             nn.Conv2d(input_ch // 4, input_ch // 8, kernel_size=3, stride=2, bias=False),
@@ -280,13 +280,12 @@ class LatentFeatureMatcher(nn.Module):
         )
         output_h, output_w = calculate_conv2d_sequence_output_size(input_h, input_w, self.feature_matcher)
         self.linear = nn.Sequential(
-            nn.Linear(168, 64),
+            nn.Linear((input_ch // 16) * output_h * output_w, 64),
             nn.PReLU(),
             nn.Linear(64, 8),
             nn.PReLU(),
             nn.Linear(8, 3)
         )
-        self.lie_so3 = LieSE3(translation_scale=1, rotation_scale=rotation_scale)
         self.estimated_noise = None
         self.estimated = False
     
@@ -297,53 +296,37 @@ class LatentFeatureMatcher(nn.Module):
         self.estimated_noise = torch.zeros(size=(agent_count, agent_count, 4, 4),
                                            dtype=torch.float32,
                                            device=device)
-    
+
     def forward(self, feat_x, feat_y, agent_index):
+        """
+        # channel wise interleaving can be checked with the following code
+            for i in range(agent_count):
+                for c in range(128):
+                    if (x[i, c * 2] == feat_x[c]).unique() != torch.tensor([True], device=x.device):
+                        import pdb; pdb.set_trace()
+            for i in range(agent_count):
+                for c in range(128):
+                    if (x[i, c * 2  + 1] == feat_y[i, c]).unique() != torch.tensor([True], device=x.device):
+                        import pdb; pdb.set_trace()
+        """
         # feat_x: C x 80 x 108
         # feat_y: A x C x 80 x 108
-        for i in range(feat_y.shape[0]):
-            x = torch.cat((feat_x, feat_y[i]), dim=0).unsqueeze(0)
-            x = self.linear(self.feature_matcher(x).reshape(1, -1)).squeeze()
-            tf = torch.eye(4, dtype=torch.float32, device=feat_x.device)
-            angle = torch.tanh(x[0]) * math.pi
-            tf[0, 0] =  torch.cos(angle)
-            tf[0, 1] = -torch.sin(angle)
-            tf[1, 0] =  torch.sin(angle)
-            tf[1, 1] =  torch.cos(angle)
-            tf[0, 3] = x[1]
-            tf[1, 3] = x[2]
-            self.estimated_noise[agent_index, i] = tf
+        agent_count, channels, feat_h, feat_w = feat_y.shape
+        # rep_feat_x: A x C x 80 x 108
+        rep_feat_x = feat_x.unsqueeze(0).repeat(agent_count, 1, 1, 1)
+        # interleaved: A x 2C x 80 x 108
+        x = torch.stack((rep_feat_x, feat_y), dim=2).view(agent_count, channels * 2, feat_h, feat_w)
+        x = self.linear(self.feature_matcher(x).flatten(1, -1)).squeeze()
+        tf = torch.eye(4, dtype=torch.float32, device=feat_x.device).unsqueeze(0).repeat(agent_count, 1, 1)
+        angles = torch.tanh(x[:, 0]) * math.pi
+        tf[:, 0, 0] =  torch.cos(angles)
+        tf[:, 0, 1] = -torch.sin(angles)
+        tf[:, 1, 0] =  torch.sin(angles)
+        tf[:, 1, 1] =  torch.cos(angles)
+        tf[:, 0, 3] = x[:, 1]
+        tf[:, 1, 3] = x[:, 2]
+        self.estimated_noise[agent_index] = tf
 
-    # def forward(self, feat_x, feat_y, agent_index):
-    #     # feat_x: C x 80 x 108
-    #     # feat_y: A x C x 80 x 108
-    #     for i in range(feat_y.shape[0]):
-    #         x = torch.cat((feat_x, feat_y[i]), dim=0).unsqueeze(0)
-    #         x = self.feature_matcher(x).mean(dim=(1, 3))
-    #         self.estimated_noise[agent_index, i] = self.lie_so3(x)
-
-    # def forward(self, feat_x, feat_y, agent_index):
-    #     # feat_x: C x 80 x 108
-    #     # feat_y: A x C x 80 x 108
-    #     agent_count, channels, feat_h, feat_w = feat_y.shape
-    #     # rep_feat_x: A x C x 80 x 108
-    #     rep_feat_x = feat_x.unsqueeze(0).repeat(agent_count, 1, 1, 1)
-    #     # interleaved: A x 2C x 80 x 108
-    #     x = torch.stack((rep_feat_x, feat_y), dim=2).view(agent_count, channels * 2, feat_h, feat_w)
-    #     # testing interleaved features
-    #     # for i in range(agent_count):
-    #     #     for c in range(128):
-    #     #         if (x[i, c * 2] == feat_x[c]).unique() != torch.tensor([True], device=x.device):
-    #     #             import pdb; pdb.set_trace()
-    #     # for i in range(agent_count):
-    #     #     for c in range(128):
-    #     #         if (x[i, c * 2  + 1] == feat_y[i, c]).unique() != torch.tensor([True], device=x.device):
-    #     #             import pdb; pdb.set_trace()
-    #     # A x 3 (for x, y and theta)
-    #     x = self.feature_matcher(x).mean(dim=(1, 3))
-    #     # get lie_so3 transform
-    #     self.estimated_noise[agent_index] = self.lie_so3(x)
-    #     # return self.estimated_noise[agent_index]
 
 def calculate_conv2d_output_size(fsize_h, fsize_w, kernel_size_h, kernel_size_w,
                                  padding_h, padding_w, stride_h, stride_w):
