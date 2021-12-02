@@ -314,7 +314,7 @@ class LatentFeatureMatcher(nn.Module):
         rep_feat_x = feat_x.unsqueeze(0).repeat(agent_count, 1, 1, 1)
         # interleaved: A x 2C x 80 x 108
         x = torch.stack((rep_feat_x, feat_y), dim=2).view(agent_count, channels * 2, feat_h, feat_w)
-        x = self.linear(self.feature_matcher(x).flatten(1, -1)).squeeze()
+        x = self.linear(self.feature_matcher(x).flatten(1, -1))
         tf = torch.eye(4, dtype=torch.float32, device=feat_x.device).unsqueeze(0).repeat(agent_count, 1, 1)
         angles = torch.tanh(x[:, 0]) * math.pi
         tf[:, 0, 0] =  torch.cos(angles)

@@ -133,7 +133,7 @@ def get_transform_loss(gt_transforms: torch.Tensor, noisy_transforms: torch.Tens
     for i in range(gt_transforms.shape[0]):
         outside_fov = torch.where(adjacency_matrix[i] == False)[0]
         gt_relative_tfs = gt_transforms[i].inverse() @ gt_transforms
-        estimated_relative_tfs = (noisy_transforms[i].inverse() @ noisy_transforms) @ estiamted_noise[i]
+        estimated_relative_tfs = (noisy_transforms[i].inverse() @ noisy_transforms) @ estiamted_noise[i].inverse()
         agent_loss = loss_func(estimated_relative_tfs, gt_relative_tfs).mean(dim=(1, 2))
         agent_loss[outside_fov] = 0
         t_loss += agent_loss.sum()
