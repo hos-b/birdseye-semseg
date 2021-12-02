@@ -72,12 +72,9 @@ def test(**kwargs):
             # forward pass
             solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
                 model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
-            m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
-                mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
-            s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) + \
-                     torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
             t_loss = get_transform_loss(car_transforms, noisy_transforms,
-                                        model.feat_matching_net.estimated_noise, transform_loss)
+                                        model.feat_matching_net.estimated_noise,
+                                        agent_pool.adjacency_matrix, transform_loss)
             # weighted losses
             # (0.5 * m_loss * torch.exp(-mask_loss_weight) + 0.5 * mask_loss_weight +
             #  0.5 * t_loss * torch.exp(-trns_loss_weight) + 0.5 * trns_loss_weight +
@@ -137,7 +134,7 @@ if __name__ == '__main__':
     # losses -----------------------------------------------------------------------------------
     semseg_loss = nn.CrossEntropyLoss(reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')
-    transform_loss = nn.MSELoss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='none')
     # send to gpu
     semseg_loss = semseg_loss.to(device)
     mask_loss = mask_loss.to(device)

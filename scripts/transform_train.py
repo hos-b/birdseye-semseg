@@ -88,7 +88,7 @@ def train(**kwargs):
                 model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
             t_loss = get_transform_loss(car_transforms, noisy_transforms,
                                         model.feat_matching_net.estimated_noise,
-                                        transform_loss)
+                                        agent_pool.adjacency_matrix, transform_loss)
             # backward pass
             t_loss.backward()
             batch_train_t_loss = t_loss.item()
@@ -142,7 +142,7 @@ def train(**kwargs):
                     model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
                 total_valid_t_loss += get_transform_loss(car_transforms, noisy_transforms,
                                                          model.feat_matching_net.estimated_noise,
-                                                         transform_loss)
+                                                         agent_pool.adjacency_matrix, transform_loss)
             sseg_ious += get_iou_per_class(aggr_sseg_preds, labels, agent_pool.combined_masks,
                                            train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(aggr_mask_preds.squeeze(1), agent_pool.combined_masks,
@@ -313,7 +313,7 @@ def parse_and_execute():
         torch.autograd.set_detect_anomaly(True)
         print(f'disabled logging')
     # losses -----------------------------------------------------------------------------------
-    transform_loss = nn.MSELoss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='none')
     # send to gpu
     if train_cfg.device == 'cuda':
         transform_loss = transform_loss.to(device)

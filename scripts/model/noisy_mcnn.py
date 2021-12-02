@@ -192,7 +192,6 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
                     noisy_img_tfs = get_single_relative_img_transform(transforms, i, ppm, center_x, center_y).to(transforms.device)
                     noisy_warped_features = kornia.warp_affine(x, noisy_img_tfs, dsize=(cf_h, cf_w), mode=self.mcnnt3x.aggregation_type)
                     self.feat_matching_net(noisy_warped_features[i], noisy_warped_features, i)
-                    self.feat_matching_net.estimated_noise[i, outside_fov] = torch.eye(4, dtype=torch.float32, device=transforms.device)
                 # rectfiy the transform using estimated noise and warp (from scratch)
                 denoised_img_tfs = get_modified_single_relative_img_transform(transforms, self.feat_matching_net.estimated_noise[i].inverse(), i, ppm, center_x, center_y).to(transforms.device)
                 warped_features = kornia.warp_affine(x, denoised_img_tfs, dsize=(cf_h, cf_w), mode=self.mcnnt3x.aggregation_type)
