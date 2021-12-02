@@ -258,3 +258,17 @@ def visualize_tensor_mean(tensor: torch.Tensor, path: str):
     # normalize channel to 0-255
     mean = (((mean - mean.min()) / (mean.max() - mean.min())) * 255).astype(np.uint8)
     cv2.imwrite(path, mean)
+
+def visualize_tensor_color_mean(tensor: torch.Tensor, path: str, depth = 12):
+    """
+    compute the tensor mean and visualize it
+    """
+    assert len(tensor.shape) == 3, f'expected CxHxW, got {tensor.shape}'
+    channels = tensor.shape[0]
+    mean_2 = tensor[:channels // depth].mean(dim=0).unsqueeze(dim=2).cpu().numpy()
+    mean_1 = tensor[channels // depth: (2 * channels) // depth].mean(dim=0).unsqueeze(dim=2).cpu().numpy()
+    mean_0 = tensor[(2 * channels) // depth: (3 * channels) // depth].mean(dim=0).unsqueeze(dim=2).cpu().numpy()
+    mean = np.concatenate((mean_0, mean_1, mean_2), axis=2)
+    # normalize channel to 0-255
+    mean = (((mean - mean.min()) / (mean.max() - mean.min())) * 255).astype(np.uint8)
+    cv2.imwrite(path, mean)
