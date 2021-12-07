@@ -6,10 +6,9 @@ import torch.nn.functional as F
 from data.mask_warp import get_single_relative_img_transform, get_modified_single_relative_img_transform
 from data.config import SemanticCloudConfig
 from model.dual_mcnn import DualTransposedMCNN3x
-from model.modules.lie_so3.lie_so3_m import LieSE3
-from model.base import SoloAggrSemanticsMask
+from model.base import SoloAggrSemanticsMask, NoiseEstimator
 
-class NoisyMCNNT3x(DualTransposedMCNN3x):
+class NoisyMCNNT3x(DualTransposedMCNN3x, NoiseEstimator):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super(NoisyMCNNT3x, self).__init__(num_classes, output_size, sem_cfg, aggr_type)
         self.feat_matching_net = LatentFeatureMatcher(128, 80, 108, 0.01)
@@ -102,7 +101,7 @@ class NoisyMCNNT3x(DualTransposedMCNN3x):
         self.feat_matching_net.estimated = True
         return aggregated_features
 
-class NoisyMCNNT3xRT(SoloAggrSemanticsMask):
+class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
     """
     same as NoisyMCNNT3x but resumed from a checkpoint and detached, apart from the
     noise canceling network.
@@ -284,7 +283,7 @@ class LatentFeatureMatcher(nn.Module):
             nn.PReLU(),
             nn.Linear(8, 3)
         )
-        self.estimated_noise = None
+        self.estimated_noise: torch.Tensor = None
         self.estimated = False
     
     def refresh(self, agent_count, device):
