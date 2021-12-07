@@ -5,16 +5,17 @@ torch-seed: 0
 snapshot-dir: './runs/{}/snapshots'
 
 models:
+  extra-arg: './runs/mcnnT3x-ce-0.1-uniform-math/snapshots/best_model.pth'
   runs: [
-         'mcnnT2x-ce-nodim-noisybaseline-unidata',
-         'mcnnT3x-ce-0.1-uniform-math',
+         'mcnnT3xNoisyRT-coolnoise-nodrop-mse-unidata',
+         'mcnnT3x-ce-0.1-unidata-[4-.6-.6]-2xaggr+post'
         ]
   graph-networks: [
-                   false,
+                   true,
                    true,
                   ]
   model-names: [
-                'mcnnT2x',
+                'mcnnT3xNoisyRT',
                 'mcnnT3x',
                ]
   model-versions: [
@@ -27,14 +28,15 @@ models:
                      ]
 
 gui:
-  evalutate-at-start: false
-  profile-at-start: true
+  evaluate-noise-at-start: false
+  evaluate-ious-at-start: false
+  profile-at-start: false
   sample-save-dir: './samples'
   full-metrics-save-dir: '.'
   mask-threshold: 0.6
   transparent-masks: True
 
-# only [unsuccessfully] tackled in mcnnT3xNoisy
+# only tackled in mcnnT3xNoisyRT
 se2-noise:
   se2-noise-theta-std: 4.0 # degrees
   se2-noise-dx-std: 0.6    # meters

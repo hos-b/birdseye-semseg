@@ -259,8 +259,10 @@ class EvaluationConfig:
         self.model_names = list(conf['models']['model-names'])
         self.model_versions = list(conf['models']['model-versions'])
         self.aggregation_types = list(conf['models']['aggregation-types'])
+        self.model_extra_arg = str(conf['models']['extra-arg'])
         # gui parameteres
-        self.evaluate_at_start = bool(conf['gui']['evalutate-at-start'])
+        self.evaluate_ious_at_start = bool(conf['gui']['evaluate-ious-at-start'])
+        self.evaluate_noise_at_start = bool(conf['gui']['evaluate-noise-at-start'])
         self.profile_at_start = bool(conf['gui']['profile-at-start'])
         self.mask_thresh = float(conf['gui']['mask-threshold'])
         self.sample_save_dir = str(conf['gui']['sample-save-dir'])

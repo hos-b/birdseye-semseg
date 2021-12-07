@@ -1,4 +1,5 @@
 import os
+from typing import List
 import cv2
 import torch
 import tkinter
@@ -17,6 +18,7 @@ from data.utils import get_noisy_transforms, get_relative_noise
 from model.factory import get_model
 from metrics.iou import NetworkMetrics
 from metrics.inference_time import InferenceMetrics
+from metrics.noise import NoiseMetrics
 
 class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
@@ -274,9 +276,6 @@ class SampleWindow:
         self.update_prediction(True)
 
     def calculate_ious(self, dataset: MassHDF5):
-        if not self.eval_cfg.evaluate_at_start:
-            print('iou calculation disabled in yaml file')
-            return
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
@@ -284,12 +283,12 @@ class SampleWindow:
 
         for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
             print(f'\r{idx + 1}/{total_length}', end='')
-            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
-                                                                           car_masks, fov_masks,
-                                                                           car_transforms)
-            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
-                                                                             fov_masks, car_transforms)
-
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(
+                self.device, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(
+                rgbs, labels, car_masks, fov_masks, car_transforms
+            )
 
             for name, network in self.networks.items():
                 metrics.update_network(
@@ -297,7 +296,8 @@ class SampleWindow:
                     car_masks, fov_masks, car_transforms, labels, self.ppm,
                     self.output_h, self.output_w, self.center_x, self.center_y,
                     self.eval_cfg.mask_thresh, self.eval_cfg.se2_noise_dx_std,
-                    self.eval_cfg.se2_noise_dy_std, self.eval_cfg.se2_noise_th_std)
+                    self.eval_cfg.se2_noise_dy_std, self.eval_cfg.se2_noise_th_std
+                )
 
         metrics.finish()
 
@@ -319,9 +319,6 @@ class SampleWindow:
         print('done')
 
     def calculate_inference_time(self, dataset: MassHDF5):
-        if not self.eval_cfg.profile_at_start:
-            print('inference time profiling disabled in yaml file')
-            return
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating network inference times...')
@@ -340,6 +337,43 @@ class SampleWindow:
         metrics.finish()
         metrics.write_to_file('./inference.txt')
         print('done')
+
+    def calculate_noise_cancellation(self, dataset: MassHDF5):
+        dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
+        total_length = len(dloader)
+        print('evaluating noise cancellation...')
+        metrics: List[NoiseMetrics] = []
+        for network_label, network in self.networks.items():
+            if hasattr(network, 'feat_matching_net'):
+                metrics.append(
+                    NoiseMetrics(
+                        network_label, network, self.device, self.eval_cfg.max_agent_count
+                    )
+                )
+            else:
+                print(f'{network_label} does not have a noise estimating subnet. skipping...')
+
+        for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
+            print(f'\r{idx + 1}/{total_length}', end='')
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
+                                                                           car_masks, fov_masks,
+                                                                           car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
+                                                                             fov_masks, car_transforms)
+
+            for noise_metric in metrics:
+                noise_metric.update_network(
+                    rgbs, car_masks, fov_masks, car_transforms,
+                    self.eval_cfg.se2_noise_dx_std, 
+                    self.eval_cfg.se2_noise_dy_std,
+                    self.eval_cfg.se2_noise_th_std,
+                    self.output_h, self.output_w, self.ppm,
+                    self.center_x, self.center_y
+                )
+
+        for noise_metric in metrics:
+            noise_metric.finish()
+            noise_metric.write_to_file(f'{noise_metric.label}'[:10] +'_noizeval.txt')
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
@@ -434,7 +468,7 @@ class SampleWindow:
                 estimated_noise_tf = network.feat_matching_net.estimated_noise[self.agent_index]
                 estimated_noise_params = torch.zeros((self.agent_count, 3), dtype=car_transforms.dtype,
                                                      device=car_transforms.device)
-                estimated_noise_params[:, :2] = estimated_noise_tf[:, :2, 2]
+                estimated_noise_params[:, :2] = estimated_noise_tf[:, :2, 3]
                 estimated_noise_params[:,  2] = torch.atan2(estimated_noise_tf[:, 1, 0],
                                                             estimated_noise_tf[:, 0, 0])
                 print(f'agent {self.agent_index} noise parameters in {name} ------- ')
@@ -512,8 +546,11 @@ def main():
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
             exit(-1)
-        model = get_model(eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
-                          sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        model = get_model(
+            eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
+            sem_cfg, eval_cfg.aggregation_types[i],
+            mcnnt3x_path=eval_cfg.model_extra_arg
+        ).to(device)
         print(f'loading {snapshot_path}')
         try:
             model.load_state_dict(torch.load(snapshot_path))
@@ -522,8 +559,18 @@ def main():
             exit()
         gui.add_network(model, eval_cfg.runs[i], eval_cfg.model_gnn_flags[i])
     # evaluate the added networks --------------------------------------------------------------------------
-    gui.calculate_ious(test_set)
-    gui.calculate_inference_time(test_set)
+    if eval_cfg.evaluate_ious_at_start:
+        gui.calculate_ious(test_set)
+    else:
+        print('iou calculation disabled.')
+    if eval_cfg.profile_at_start:
+        gui.calculate_inference_time(test_set)
+    else:
+        print('inference time profiling disabled.')
+    if eval_cfg.evaluate_noise_at_start:
+        gui.calculate_noise_cancellation(test_set)
+    else:
+        print('noise evaluation disabled.')
     # start the gui ----------------------------------------------------------------------------------------
     print('starting gui...')
     gui.start()
