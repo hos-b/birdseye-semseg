@@ -386,7 +386,7 @@ class SoloAggrSemanticsMask(nn.Module):
 class NoiseEstimator(ABC):
     @torch.no_grad()
     def get_batch_noise_performance(self, rgbs: torch.Tensor, car_masks: torch.Tensor, car_transforms: torch.Tensor,
-                                    gt_transforms: torch.Tensor, adjcaceny_matrix: torch.Tensor):
+                                    gt_transforms: torch.Tensor, adjacency_matrix: torch.Tensor):
         """
         returns accumulated x, y and theta  absolute error before and after noise correction.
         also returns number of estimated noise instances.
@@ -400,7 +400,7 @@ class NoiseEstimator(ABC):
         if agent_count == 1:
             return x_noise, y_noise, t_noise
         # todo consider adj mat
-        self.forward(rgbs, car_transforms, adjcaceny_matrix, car_masks, noise_correction_en=True)
+        self.forward(rgbs, car_transforms, adjacency_matrix, car_masks, noise_correction_en=True)
         for i in range(agent_count):
             # T_j w.r.t. T_i
             gt_relative_tfs = gt_transforms[i].inverse() @ gt_transforms
@@ -415,6 +415,8 @@ class NoiseEstimator(ABC):
             noise_post = gt_relative_tfs.inverse() @ corrected_relative_tfs
             noise_pre[i] = torch.eye(4)
             noise_post[i] = torch.eye(4)
+            unwanted = torch.where(adjacency_matrix[i] == False)[0].cpu().tolist()
+            unwanted.append(i)
             # get absolute noise
             xpre = torch.abs(noise_pre[:, 0, 3]).cpu().tolist()
             ypre = torch.abs(noise_pre[:, 1, 3]).cpu().tolist()
@@ -422,9 +424,10 @@ class NoiseEstimator(ABC):
             xpost = torch.abs(noise_post[:, 0, 3]).cpu().tolist()
             ypost = torch.abs(noise_post[:, 1, 3]).cpu().tolist()
             tpost = torch.abs(torch.atan2(noise_post[:, 1, 0], noise_post[:, 0, 0])).cpu().tolist()
-            # disregard ego relative transform, although used in training for robustness
-            xpre.pop(i); ypre.pop(i); tpre.pop(i)
-            xpost.pop(i); ypost.pop(i); tpost.pop(i)
+            # disregard ego (although used in training for robustness) & out-of-view rel. transforms
+            for unwanted_idx in sorted(unwanted, reverse=True):
+                xpre.pop(unwanted_idx); ypre.pop(unwanted_idx); tpre.pop(unwanted_idx)
+                xpost.pop(unwanted_idx); ypost.pop(unwanted_idx); tpost.pop(unwanted_idx)
             # discard out-of-view agents
             x_noise['pre'] += xpre
             y_noise['pre'] += ypre
