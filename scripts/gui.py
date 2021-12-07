@@ -371,9 +371,13 @@ class SampleWindow:
                     self.center_x, self.center_y
                 )
 
-        for noise_metric in metrics:
-            noise_metric.finish()
-            noise_metric.write_to_file(f'{noise_metric.label}'[:10] +'_noizeval.txt')
+        if len(metrics) > 1:
+            for noise_metric in metrics:
+                noise_metric.finish()
+                noise_metric.write_to_file(f'{noise_metric.label}'[:10] + '_noizeval.txt')
+        else:
+            metrics[0].finish()
+            metrics[0].write_to_file('noise.txt')
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
