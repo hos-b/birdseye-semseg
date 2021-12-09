@@ -38,8 +38,10 @@ class DoubleSemantic(nn.Module):
         solo_gt_masks = car_masks + fov_masks
         # use manual aggregation if used as baseline
         if not graph_network:
-            solo_sseg_preds, _ = self.forward(rgbs, car_transforms, torch.eye(agent_count),
-                                              car_masks, noise_correction_en=noise_correction_en)
+            solo_sseg_preds, _ = self.forward(
+                rgbs, car_transforms, torch.eye(agent_count, dtype=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
+            )
             final_solo_sseg_pred = solo_sseg_preds[agent_index].clone()
             # remove mask from semantic classes for aggregation
             if 'Mask' in semantic_classes.values():
@@ -87,7 +89,7 @@ class DoubleSemantic(nn.Module):
         else:
             solo_sseg_preds, aggr_sseg_preds = self.forward(
                 rgbs, car_transforms, adjacency_matrix, car_masks,
-                noise_correction_en=noise_correction_en
+                noise_correction_en=noise_correction_en, evaluation=True
             )
             final_solo_sseg_pred = solo_sseg_preds[agent_index]
             final_aggr_sseg_pred = aggr_sseg_preds[agent_index]
@@ -127,8 +129,8 @@ class DoubleSemantic(nn.Module):
         # manual aggregation for baseline network
         if not graph_network:
             solo_sseg_preds, _ = self.forward(
-                rgbs, car_transforms, torch.eye(agent_count), car_masks,
-                noise_correction_en=noise_correction_en
+                rgbs, car_transforms, torch.eye(agent_count, dtyp=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
             )
             if 'Mask' in semantic_classes.values():
                 # mask id is the last index of the label list
@@ -163,8 +165,8 @@ class DoubleSemantic(nn.Module):
         # latent aggregation for others
         else:
             _, aggr_sseg_preds = self.forward(
-                rgbs, car_transforms, torch.ones((agent_count, agent_count)), car_masks,
-                noise_correction_en=noise_correction_en
+                rgbs, car_transforms, torch.ones((agent_count, agent_count), dtype=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
             )
             # disable masking for iou calculation if not baseline & mask is a semantic class
             if 'Mask' in semantic_classes.values():
@@ -211,8 +213,8 @@ class AggrSemanticsSoloMask(nn.Module):
         # use manual aggregation if used as baseline
         if not graph_network:
             solo_sseg_preds, solo_mask_preds = self.forward(
-                rgbs, car_transforms, torch.eye(agent_count), car_masks,
-                noise_correction_en=noise_correction_en
+                rgbs, car_transforms, torch.eye(agent_count, dtype=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
             )
             final_solo_sseg_pred = solo_sseg_preds[agent_index].clone()
             final_solo_mask_pred = solo_mask_preds[agent_index].squeeze()
@@ -238,12 +240,12 @@ class AggrSemanticsSoloMask(nn.Module):
         # use latent aggregation if not used as baseline
         else:
             solo_sseg_preds, _ = self.forward(
-                rgbs, car_transforms, torch.eye(agent_count), car_masks,
-                noise_correction_en=noise_correction_en
+                rgbs, car_transforms, torch.eye(agent_count, dtype=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
             )
             aggr_sseg_preds, solo_mask_preds = self.forward(
                 rgbs, car_transforms, adjacency_matrix, car_masks,
-                noise_correction_en=noise_correction_en
+                noise_correction_en=noise_correction_en, evaluation=True
             )
             final_solo_sseg_pred = solo_sseg_preds[agent_index]
             final_aggr_sseg_pred = aggr_sseg_preds[agent_index]
@@ -278,8 +280,8 @@ class AggrSemanticsSoloMask(nn.Module):
         # manual aggregation for baseline network
         if not graph_network:
             solo_sseg_preds, solo_mask_preds = self.forward(
-                rgbs, car_transforms, torch.eye(agent_count), car_masks,
-                noise_correction_en=noise_correction_en
+                rgbs, car_transforms, torch.eye(agent_count, dtype=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
             )
             # masking of regions outside estimated FoV
             solo_sseg_preds *= solo_mask_preds
@@ -297,9 +299,8 @@ class AggrSemanticsSoloMask(nn.Module):
         # latent aggregation for others
         else:
             aggr_sseg_preds, solo_mask_preds = self.forward(
-                rgbs, car_transforms,
-                torch.ones((agent_count, agent_count)),
-                car_masks, noise_correction_en=noise_correction_en
+                rgbs, car_transforms, torch.ones((agent_count, agent_count), dtype=torch.bool),
+                car_masks, noise_correction_en=noise_correction_en, evaluation=True
             )
         # thresholding masks before (and after) aggregation
         solo_mask_preds[solo_mask_preds >= mask_detect_thresh] = 1
@@ -344,7 +345,7 @@ class SoloAggrSemanticsMask(nn.Module):
         assert graph_network, 'network not suitable as baseline. use smaller version'
         solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds =  self.forward(
             rgbs, car_transforms, adjacency_matrix, car_masks, 
-            noise_correction_en=noise_correction_en
+            noise_correction_en=noise_correction_en, evaluation=True
         )
         final_solo_sseg_pred = solo_sseg_preds[agent_index].to(device)
         final_aggr_sseg_pred = aggr_sseg_preds[agent_index].to(device)
@@ -371,7 +372,7 @@ class SoloAggrSemanticsMask(nn.Module):
         )
         _, _, aggr_sseg_preds, aggr_mask_preds = self.forward(
             rgbs, car_transforms, torch.ones((agent_count, agent_count), dtype=torch.bool),
-            car_masks, noise_correction_en=noise_correction_en
+            car_masks, noise_correction_en=noise_correction_en, evaluation=True
         )
         mask_iou  = get_mask_iou(aggr_mask_preds.squeeze(1), aggr_gt_masks, mask_detect_thresh).item()
         mskd_ious = get_iou_per_class(
@@ -382,6 +383,7 @@ class SoloAggrSemanticsMask(nn.Module):
         ).to(rgbs.device)
 
         return mskd_ious, full_ious, mask_iou
+
 
 class NoiseEstimator(ABC):
     @torch.no_grad()
@@ -400,7 +402,10 @@ class NoiseEstimator(ABC):
         if agent_count == 1:
             return x_noise, y_noise, t_noise
         # todo consider adj mat
-        self.forward(rgbs, car_transforms, adjacency_matrix, car_masks, noise_correction_en=True)
+        self.forward(
+            rgbs, car_transforms, adjacency_matrix, car_masks,
+            noise_correction_en=True, evaluation=True
+        )
         for i in range(agent_count):
             # T_j w.r.t. T_i
             gt_relative_tfs = gt_transforms[i].inverse() @ gt_transforms
