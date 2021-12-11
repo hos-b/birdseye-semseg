@@ -111,13 +111,10 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
         self.feat_matching_net = LatentFeatureMatcher(128, 80, 108)
         self.mcnnt3x = DualTransposedMCNN3x(num_classes, output_size, sem_cfg, aggr_type)
         # if training, load the checkpoint
-        try:
-            self.mcnnt3x.load_state_dict(torch.load(mcnnt3x_path))
-        except:
-            print("failed to load mcnnt3x submodel."); exit(-1)
-        for p in self.mcnnt3x.parameters():
-            p.requires_grad = False
-        print('disabled gradient calculation for mcnnt3x.')
+        if mcnnt3x_path is None:
+            print(f'warning: not explicitly loading pretrained model.')
+        else:
+            self.reload_checkpoint(mcnnt3x_path)
         # semantic aggregation parameters
         self.sem_cf_h, self.sem_cf_w = 80, 108
         self.sem_ppm = sem_cfg.pix_per_m(self.sem_cf_h, self.sem_cf_w)
@@ -132,6 +129,15 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
         self.output_count = 4
         self.model_type = 'semantic+mask'
         self.notes = 'using latent feature matching to counter noise'
+
+    def reload_checkpoint(self, mcnnt3x_path: str):
+        try:
+            self.mcnnt3x.load_state_dict(torch.load(mcnnt3x_path))
+        except:
+            print("failed to load mcnnt3x submodel."); exit(-1)
+        for p in self.mcnnt3x.parameters():
+            p.requires_grad = False
+        print('disabled gradient calculation for mcnnt3x.')
 
     def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         noise_correction_en = kwargs.get('noise_correction_en', True)
@@ -323,9 +329,12 @@ class LatentFeatureMatcher(nn.Module):
         tf[:, 1, 1] =  torch.cos(angles)
         tf[:, 0, 3] = x[:, 1]
         tf[:, 1, 3] = x[:, 2]
-        # discard ego transform during evaluation
+        # discard ego transform & non-adjacent during evaluation
         if evaluation:
             tf[agent_index] = torch.eye(4, dtype=torch.float32, device=feat_x.device)
+            for i in range(feat_y.shape[0]):
+                if feat_y[i].sum() == 0:
+                    tf[i] = torch.eye(4, dtype=torch.float32, device=feat_x.device)
         self.estimated_noise[agent_index] = tf
 
 
