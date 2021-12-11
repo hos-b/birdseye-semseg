@@ -377,7 +377,7 @@ def parse_and_execute():
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')
-    transform_loss = nn.MSELoss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='none')
     # send to gpu
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)
