@@ -106,15 +106,16 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
     same as NoisyMCNNT3x but resumed from a checkpoint and detached, apart from the
     noise canceling network.
     """
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str, mcnnt3x_path: str):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str,
+                 mcnnt3x_path: str, detach_mcnn: bool):
         super().__init__()
         self.feat_matching_net = LatentFeatureMatcher(128, 80, 108)
         self.mcnnt3x = DualTransposedMCNN3x(num_classes, output_size, sem_cfg, aggr_type)
         # if training, load the checkpoint
         if mcnnt3x_path is None:
-            print(f'warning: not explicitly loading pretrained model.')
+            print(f'warning: not loading pretrained model.')
         else:
-            self.reload_checkpoint(mcnnt3x_path)
+            self.reload_checkpoint(mcnnt3x_path, detach_mcnn)
         # semantic aggregation parameters
         self.sem_cf_h, self.sem_cf_w = 80, 108
         self.sem_ppm = sem_cfg.pix_per_m(self.sem_cf_h, self.sem_cf_w)
@@ -130,14 +131,17 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
         self.model_type = 'semantic+mask'
         self.notes = 'using latent feature matching to counter noise'
 
-    def reload_checkpoint(self, mcnnt3x_path: str):
+    def reload_checkpoint(self, mcnnt3x_path: str, detach: bool):
         try:
             self.mcnnt3x.load_state_dict(torch.load(mcnnt3x_path))
         except:
             print("failed to load mcnnt3x submodel."); exit(-1)
-        for p in self.mcnnt3x.parameters():
-            p.requires_grad = False
-        print('disabled gradient calculation for mcnnt3x.')
+        if detach:
+            for p in self.mcnnt3x.parameters():
+                p.requires_grad = False
+            print('loaded detached mcnnt3x.')
+        else:
+            print('loaded attached mcnnt3x.')
 
     def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         noise_correction_en = kwargs.get('noise_correction_en', True)

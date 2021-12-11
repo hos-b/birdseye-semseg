@@ -23,7 +23,10 @@ def get_model(model_name: str, *args, **kwargs):
     elif model_name == 'mcnnT3xNoisy':
         return NoisyMCNNT3x(*args)
     elif model_name == 'mcnnT3xNoisyRT':
-        return NoisyMCNNT3xRT(*args, kwargs.get('mcnnt3x_path', ''))
+        return NoisyMCNNT3xRT(
+        *args, kwargs.get('mcnnt3x_path', None),
+        kwargs.get('detach_mcnn', True)
+    )
     elif model_name == 'pyrocc':
         return PyramidOccupancyNetwork(*args)
     elif model_name == 'mcnnT2x':
