@@ -140,7 +140,7 @@ def train(**kwargs):
             wandb.log({
                 'loss/total train mask': total_train_m_loss / sample_count,
                 'loss/total train sseg': total_train_s_loss / sample_count,
-                'loss/total train sseg': total_train_t_loss / sample_count,
+                'loss/total train trns': total_train_t_loss / sample_count,
                 'misc/epoch': ep + 1
             })
         print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
@@ -207,7 +207,7 @@ def train(**kwargs):
                     wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
-
+        import pdb; pdb.set_trace()
         # more wandb logging -------------------------------------------------------------------
         avg_iou = 0.0
         log_dict = {}
