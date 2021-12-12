@@ -355,15 +355,22 @@ class SampleWindow:
 
         for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
             print(f'\r{idx + 1}/{total_length}', end='')
-            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
-                                                                           car_masks, fov_masks,
-                                                                           car_transforms)
-            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
-                                                                             fov_masks, car_transforms)
-
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(
+                self.device, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(
+                rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            noisy_transforms = get_noisy_transforms(
+                car_transforms,
+                self.eval_cfg.se2_noise_dx_std,
+                self.eval_cfg.se2_noise_dy_std,
+                self.eval_cfg.se2_noise_th_std
+            )
             for noise_metric in metrics:
                 noise_metric.update_network(
-                    rgbs, car_masks, fov_masks, car_transforms,
+                    rgbs, car_masks, fov_masks,
+                    car_transforms, noisy_transforms,
                     self.eval_cfg.se2_noise_dx_std, 
                     self.eval_cfg.se2_noise_dy_std,
                     self.eval_cfg.se2_noise_th_std,
