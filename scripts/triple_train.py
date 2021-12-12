@@ -178,7 +178,7 @@ def train(**kwargs):
             with torch.no_grad():
                 solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = model(
                     rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks,
-                    noise_correction_en=True, evaluation=False
+                    noise_correction_en=True, evaluation=True
                 )
                 total_valid_m_loss += (mask_loss(solo_mask_preds.squeeze(1), solo_masks) +
                                         mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)).item()
@@ -377,7 +377,7 @@ def parse_and_execute():
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')
-    transform_loss = nn.MSELoss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='none')
     # send to gpu
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)
