@@ -552,8 +552,7 @@ def main():
             exit(-1)
         model = get_model(
             eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
-            sem_cfg, eval_cfg.aggregation_types[i],
-            mcnnt3x_path=None
+            sem_cfg, eval_cfg.aggregation_types[i]
         ).to(device)
         print(f'loading {snapshot_path}')
         try:
@@ -561,8 +560,6 @@ def main():
         except:
             print(f'{eval_cfg.model_names[i]} implementation is incompatible with {eval_cfg.runs[i]}')
             exit()
-        if hasattr(model, 'reload_checkpoint'):
-            model.reload_checkpoint(eval_cfg.model_extra_arg)
         gui.add_network(model, eval_cfg.runs[i], eval_cfg.model_gnn_flags[i])
     # evaluate the added networks --------------------------------------------------------------------------
     if eval_cfg.evaluate_ious_at_start:
