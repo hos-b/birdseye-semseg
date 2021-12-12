@@ -106,16 +106,10 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
     same as NoisyMCNNT3x but resumed from a checkpoint and detached, apart from the
     noise canceling network.
     """
-    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str,
-                 mcnnt3x_path: str, detach_mcnn: bool):
+    def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str):
         super().__init__()
         self.feat_matching_net = LatentFeatureMatcher(128, 80, 108)
         self.mcnnt3x = DualTransposedMCNN3x(num_classes, output_size, sem_cfg, aggr_type)
-        # if training, load the checkpoint
-        if mcnnt3x_path is None:
-            print(f'warning: not loading pretrained model.')
-        else:
-            self.reload_checkpoint(mcnnt3x_path, detach_mcnn)
         # semantic aggregation parameters
         self.sem_cf_h, self.sem_cf_w = 80, 108
         self.sem_ppm = sem_cfg.pix_per_m(self.sem_cf_h, self.sem_cf_w)
@@ -131,7 +125,10 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
         self.model_type = 'semantic+mask'
         self.notes = 'using latent feature matching to counter noise'
 
-    def reload_checkpoint(self, mcnnt3x_path: str, detach: bool):
+    def reload_mcnnt3x_checkpoint(self, mcnnt3x_path: str, detach: bool):
+        if mcnnt3x_path == '':
+            print('warning: not loading pretrained mcnnt3x model')
+            return
         try:
             self.mcnnt3x.load_state_dict(torch.load(mcnnt3x_path))
         except:

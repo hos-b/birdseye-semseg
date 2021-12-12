@@ -267,8 +267,8 @@ def parse_and_execute():
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
     model = get_model(train_cfg.model_name, train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.aggregation_type,
-                      mcnnt3x_path=train_cfg.extra_model_arg).to(device)
+                      geom_cfg, train_cfg.aggregation_type).to(device)
+    model.reload_mcnnt3x_checkpoint(train_cfg.extra_model_arg, True)
     if not hasattr(model, 'feat_matching_net'):
         print('model does not have feature matching network'); exit()
     if model.output_count != 4:
