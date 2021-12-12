@@ -2,7 +2,6 @@ import torch
 import statistics
 from agent.agent_pool import CurriculumPool
 from data.config import SemanticCloudConfig
-from data.utils import get_noisy_transforms
 from model.base import NoiseEstimator
 
 class NoiseMetrics:
@@ -22,14 +21,9 @@ class NoiseMetrics:
         )
 
     def update_network(self, rgbs, car_masks, fov_masks, gt_transforms,
-                       noise_std_x, noise_std_y, noise_std_theta,
+                       noisy_transforms, noise_std_x, noise_std_y, noise_std_theta,
                        output_h, output_w, ppm, center_x, center_y):
 
-
-        noisy_transforms = get_noisy_transforms(gt_transforms,
-                                                noise_std_x,
-                                                noise_std_y,
-                                                noise_std_theta)
         solo_masks = car_masks + fov_masks
         self.pool.generate_connection_strategy(
             solo_masks, gt_transforms, ppm, output_h, output_w, center_x, center_y
