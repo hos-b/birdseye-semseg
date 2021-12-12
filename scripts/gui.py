@@ -316,7 +316,7 @@ class SampleWindow:
             exec(f"self.actv_noiz_iou_label_{i}.configure(text='{lines[2]}')")
 
         metrics.write_to_file('metrics.txt')
-        print('done')
+        print('\ndone')
 
     def calculate_inference_time(self, dataset: MassHDF5):
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
@@ -336,7 +336,7 @@ class SampleWindow:
 
         metrics.finish()
         metrics.write_to_file('./inference.txt')
-        print('done')
+        print('\ndone')
 
     def calculate_noise_cancellation(self, dataset: MassHDF5):
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
@@ -378,6 +378,8 @@ class SampleWindow:
         else:
             metrics[0].finish()
             metrics[0].write_to_file('noise.txt')
+
+        print('\ndone')
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
