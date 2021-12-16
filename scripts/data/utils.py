@@ -85,9 +85,15 @@ def get_se2_noise_transforms(batch_size, device, dx_std, dy_std, th_std) -> torc
     se2_noise[indices] = torch.eye(4, dtype=torch.float32, device=device)
     return se2_noise.reshape((batch_size, batch_size, 4, 4))
 
+
 def get_relative_noise(gt_transforms: torch.Tensor, noisy_transforms: torch.Tensor) -> torch.Tensor:
     """
     return the relative noise of the noisy transforms compared to the gt transforms
+    input:
+        * gt_transforms:    A x 4 x 4
+        * noisy_transforms: A x 4 x 4
+    output:
+        * relative_noise:   A x A x 3 [x, y, theta]
     """
     agent_count = gt_transforms.shape[0]
     relative_noise_params = torch.zeros((agent_count, agent_count, 3),
@@ -112,6 +118,26 @@ def get_relative_noise(gt_transforms: torch.Tensor, noisy_transforms: torch.Tens
     relative_noise_params[:, :,  2] = torch.atan2(gt_rel_2d_tf[:, :, 1, 0], gt_rel_2d_tf[:, :, 0, 0]) - \
                                       torch.atan2(nz_rel_2d_tf[:, :, 1, 0], nz_rel_2d_tf[:, :, 0, 0])
     return relative_noise_params
+
+def get_se2_diff(mat_1: torch.Tensor, mat_2: torch.Tensor):
+    """
+    input:
+        * matrix 1: A x 4 x 4
+        * matrix 2: A x 4 x 4
+    output:
+        * A x 3 [dx, dy, dtheta]
+    """
+    agent_count = mat_1.shape[0]
+    relative_diff = torch.zeros(
+        (agent_count, 3), dtype=mat_1.dtype,
+        device=mat_1.device
+    )
+    relative_diff[:, :2] = mat_1[:, :2, 3] - mat_2[:, :2, 3]
+    relative_diff[:,  2] = torch.atan2(mat_1[:, 1, 0], mat_1[:, 0, 0]) - \
+                           torch.atan2(mat_2[:, 1, 0], mat_2[:, 0, 0])
+    return relative_diff
+
+
 
 def separate_masks(masks: torch.Tensor, boundary_pixel: int = 172):
     """
