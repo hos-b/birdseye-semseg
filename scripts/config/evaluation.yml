@@ -7,22 +7,37 @@ snapshot-dir: './runs/{}/snapshots'
 models:
   extra-arg: './runs/mcnnT3x-ce-0.1-uniform-math/snapshots/best_model.pth'
   runs: [
+         'mcnnT2x-ce-0.1-unidata-baseline',
+         'mcnnT3x-ce-0.1-uniform-math',
+         'mcnnT3x-ce-0.1-unidata-[4-.6-.6]-2xaggr+post',
          'mcnnT3xNoisyRT-coolnoise-nodrop-mse-unidata',
-         'mcnnT3x-ce-0.1-unidata-[4-.6-.6]-2xaggr+post'
+         'mcnnT3xNoisyRT-1e-4-ce-0.1drop-triple-unidata',
         ]
   graph-networks: [
+                   false,
+                   true,
+                   true,
                    true,
                    true,
                   ]
   model-names: [
-                'mcnnT3xNoisyRT',
+                'mcnnT2x',
                 'mcnnT3x',
+                'mcnnT3x',
+                'mcnnT3xNoisyRT',
+                'mcnnT3xNoisyRT',
                ]
   model-versions: [
                    'best',
                    'best',
+                   'best',
+                   'best',
+                   'best',
                   ]
   aggregation-types: [
+                      'bilinear',
+                      'bilinear',
+                      'bilinear',
                       'bilinear',
                       'bilinear',
                      ]
@@ -31,10 +46,12 @@ gui:
   evaluate-noise-at-start: false
   evaluate-ious-at-start: false
   profile-at-start: false
+  log-estimated-noise: false
   sample-save-dir: './samples'
   full-metrics-save-dir: '.'
   mask-threshold: 0.6
   transparent-masks: True
+  adjacency-init: 'ones'
 
 # only tackled in mcnnT3xNoisyRT
 se2-noise:

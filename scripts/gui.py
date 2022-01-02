@@ -125,7 +125,11 @@ class SampleWindow:
                 if j == 0:
                     exec(f"self.mlabel_{j}{i} = tkinter.Label(self.control_window, text={i + 1})")
                     exec(f"self.mlabel_{j}{i}.grid(column={j + 7}, row={i + 2})")
-                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.control_window, text='1' if {i} == {j} else '0')")
+                if i == j or eval_cfg.adjacency_init == 'ones':
+                    button_text = '1'
+                else:
+                    button_text = '0'
+                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.control_window, text='{button_text}')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 8}, row={i + 2})")
         # relative injected noise table
@@ -219,7 +223,7 @@ class SampleWindow:
         self.dset_iterator = dset_iterator
 
     def start(self):
-        if True not in self.graph_flags.values():
+        if False not in self.graph_flags.values():
             print("warning: no baseline network has been added")
         self.change_sample()
         self.viz_window.mainloop()
@@ -405,14 +409,21 @@ class SampleWindow:
         self.current_data = (rgbs, labels, car_masks, fov_masks, car_transforms)
         self.agent_count = rgbs.shape[0]
         self.batch_index = batch_index
-        self.adjacency_matrix = torch.eye(self.agent_count)
+        if self.eval_cfg.adjacency_init == 'eye':
+            self.adjacency_matrix = torch.eye(self.agent_count)
+        else:
+            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count))
         self.root.title(f'batch #{batch_index.squeeze().item()}')
         self.agent_index = 0
         self._refresh_agent_buttons()
         # enable/disable adjacency matrix buttons, reset their labels
         for j in range(8):
             for i in range(8):
-                exec(f"self.mbutton_{j}{i}.configure(text='1' if {i} == {j} else '0')")
+                if i == j or self.eval_cfg.adjacency_init == 'ones':
+                    button_text = '1'
+                else:
+                    button_text = '0'
+                exec(f"self.mbutton_{j}{i}.configure(text='{button_text}')")
                 if i < self.agent_count and j < self.agent_count:
                     exec(f"self.mbutton_{j}{i}['state'] = 'normal'")
                 else:
@@ -483,7 +494,7 @@ class SampleWindow:
             aggr_mask_pred[aggr_mask_pred < self.eval_cfg.mask_thresh] = 0
             aggr_mask_pred[aggr_mask_pred >= self.eval_cfg.mask_thresh] = 1
             # log estimated noise
-            if hasattr(network, 'feat_matching_net'):
+            if self.eval_cfg.log_noise_estimate and hasattr(network, 'feat_matching_net'):
                 estimated_noise_tf = network.feat_matching_net.estimated_noise[self.agent_index]
                 estimated_noise_params = torch.zeros((self.agent_count, 3), dtype=car_transforms.dtype,
                                                      device=car_transforms.device)
