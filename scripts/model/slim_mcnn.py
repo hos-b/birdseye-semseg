@@ -1,17 +1,19 @@
 import torch
 import kornia
 import torch.nn.functional as F
+import torch.nn as nn
 
 from data.mask_warp import get_single_relative_img_transform
 from data.config import SemanticCloudConfig
 from model.dual_mcnn import DualTransposedMCNN3x
 from model.large_mcnn import _DSConv
 
+
 class SlimMCNNT3x(DualTransposedMCNN3x):
     def __init__(self, num_classes, output_size, sem_cfg: SemanticCloudConfig, aggr_type: str, compression_channels: int):
         super().__init__(num_classes, output_size, sem_cfg, aggr_type)
-        self.compression_encoder = _DSConv(128, compression_channels)
-        self.compression_decoder = _DSConv(compression_channels, 128)
+        self.compression_encoder = SlimEncoder(128, compression_channels)
+        self.compression_decoder = SlimDecoder(compression_channels, 128, output_size)
     
     def forward(self, rgbs, transforms, adjacency_matrix, car_masks, **kwargs):
         # B, 3, 480, 640: input size
@@ -27,13 +29,16 @@ class SlimMCNNT3x(DualTransposedMCNN3x):
         sseg_x = sseg_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         mask_x = mask_x + F.interpolate(car_masks.unsqueeze(1), size=(self.sem_cf_h, self.sem_cf_w), mode='bilinear', align_corners=True)
         # simulate compression/decompression
-        msg_x_comp = self.compression_encoder(mask_x * sseg_x)
+        org_x = mask_x * sseg_x
+        # B, c, 76, 104
+        msg_x_comp = self.compression_encoder(org_x)
+        # B, 128, 80, 108
         msg_x_decomp = self.compression_decoder(msg_x_comp)
         # B, 128, 80, 108
         # 2 stage message passing for semantics
-        aggr_sseg_x = self.aggregate_compressed_features(mask_x * sseg_x, msg_x_decomp, transforms, adjacency_matrix)
+        aggr_sseg_x = self.aggregate_compressed_features(org_x, msg_x_decomp, transforms, adjacency_matrix)
         aggr_sseg_x = self.graph_aggr_conv1(aggr_sseg_x)
-        aggr_sseg_x = self.aggregate_compressed_features(aggr_sseg_x, aggr_sseg_x, transforms, adjacency_matrix)
+        # aggr_sseg_x = self.aggregate_compressed_features(aggr_sseg_x, aggr_sseg_x, transforms, adjacency_matrix)
         aggr_sseg_x = self.graph_aggr_conv2(aggr_sseg_x)
         # solo mask estimation
         # B, 1, 80, 108
@@ -129,3 +134,23 @@ class SlimMCNNT3x(DualTransposedMCNN3x):
         warped_masks = kornia.warp_affine(ego_masks, relative_tfs, dsize=(self.msk_cf_h, self.msk_cf_w), mode=self.aggregation_type)
         final_mask = torch.sigmoid(self.mask_aggr_conv(warped_masks.sum(dim=0).unsqueeze(0)))
         return final_semantics, final_mask
+
+
+class SlimEncoder(nn.Module):
+    def __init__(self, input_c, output_c):
+        super().__init__()
+        self.conv1 = nn.Conv2d(input_c , output_c, 5, 1, 0)
+        self.conv2 = nn.Conv2d(output_c, output_c, 3, 1, 0)
+
+    def forward(self, x):
+        return self.conv2(self.conv1(x))
+
+class SlimDecoder(nn.Module):
+    def __init__(self, input_c, output_c, output_size):
+        super().__init__()
+        self.output_size = output_size
+        self.tconv1 = nn.ConvTranspose2d(input_c , output_c, 3)
+        self.tconv2 = nn.ConvTranspose2d(output_c, output_c, 5)
+
+    def forward(self, x):
+        return self.tconv2(self.tconv1(x))
