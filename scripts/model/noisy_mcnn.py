@@ -241,6 +241,7 @@ class NoisyMCNNT3xRT(SoloAggrSemanticsMask, NoiseEstimator):
         only used for inference profiling. output may be invalid.
         """
         agent_count = latent_features.shape[0]
+        self.feat_matching_net.refresh(agent_count, transforms.device)
         # B, 128, 80, 108
         # first message passing stage (done for all agents)
         aggr_features = torch.zeros_like(latent_features)
