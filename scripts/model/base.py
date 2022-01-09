@@ -2,7 +2,9 @@ import torch
 import kornia
 import torch.nn as nn
 from abc import ABC
-from data.mask_warp import get_single_relative_img_transform, get_single_adjacent_aggregate_mask, get_all_aggregate_masks
+from data.mask_warp import get_single_relative_img_transform, get_single_adjacent_aggregate_mask
+from data.mask_warp import get_all_aggregate_masks
+from data.utils import get_se2_diff
 from metrics.iou import get_iou_per_class, get_mask_iou
 
 
@@ -401,7 +403,6 @@ class NoiseEstimator(ABC):
         # ignore single batches
         if agent_count == 1:
             return x_noise, y_noise, t_noise
-        # todo consider adj mat
         self.forward(
             rgbs, car_transforms, adjacency_matrix, car_masks,
             noise_correction_en=True, evaluation=True
@@ -412,28 +413,25 @@ class NoiseEstimator(ABC):
             # T_j' w.r.t. T_i
             nz_relative_tfs = car_transforms[i].inverse() @ car_transforms
             # hopefully T_j w.r.t. T_i
-            corrected_relative_tfs = (car_transforms[i].inverse() @ car_transforms) @ \
-                self.feat_matching_net.estimated_noise[i].inverse()
-            # present relative error, pre correction
-            noise_pre = gt_relative_tfs.inverse() @ nz_relative_tfs
-            # present relative error, post correction
-            noise_post = gt_relative_tfs.inverse() @ corrected_relative_tfs
-            noise_pre[i] = torch.eye(4)
-            noise_post[i] = torch.eye(4)
+            co_relative_tfs = nz_relative_tfs @ self.feat_matching_net.estimated_noise[i].inverse()
+            # present relative noise, pre correction
+            noise_pre = get_se2_diff(nz_relative_tfs, gt_relative_tfs)
+            # present relative noise, post correction
+            noise_post = get_se2_diff(co_relative_tfs, gt_relative_tfs)
+            # get absolute noise
+            xpre = torch.abs(noise_pre[:, 0]).cpu().tolist()
+            ypre = torch.abs(noise_pre[:, 1]).cpu().tolist()
+            tpre = torch.abs(noise_pre[:, 2]).cpu().tolist()
+            xpost = torch.abs(noise_post[:, 0]).cpu().tolist()
+            ypost = torch.abs(noise_post[:, 1]).cpu().tolist()
+            tpost = torch.abs(noise_post[:, 2]).cpu().tolist()
+            # mark and discard invalid predictions (ego & out-of-view)
             unwanted = torch.where(adjacency_matrix[i] == False)[0].cpu().tolist()
             unwanted.append(i)
-            # get absolute noise
-            xpre = torch.abs(noise_pre[:, 0, 3]).cpu().tolist()
-            ypre = torch.abs(noise_pre[:, 1, 3]).cpu().tolist()
-            tpre = torch.abs(torch.atan2(noise_pre[:, 1, 0], noise_pre[:, 0, 0])).cpu().tolist()
-            xpost = torch.abs(noise_post[:, 0, 3]).cpu().tolist()
-            ypost = torch.abs(noise_post[:, 1, 3]).cpu().tolist()
-            tpost = torch.abs(torch.atan2(noise_post[:, 1, 0], noise_post[:, 0, 0])).cpu().tolist()
-            # disregard ego (although used in training for robustness) & out-of-view rel. transforms
             for unwanted_idx in sorted(unwanted, reverse=True):
                 xpre.pop(unwanted_idx); ypre.pop(unwanted_idx); tpre.pop(unwanted_idx)
                 xpost.pop(unwanted_idx); ypost.pop(unwanted_idx); tpost.pop(unwanted_idx)
-            # discard out-of-view agents
+            # add to the list
             x_noise['pre'] += xpre
             y_noise['pre'] += ypre
             t_noise['pre'] += tpre
