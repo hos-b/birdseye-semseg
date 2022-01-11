@@ -343,7 +343,7 @@ class EvaluationConfig:
                 print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type.')
                 exit()
         for i in range(len(self.model_names)):
-            if self.model_names[i] == 'mcnnT2x' and self.model_gnn_flags:
+            if self.model_names[i] == 'mcnnT2x' and self.model_gnn_flags[i]:
                 print(f'sanity-check-error: {self.runs[i]} is marked as a GNN.')
                 exit()
                 
