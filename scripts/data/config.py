@@ -342,6 +342,11 @@ class EvaluationConfig:
             if self.aggregation_types[i] != 'bilinear' and self.aggregation_types[i] != 'nearest':
                 print(f'sanity-check-error: {self.aggregation_types[i]} is not a valid aggregation type.')
                 exit()
+        for i in range(len(self.model_names)):
+            if self.model_names[i] == 'mcnnT2x' and self.model_gnn_flags:
+                print(f'sanity-check-error: {self.runs[i]} is marked as a GNN.')
+                exit()
+                
 
 
 class ReportConfig:
