@@ -47,10 +47,8 @@ def test(**kwargs):
         init_wandb('transform loss test', train_cfg)
 
     # start
-    batch_ids = [0] #, 1, 2, 3, 4, 5
+    batch_ids = [0, 1, 2, 3, 4, 5] #, 1, 2, 3, 4, 5
     for ep in range(10000):
-        total_m_loss = 0.0
-        total_s_loss = 0.0
         total_t_loss = 0.0
         sample_count = 0
         model.train()
@@ -67,20 +65,16 @@ def test(**kwargs):
             # fwd-bwd
             optimizer.zero_grad()
             # add se2 noise
-            gt_transforms = car_transforms.clone()
-            noise_transforms = get_se2_noise_transforms(batch_size, device,
-                                                        train_cfg.se2_noise_dx_std,
-                                                        train_cfg.se2_noise_dy_std,
-                                                        train_cfg.se2_noise_th_std)
+            noisy_transforms = get_noisy_transforms(car_transforms,
+                                                    train_cfg.se2_noise_dx_std,
+                                                    train_cfg.se2_noise_dy_std,
+                                                    train_cfg.se2_noise_th_std)
             # forward pass
             solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks,
-                      gt_relative_noise=noise_transforms)
-            m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
-                mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
-            s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) + \
-                     torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)
-            t_loss = transform_loss(model.feat_matching_net.estimated_noise, noise_transforms)
+                model(rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks)
+            t_loss = get_transform_loss(car_transforms, noisy_transforms,
+                                        model.feat_matching_net.estimated_noise,
+                                        agent_pool.adjacency_matrix, transform_loss)
             # weighted losses
             # (0.5 * m_loss * torch.exp(-mask_loss_weight) + 0.5 * mask_loss_weight +
             #  0.5 * t_loss * torch.exp(-trns_loss_weight) + 0.5 * trns_loss_weight +
@@ -88,29 +82,18 @@ def test(**kwargs):
             (t_loss).backward()
 
             optimizer.step()
-
-            total_m_loss += m_loss.item()
-            total_s_loss += s_loss.item()
             total_t_loss += t_loss.item()
             # end of batch
 
         # log batch loss
         if ep % train_cfg.log_every == 0:
-            print(f'\nepoch loss: {(total_m_loss / sample_count):.6f} mask, '
-                                f'{(total_s_loss / sample_count):.6f} segmentation '
-                                f'{(total_t_loss / sample_count):.6f} transform')
+            print(f'\nepoch loss: {ep}: {(total_t_loss / sample_count):.6f} transform')
             if enable_logging:
                 batch_img = plot_full_batch(rgbs, labels, solo_sseg_preds, aggr_sseg_preds,
                                             solo_mask_preds, aggr_mask_preds,
                                             solo_masks, agent_pool.combined_masks,
                                             plot_dest='image', semantic_classes=train_cfg.classes,
                                             title=f'E: {ep + 1}, B#: idk')
-                wandb.log({
-                        'loss/total train mask': total_m_loss,
-                        'loss/total train sseg': total_s_loss,
-                        'loss/total train trns': total_t_loss,
-                        'media/results': wandb.Image(batch_img, caption='full batch predictions')
-                    })
 
 if __name__ == '__main__':
     # parsing config file
@@ -138,8 +121,9 @@ if __name__ == '__main__':
     if not os.path.exists(train_cfg.snapshot_dir):
         os.makedirs(train_cfg.snapshot_dir)
     # network stuff ----------------------------------------------------------------------------
-    model = get_model('mcnnT3xNoisy', train_cfg.num_classes, new_size,
-                      geom_cfg, train_cfg.aggregation_type).to(device)
+    model = get_model('mcnnT3xNoisyRT', train_cfg.num_classes, new_size,
+                      geom_cfg, train_cfg.aggregation_type,
+                      mcnnt3x_path=train_cfg.extra_model_arg).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=train_cfg.learning_rate)
     mask_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
     sseg_loss_weight = torch.tensor([0.0], requires_grad=True, device=device)
@@ -150,7 +134,7 @@ if __name__ == '__main__':
     # losses -----------------------------------------------------------------------------------
     semseg_loss = nn.CrossEntropyLoss(reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')
-    transform_loss = nn.MSELoss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='none')
     # send to gpu
     semseg_loss = semseg_loss.to(device)
     mask_loss = mask_loss.to(device)

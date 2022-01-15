@@ -23,7 +23,7 @@ def get_model(model_name: str, *args, **kwargs):
     elif model_name == 'mcnnT3xNoisy':
         return NoisyMCNNT3x(*args)
     elif model_name == 'mcnnT3xNoisyRT':
-        return NoisyMCNNT3xRT(*args, kwargs.get('mcnnt3x_path', ''))
+        return NoisyMCNNT3xRT(*args)
     elif model_name == 'pyrocc':
         return PyramidOccupancyNetwork(*args)
     elif model_name == 'mcnnT2x':
@@ -38,6 +38,12 @@ def get_model(model_name: str, *args, **kwargs):
         return SlimMCNNT3x(*args, 16)
     elif model_name == 'slimcnnT3x8':
         return SlimMCNNT3x(*args, 8)
+    elif model_name == 'slimcnnT3x4':
+        return SlimMCNNT3x(*args, 4)
+    elif model_name == 'slimcnnT3x2':
+        return SlimMCNNT3x(*args, 2)
+    elif model_name == 'slimcnnT3x1':
+        return SlimMCNNT3x(*args, 1)
     elif model_name == 'mcnnT3x1x':
         return DualTransposedMCNN3x_1x(*args)
     elif model_name == 'mcnnT3xFlat':
