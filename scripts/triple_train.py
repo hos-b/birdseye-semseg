@@ -68,40 +68,47 @@ def train(**kwargs):
         # training
         model.train()
         for batch_idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(train_loader):
-            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
-                                                        fov_masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(
+                device, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
             # simulate connection drops
-            rgbs, labels, car_masks, fov_masks, car_transforms = drop_agent_data(train_cfg.drop_prob,
-                                                        rgbs, labels, car_masks, fov_masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = drop_agent_data(
+                train_cfg.drop_prob, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
             batch_size = rgbs.shape[0]
             sample_count += batch_size
             solo_masks = car_masks + fov_masks
-            agent_pool.generate_connection_strategy(solo_masks, car_transforms,
-                                                    PPM, NEW_SIZE[0], NEW_SIZE[1],
-                                                    CENTER[0], CENTER[1])
+            agent_pool.generate_connection_strategy(
+                solo_masks, car_transforms, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1]
+            )
             # fwd-bwd
             optimizer.zero_grad()
             # generate se2 noise
-            noise_transforms = get_se2_noise_transforms(batch_size, device,
-                                                        train_cfg.se2_noise_dx_std,
-                                                        train_cfg.se2_noise_dy_std,
-                                                        train_cfg.se2_noise_th_std)
+            noisy_transforms = get_noisy_transforms(
+                car_transforms, train_cfg.se2_noise_dx_std,
+                train_cfg.se2_noise_dy_std, train_cfg.se2_noise_th_std
+            )
             # add mask wallhack for semantics
             if random.uniform(0, 1) < train_cfg.wallhack_prob:
                 wallhack = wallhack_mask
             else:
                 wallhack = torch.zeros_like(wallhack_mask, device=device)
             # forward pass
-            solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks, 
-                      gt_relative_noise=noise_transforms)
+            solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = model(
+                rgbs, noisy_transforms, agent_pool.adjacency_matrix, car_masks,
+                noise_correction_en=True, evaluation=False
+            )
             m_loss = mask_loss(solo_mask_preds.squeeze(1), solo_masks) + \
                 mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)
             s_loss = torch.mean(semseg_loss(solo_sseg_preds, labels) *
                                 torch.clamp(solo_masks + wallhack, 0.0, 1.0)) + \
                      torch.mean(semseg_loss(aggr_sseg_preds, labels) *
                                 torch.clamp(agent_pool.combined_masks + wallhack, 0.0, 1.0))
-            t_loss = transform_loss(model.feat_matching_net.estimated_noise, noise_transforms)
+            t_loss = get_transform_loss(
+                car_transforms, noisy_transforms,
+                model.feat_matching_net.estimated_noise,
+                agent_pool.adjacency_matrix, transform_loss
+            )
             # semseg & mask batch loss
             batch_train_m_loss = m_loss.item()
             batch_train_s_loss = s_loss.item()
@@ -133,7 +140,7 @@ def train(**kwargs):
             wandb.log({
                 'loss/total train mask': total_train_m_loss / sample_count,
                 'loss/total train sseg': total_train_s_loss / sample_count,
-                'loss/total train sseg': total_train_t_loss / sample_count,
+                'loss/total train trns': total_train_t_loss / sample_count,
                 'misc/epoch': ep + 1
             })
         print(f'\nepoch loss: {(total_train_m_loss / sample_count)} mask, '
@@ -153,28 +160,35 @@ def train(**kwargs):
                   f'validation batch: {batch_idx + 1} / {len(valid_loader)}', end='')
             batch_size = rgbs.shape[1]
             sample_count += batch_size
-            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(device, rgbs, labels, car_masks,
-                                                        fov_masks, car_transforms)
-            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
-                                                        fov_masks, car_transforms)
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(
+                device, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(
+                rgbs, labels, car_masks, fov_masks, car_transforms
+            )
             solo_masks = car_masks + fov_masks
-            agent_pool.generate_connection_strategy(solo_masks, car_transforms,
-                                                    PPM, NEW_SIZE[0], NEW_SIZE[1],
-                                                    CENTER[0], CENTER[1])
+            agent_pool.generate_connection_strategy(
+                solo_masks, car_transforms, PPM, NEW_SIZE[0], NEW_SIZE[1], CENTER[0], CENTER[1]
+            )
             # generate se2 noise
-            noise_transforms = get_se2_noise_transforms(batch_size, device,
-                                                        train_cfg.se2_noise_dx_std,
-                                                        train_cfg.se2_noise_dy_std,
-                                                        train_cfg.se2_noise_th_std)
+            noisy_transforms = get_noisy_transforms(
+                car_transforms, train_cfg.se2_noise_dx_std,
+                train_cfg.se2_noise_dy_std, train_cfg.se2_noise_th_std
+            )
             with torch.no_grad():
-                solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = \
-                    model(rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks,
-                          gt_relative_noise=noise_transforms)
+                solo_sseg_preds, solo_mask_preds, aggr_sseg_preds, aggr_mask_preds = model(
+                    rgbs, car_transforms, agent_pool.adjacency_matrix, car_masks,
+                    noise_correction_en=True, evaluation=True
+                )
                 total_valid_m_loss += (mask_loss(solo_mask_preds.squeeze(1), solo_masks) +
                                         mask_loss(aggr_mask_preds.squeeze(1), agent_pool.combined_masks)).item()
                 total_valid_s_loss += (torch.mean(semseg_loss(solo_sseg_preds, labels) * solo_masks) +
                                        torch.mean(semseg_loss(aggr_sseg_preds, labels) * agent_pool.combined_masks)).item()
-                total_valid_t_loss += transform_loss(model.feat_matching_net.estimated_noise, noise_transforms).item()
+                total_valid_t_loss += get_transform_loss(
+                    car_transforms, noisy_transforms,
+                    model.feat_matching_net.estimated_noise,
+                    agent_pool.adjacency_matrix, transform_loss
+                )
             sseg_ious += get_iou_per_class(aggr_sseg_preds, labels, agent_pool.combined_masks,
                                            train_cfg.num_classes).to(device)
             mask_ious += get_mask_iou(aggr_mask_preds.squeeze(1), agent_pool.combined_masks,
@@ -193,7 +207,7 @@ def train(**kwargs):
                     wandb.log(validation_img_log_dict)
                 visualized = True
             # end of batch
-
+        import pdb; pdb.set_trace()
         # more wandb logging -------------------------------------------------------------------
         avg_iou = 0.0
         log_dict = {}
@@ -307,6 +321,7 @@ def parse_and_execute():
     # network stuff ----------------------------------------------------------------------------
     model = get_model(train_cfg.model_name, train_cfg.num_classes, new_size,
                       geom_cfg, train_cfg.aggregation_type).to(device)
+    model.reload_mcnnt3x_checkpoint(train_cfg.extra_model_arg, False)
     if not hasattr(model, 'feat_matching_net'):
         print('model does not have feature matching network'); exit()
     if model.output_count != 4:
@@ -362,7 +377,7 @@ def parse_and_execute():
     elif train_cfg.loss_function == 'focal':
         semseg_loss = FocalLoss(alpha=0.5, gamma=2.0, reduction='none')
     mask_loss = nn.L1Loss(reduction='mean')
-    transform_loss = nn.MSELoss(reduction='mean')
+    transform_loss = nn.MSELoss(reduction='none')
     # send to gpu
     if train_cfg.device == 'cuda':
         semseg_loss = semseg_loss.to(device)

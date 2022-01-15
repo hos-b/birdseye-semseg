@@ -1,4 +1,5 @@
 import os
+from typing import List
 import cv2
 import torch
 import tkinter
@@ -17,6 +18,7 @@ from data.utils import get_noisy_transforms, get_relative_noise
 from model.factory import get_model
 from metrics.iou import NetworkMetrics
 from metrics.inference_time import InferenceMetrics
+from metrics.noise import NoiseMetrics
 
 class SampleWindow:
     def __init__(self, eval_cfg: EvaluationConfig, classes_dict, device: torch.device, new_size, center, ppm):
@@ -83,10 +85,12 @@ class SampleWindow:
         # misc. buttons
         self.smask_button     = tkinter.Button(self.control_window, command=self.toggle_baseline_self_masking, text=f'filter baseline: {int(self.baseline_masking_en)}')
         self.viz_masks_button = tkinter.Button(self.control_window, command=self.toggle_mask_visualization, text=f'visualize masks: {int(self.show_masks)}')
+        self.anc_toggle       = tkinter.Button(self.control_window, command=self.toggle_active_noise_cancellation, text=f'ANC: {int(self.noise_correction_en)}')
         self.next_sample      = tkinter.Button(self.control_window, command=self.change_sample, text='next')
         self.save_sample      = tkinter.Button(self.control_window, command=self.write_sample, text='save')
         self.smask_button.      grid(column=2, row=3, columnspan=4)
         self.viz_masks_button.  grid(column=2, row=4, columnspan=4)
+        self.anc_toggle.        grid(column=2, row=11, columnspan=4)
         self.next_sample.       grid(column=2, row=5, columnspan=2)
         self.save_sample.       grid(column=4, row=5, columnspan=2)
         # noise parameters
@@ -121,7 +125,11 @@ class SampleWindow:
                 if j == 0:
                     exec(f"self.mlabel_{j}{i} = tkinter.Label(self.control_window, text={i + 1})")
                     exec(f"self.mlabel_{j}{i}.grid(column={j + 7}, row={i + 2})")
-                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.control_window, text='1' if {i} == {j} else '0')")
+                if i == j or eval_cfg.adjacency_init == 'ones':
+                    button_text = '1'
+                else:
+                    button_text = '0'
+                exec(f"self.mbutton_{j}{i} = tkinter.Button(self.control_window, text='{button_text}')")
                 exec(f"self.mbutton_{j}{i}.configure(command=lambda: self.matrix_clicked({i}, {j}))", locals(), locals())
                 exec(f"self.mbutton_{j}{i}.grid(column={j + 8}, row={i + 2})")
         # relative injected noise table
@@ -215,7 +223,7 @@ class SampleWindow:
         self.dset_iterator = dset_iterator
 
     def start(self):
-        if True not in self.graph_flags.values():
+        if False not in self.graph_flags.values():
             print("warning: no baseline network has been added")
         self.change_sample()
         self.viz_window.mainloop()
@@ -249,6 +257,11 @@ class SampleWindow:
         self.smask_button.configure(text=f'filter baseline: {int(self.baseline_masking_en)}')
         self.update_prediction(False)
 
+    def toggle_active_noise_cancellation(self):
+        self.noise_correction_en =  not self.noise_correction_en
+        self.anc_toggle.configure(text=f'ANC: {int(self.noise_correction_en)}')
+        self.update_prediction(False)
+
     def apply_noise_params(self):
         th_std = self.eval_cfg.se2_noise_th_std
         dy_std = self.eval_cfg.se2_noise_dx_std
@@ -274,9 +287,6 @@ class SampleWindow:
         self.update_prediction(True)
 
     def calculate_ious(self, dataset: MassHDF5):
-        if not self.eval_cfg.evaluate_at_start:
-            print('iou calculation disabled in yaml file')
-            return
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating IoUs...')
@@ -284,12 +294,12 @@ class SampleWindow:
 
         for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
             print(f'\r{idx + 1}/{total_length}', end='')
-            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
-                                                                           car_masks, fov_masks,
-                                                                           car_transforms)
-            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(rgbs, labels, car_masks,
-                                                                             fov_masks, car_transforms)
-
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(
+                self.device, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(
+                rgbs, labels, car_masks, fov_masks, car_transforms
+            )
 
             for name, network in self.networks.items():
                 metrics.update_network(
@@ -297,7 +307,8 @@ class SampleWindow:
                     car_masks, fov_masks, car_transforms, labels, self.ppm,
                     self.output_h, self.output_w, self.center_x, self.center_y,
                     self.eval_cfg.mask_thresh, self.eval_cfg.se2_noise_dx_std,
-                    self.eval_cfg.se2_noise_dy_std, self.eval_cfg.se2_noise_th_std)
+                    self.eval_cfg.se2_noise_dy_std, self.eval_cfg.se2_noise_th_std
+                )
 
         metrics.finish()
 
@@ -316,12 +327,9 @@ class SampleWindow:
             exec(f"self.actv_noiz_iou_label_{i}.configure(text='{lines[2]}')")
 
         metrics.write_to_file('metrics.txt')
-        print('done')
+        print('\ndone')
 
     def calculate_inference_time(self, dataset: MassHDF5):
-        if not self.eval_cfg.profile_at_start:
-            print('inference time profiling disabled in yaml file')
-            return
         dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
         total_length = len(dloader)
         print('calculating network inference times...')
@@ -339,7 +347,57 @@ class SampleWindow:
 
         metrics.finish()
         metrics.write_to_file('./inference.txt')
-        print('done')
+        print('\ndone')
+
+    def calculate_noise_cancellation(self, dataset: MassHDF5):
+        dloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False, num_workers=1)
+        total_length = len(dloader)
+        print('evaluating noise cancellation...')
+        metrics: List[NoiseMetrics] = []
+        for network_label, network in self.networks.items():
+            if hasattr(network, 'feat_matching_net'):
+                metrics.append(
+                    NoiseMetrics(
+                        network_label, network, self.device, self.eval_cfg.max_agent_count
+                    )
+                )
+            else:
+                print(f'{network_label} does not have a noise estimating subnet. skipping...')
+
+        for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, _) in enumerate(dloader):
+            print(f'\r{idx + 1}/{total_length}', end='')
+            rgbs, labels, car_masks, fov_masks, car_transforms = to_device(
+                self.device, rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            rgbs, labels, car_masks, fov_masks, car_transforms = squeeze_all(
+                rgbs, labels, car_masks, fov_masks, car_transforms
+            )
+            noisy_transforms = get_noisy_transforms(
+                car_transforms,
+                self.eval_cfg.se2_noise_dx_std,
+                self.eval_cfg.se2_noise_dy_std,
+                self.eval_cfg.se2_noise_th_std
+            )
+            for noise_metric in metrics:
+                noise_metric.update_network(
+                    rgbs, car_masks, fov_masks,
+                    car_transforms, noisy_transforms,
+                    self.eval_cfg.se2_noise_dx_std, 
+                    self.eval_cfg.se2_noise_dy_std,
+                    self.eval_cfg.se2_noise_th_std,
+                    self.output_h, self.output_w, self.ppm,
+                    self.center_x, self.center_y
+                )
+
+        if len(metrics) > 1:
+            for noise_metric in metrics:
+                noise_metric.finish()
+                noise_metric.write_to_file(f'{noise_metric.label}'[:20] + '_noizeval.txt')
+        else:
+            metrics[0].finish()
+            metrics[0].write_to_file('noise.txt')
+
+        print('\ndone')
 
     def change_sample(self):
         (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
@@ -351,14 +409,21 @@ class SampleWindow:
         self.current_data = (rgbs, labels, car_masks, fov_masks, car_transforms)
         self.agent_count = rgbs.shape[0]
         self.batch_index = batch_index
-        self.adjacency_matrix = torch.eye(self.agent_count)
+        if self.eval_cfg.adjacency_init == 'eye':
+            self.adjacency_matrix = torch.eye(self.agent_count)
+        else:
+            self.adjacency_matrix = torch.ones((self.agent_count, self.agent_count))
         self.root.title(f'batch #{batch_index.squeeze().item()}')
         self.agent_index = 0
         self._refresh_agent_buttons()
         # enable/disable adjacency matrix buttons, reset their labels
         for j in range(8):
             for i in range(8):
-                exec(f"self.mbutton_{j}{i}.configure(text='1' if {i} == {j} else '0')")
+                if i == j or self.eval_cfg.adjacency_init == 'ones':
+                    button_text = '1'
+                else:
+                    button_text = '0'
+                exec(f"self.mbutton_{j}{i}.configure(text='{button_text}')")
                 if i < self.agent_count and j < self.agent_count:
                     exec(f"self.mbutton_{j}{i}['state'] = 'normal'")
                 else:
@@ -381,11 +446,10 @@ class SampleWindow:
         self.visualized_data['rgb'] = rgb.copy()
         rgb = cv2.resize(rgb, (342, 256), cv2.INTER_LINEAR)
         rgb_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(rgb), 'RGB')
-        # target image
+        # target image and mask
         ss_gt_img = convert_semantics_to_rgb(labels[self.agent_index].cpu(), self.semantic_classes)
         self.visualized_data['target_semantics'] = ss_gt_img.copy()
         if self.show_masks:
-            # import pdb; pdb.set_trace()
             aggr_gt_mask = get_single_adjacent_aggregate_mask(
                 car_masks + fov_masks, car_transforms, self.agent_index, self.ppm,
                 self.output_h, self.output_w, self.center_x, self.center_y,
@@ -398,15 +462,15 @@ class SampleWindow:
                 ss_gt_img[aggr_gt_mask == 0, :] = 0
             self.visualized_data['masked_target_semantics'] = ss_gt_img
         target_tk = PIL.ImageTk.PhotoImage(PILImage.fromarray(ss_gt_img), 'RGB')
-
         # add noise (important to do after the gt aggr. mask is calculated)
         if resample_noise:
             self.noisy_transforms = get_noisy_transforms(car_transforms,
                                                          self.eval_cfg.se2_noise_dx_std,
                                                          self.eval_cfg.se2_noise_dy_std,
                                                          self.eval_cfg.se2_noise_th_std)
-        injected_noise_params = get_relative_noise(car_transforms, self.noisy_transforms)[self.agent_index]
+        injected_noise_params = get_relative_noise(car_transforms, self.noisy_transforms, self.agent_index)
         self._update_relative_noise_table(injected_noise_params)
+        # network outputs
         for i, (name, network) in enumerate(self.networks.items()):
             self.visualized_data[name] = {}
             # >>> front RGB image
@@ -419,8 +483,8 @@ class SampleWindow:
 
             solo_sseg_pred, solo_mask_pred, \
             aggr_sseg_pred, aggr_mask_pred = network.get_eval_output(
-                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks, self.noisy_transforms,
-                self.adjacency_matrix, self.ppm, self.output_h, self.output_w,
+                self.segclass_dict, self.graph_flags[name], rgbs, car_masks, fov_masks,
+                self.noisy_transforms, self.adjacency_matrix, self.ppm, self.output_h, self.output_w,
                 self.center_x, self.center_y, self.agent_index, self.baseline_masking_en,
                 torch.device('cpu'), self.noise_correction_en
             )
@@ -430,11 +494,11 @@ class SampleWindow:
             aggr_mask_pred[aggr_mask_pred < self.eval_cfg.mask_thresh] = 0
             aggr_mask_pred[aggr_mask_pred >= self.eval_cfg.mask_thresh] = 1
             # log estimated noise
-            if hasattr(network, 'feat_matching_net'):
+            if self.eval_cfg.log_noise_estimate and hasattr(network, 'feat_matching_net'):
                 estimated_noise_tf = network.feat_matching_net.estimated_noise[self.agent_index]
                 estimated_noise_params = torch.zeros((self.agent_count, 3), dtype=car_transforms.dtype,
                                                      device=car_transforms.device)
-                estimated_noise_params[:, :2] = estimated_noise_tf[:, :2, 2]
+                estimated_noise_params[:, :2] = estimated_noise_tf[:, :2, 3]
                 estimated_noise_params[:,  2] = torch.atan2(estimated_noise_tf[:, 1, 0],
                                                             estimated_noise_tf[:, 0, 0])
                 print(f'agent {self.agent_index} noise parameters in {name} ------- ')
@@ -512,8 +576,10 @@ def main():
         if not os.path.exists(snapshot_path):
             print(f'{snapshot_path} does not exist')
             exit(-1)
-        model = get_model(eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
-                          sem_cfg, eval_cfg.aggregation_types[i]).to(device)
+        model = get_model(
+            eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
+            sem_cfg, eval_cfg.aggregation_types[i]
+        ).to(device)
         print(f'loading {snapshot_path}')
         try:
             model.load_state_dict(torch.load(snapshot_path))
@@ -522,8 +588,18 @@ def main():
             exit()
         gui.add_network(model, eval_cfg.runs[i], eval_cfg.model_gnn_flags[i])
     # evaluate the added networks --------------------------------------------------------------------------
-    gui.calculate_ious(test_set)
-    gui.calculate_inference_time(test_set)
+    if eval_cfg.evaluate_ious_at_start:
+        gui.calculate_ious(test_set)
+    else:
+        print('iou calculation disabled.')
+    if eval_cfg.profile_at_start:
+        gui.calculate_inference_time(test_set)
+    else:
+        print('inference time profiling disabled.')
+    if eval_cfg.evaluate_noise_at_start:
+        gui.calculate_noise_cancellation(test_set)
+    else:
+        print('noise evaluation disabled.')
     # start the gui ----------------------------------------------------------------------------------------
     print('starting gui...')
     gui.start()
