@@ -40,6 +40,7 @@ public:
 	~MassAgent();
 	explicit MassAgent(std::mt19937& random_generator,
 					   const std::unordered_map<int, bool>& restricted_roads);
+	explicit MassAgent(std::mt19937& random_generator, float x, float y, float z);
 	MassAgent(const MassAgent&) = delete;
 	const MassAgent& operator=(const MassAgent&) = delete;
 	MassAgent(MassAgent&&) = delete;
@@ -52,6 +53,7 @@ public:
 				  unsigned int max_index);
 	void HideAgent();
 	void CaptureOnce();
+	void MoveForward(double distance);
 	void PauseSensorCallbacks();
 	void ResumeSensorCallbacks();
 	std::tuple<carla::geom::Rotation, Eigen::Matrix3d>

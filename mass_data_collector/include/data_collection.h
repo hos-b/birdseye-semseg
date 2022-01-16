@@ -235,6 +235,142 @@ struct CollectionConfig
     }
 };
 
+struct RuntimeConfig
+{
+    std::string dataset_path;
+    std::string dataset_name;
+    unsigned int town;
+    std::string weather;
+    unsigned long random_seed;
+    unsigned int agent_count;
+    double meters_per_capture;
+    std::vector<std::tuple<float, float, float>> starting_points;
+    unsigned int batch_count;
+    unsigned int max_batch_count;
+    unsigned int hdf5_chunk_size;
+
+    static const RuntimeConfig& GetConfig() {
+        static RuntimeConfig conf;
+        static std::once_flag once;
+        std::call_once(once, []() {
+            std::set<std::string> allowed_weathers = {
+                "Default",
+                "ClearNoon",
+                "CloudyNoon",
+                "WetNoon",
+                "WetCloudyNoon",
+                "MidRainyNoon",
+                "HardRainNoon",
+                "SoftRainNoon",
+                "ClearSunset",
+                "CloudySunset",
+                "WetSunset",
+                "WetCloudySunset",
+                "MidRainSunset",
+                "HardRainSunset",
+                "SoftRainSunset"
+            };
+            std::set<unsigned int> allowed_towns = {
+                2, 3, 4, 5
+            };
+            std::string yaml_path = ros::package::getPath("mass_data_collector") +
+								    "/param/runtime.yaml";
+		    YAML::Node base = YAML::LoadFile(yaml_path);
+		    YAML::Node dataset = base["dataset"];
+		    YAML::Node collection = base["collection"];
+		    conf.dataset_path = dataset["path"].as<std::string>();
+            conf.dataset_name = dataset["name"].as<std::string>();
+            // reading town
+            if (!dataset["town"].IsScalar()) {
+                std::cout << "expected scalar for town" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.town = dataset["town"].as<unsigned int>();
+            if (allowed_towns.find(conf.town) == allowed_towns.end()) {
+                std::cout << "town " << conf.town << " is not valid" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            // reading weather
+            if (dataset["weather"].IsSequence()) {
+                std::cout << "weather should be a single string" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.weather = dataset["weather"].as<std::string>();
+            if (allowed_weathers.find(conf.weather) == allowed_weathers.end()) {
+                std::cout << conf.weather << " is not a valid weather condition" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            // reading random seed
+            if (!collection["random-seed"].IsScalar()) {
+                std::cout << "expected scalar for random-seed" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.random_seed = collection["random-seed"].as<unsigned long>();
+            // reading agent count
+            if (!collection["agent-count"].IsScalar()) {
+                std::cout << "expected scalar for agent-count" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.agent_count = collection["agent-count"].as<unsigned int>();
+            // reading tick delta seconds
+            if (!collection["meters-per-capture"].IsScalar()) {
+                std::cout << "expected scalar for meters-per-capture" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.meters_per_capture = collection["meters-per-capture"].as<double>();
+            // reading starting points
+            if (!collection["init-x"].IsSequence() || collection["init-x"].size() != conf.agent_count) {
+                std::cout << "expected sequence of length " << conf.agent_count << " for init-x" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            if (!collection["init-y"].IsSequence() || collection["init-y"].size() != conf.agent_count) {
+                std::cout << "expected sequence of length " << conf.agent_count << " for init-y" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            if (!collection["init-z"].IsSequence() || collection["init-z"].size() != conf.agent_count) {
+                std::cout << "expected sequence of length " << conf.agent_count << " for init-z" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            for (unsigned int i = 0; i < conf.agent_count; ++i) {
+                if (!collection["init-x"][i].IsScalar()) {
+                    std::cout << "non-scalar element at init-x[" << i << "]" << std::endl;
+                    std::exit(EXIT_FAILURE);
+                }
+                if (!collection["init-y"][i].IsScalar()) {
+                    std::cout << "non-scalar element at init-y[" << i << "]" << std::endl;
+                    std::exit(EXIT_FAILURE);
+                }
+                if (!collection["init-z"][i].IsScalar()) {
+                    std::cout << "non-scalar element at init-z[" << i << "]" << std::endl;
+                    std::exit(EXIT_FAILURE);
+                }
+                float x = collection["init-x"][i].as<float>();
+                float y = collection["init-y"][i].as<float>();
+                float z = collection["init-z"][i].as<float>();
+                conf.starting_points.emplace_back(std::tuple(x, y, z));
+            }
+            // reading batch dims
+            if (!collection["batch-count"].IsScalar()) {
+                std::cout << "expected scalar for batch-count" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.batch_count = collection["batch-count"].as<unsigned int>();
+            if (!collection["maximum-batch-count"].IsScalar()) {
+                std::cout << "expected scalar for maximum-batch-count" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.max_batch_count = collection["maximum-batch-count"].as<unsigned int>();
+            if (!collection["hdf5-chunk-size"].IsScalar()) {
+                std::cout << "expected scalar for hdf5-chunk-size" << std::endl;
+                std::exit(EXIT_FAILURE);
+            }
+            conf.hdf5_chunk_size = collection["hdf5-chunk-size"].as<unsigned int>();
+            
+        });
+        return conf;
+    }
+};
+
 struct CollectionStats
 {
     CollectionStats(unsigned int max_agent_count) {

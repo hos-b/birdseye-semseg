@@ -31,7 +31,7 @@ static auto &RandomChoice(const RangeT &range, RNG &&generator) {
   return range[dist(std::forward<RNG>(generator))];
 }
 
-/* constructor */
+/* constructor for dataset collection */
 MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<int, bool>& restricted_roads)
 	: random_generator_(random_generator) {
 	// initialize noise distribution
@@ -87,7 +87,7 @@ MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<in
 		rot = Eigen::AngleAxisd(-initial_pos.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
 			  Eigen::AngleAxisd(-initial_pos.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
 			  Eigen::AngleAxisd(-initial_pos.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
-    	Eigen::Vector3d trans(initial_pos.location.x, initial_pos.location.y, initial_pos.location.z);
+    	Eigen::Vector3d trans(initial_pos.location.x, -initial_pos.location.y, initial_pos.location.z);
     	transform_.block<3, 3>(0, 0) = rot;
     	transform_.block<3, 1>(0, 3) = trans;
 		auto actor = world.TrySpawnActor(blueprint, initial_pos);
@@ -115,6 +115,88 @@ MassAgent::MassAgent(std::mt19937& random_generator, const std::unordered_map<in
 	vehicle_length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
 	SetupSensors(boundaries["camera-shift"].as<float>());
 	std::cout << "created mass-agent-" << id_ << ": " + blueprint_name_ << std::endl;
+}
+
+/* constructor for runtime */
+MassAgent::MassAgent(std::mt19937& random_generator, float x, float y, float z)
+	: random_generator_(random_generator) {
+	transform_.setIdentity();
+	id_ = agents().size();
+	agents().emplace_back(this);
+	try {
+		auto world = carla_client()->GetWorld();
+		auto spawn_points = world.GetMap()->GetRecommendedSpawnPoints();
+		// initialize kd_tree (if empty)
+		InitializeKDTree();
+		// random the car model
+		auto car_models = GetBlueprintNames();
+		bool repetitive = false;
+		auto& all_agents = agents();
+		do {
+			repetitive = false;
+			blueprint_name_	= RandomChoice(car_models, random_generator_);
+			for (size_t i = 0; i < all_agents.size(); ++i) {
+				if (i != id_ && blueprint_name_ == all_agents[i]->blueprint_name_) {
+					repetitive = true;
+					break;
+				}
+			}
+		} while(repetitive);
+		auto blueprint_library = world.GetBlueprintLibrary();
+		auto vehicles = blueprint_library->Filter(blueprint_name_);
+		if (vehicles->empty()) {
+			ROS_ERROR("ERROR: did not find car model with name: %s... using vehicle.seat.leon", blueprint_name_.c_str());
+			vehicles = blueprint_library->Filter("vehicle.seat.leon");
+		}
+		carla::client::ActorBlueprint blueprint = (*vehicles)[0];
+		// randomize the blueprint color
+		if (blueprint.ContainsAttribute("color")) {
+			auto &attribute = blueprint.GetAttribute("color");
+			blueprint.SetAttribute(
+				"color",
+				RandomChoice(attribute.GetRecommendedValues(), random_generator_));
+		}
+		auto initial_pos = spawn_points[id_];
+		auto actor = world.TrySpawnActor(blueprint, initial_pos);
+		if (!actor) {
+			std::cout << "failed to spawn " << blueprint_name_ << ". exiting..." << std::endl;
+			std::exit(EXIT_FAILURE);
+		}
+		vehicle_ = boost::static_pointer_cast<cc::Vehicle>(actor);
+		// set location to the given point
+		double query[3] = {x, y, z};
+		std::vector<size_t> knn_ret_indices(1);
+		std::vector<double> knn_sqrd_dist(1);
+		kd_tree_->knnSearch(&query[0], 1, &knn_ret_indices[0], &knn_sqrd_dist[0]);
+		auto new_pos = kd_points_[knn_ret_indices[0]]->GetTransform();
+		vehicle_->SetTransform(new_pos);
+		Eigen::Matrix3d rot;
+		rot = Eigen::AngleAxisd(-new_pos.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+			  Eigen::AngleAxisd(-new_pos.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+			  Eigen::AngleAxisd(-new_pos.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
+    	Eigen::Vector3d trans(new_pos.location.x, -new_pos.location.y, new_pos.location.z);
+		transform_.block<3, 3>(0, 0) = rot;
+    	transform_.block<3, 1>(0, 3) = trans;
+		// turn on physics & autopilot
+		vehicle_->SetSimulatePhysics(false);
+		vehicle_->SetAutopilot(false);
+	} catch (const cc::TimeoutException &e) {
+		ROS_ERROR("ERROR: connection to the CARLA server timed out\n%s\n", e.what());
+		std::exit(EXIT_FAILURE);
+	} catch (const std::exception &e) {
+		ROS_ERROR("ERROR: %s", e.what());
+		DestroyAgent();
+		std::exit(EXIT_FAILURE);
+	}
+	// reading the dimensions of the vehicle
+	std::string yaml_path = ros::package::getPath("mass_data_collector");
+	yaml_path += "/param/vehicle_dimensions.yaml";
+	YAML::Node base = YAML::LoadFile(yaml_path);
+	YAML::Node boundaries = base[blueprint_name_];
+	vehicle_width_ = std::max(boundaries["left"].as<double>(), boundaries["right"].as<double>()) * 2;
+	vehicle_length_ = std::max(boundaries["front"].as<double>(), boundaries["back"].as<double>()) * 2;
+	SetupSensors(boundaries["camera-shift"].as<float>());
+	std::cout << "created autonomous mass-agent-" << id_ << ": " + blueprint_name_ << std::endl;
 }
 
 /* destructor */
@@ -486,6 +568,53 @@ double MassAgent::carla_y() const {
 /* returns carla's z coordinate */
 double MassAgent::carla_z() const {
 	return transform_(2, 3);
+}
+
+/* move the vehicle forward in the simulator while avoiding collisions & obeying traffic rules */
+void MassAgent::MoveForward(double distance) {
+	auto curr_tfm = vehicle_->GetTransform();
+	// get current and next waypoint
+	double query[3] = {curr_tfm.location.x, curr_tfm.location.y, curr_tfm.location.z};
+	std::vector<size_t> knn_ret_indices(1);
+	std::vector<double> knn_sqrd_dist(1);
+	kd_tree_->knnSearch(&query[0], 1, &knn_ret_indices[0], &knn_sqrd_dist[0]);
+	auto curr_waypoint = kd_points_[knn_ret_indices[0]];
+	auto next_waypoint = curr_waypoint->GetNext(distance)[0];
+	auto curr_location = vehicle_->GetLocation();
+	auto next_location = next_waypoint->GetTransform().location;
+	// check if move is collision safe
+	// for (auto* agent : agents()) {
+	// 	if (agent->id_ == id_) {
+	// 		continue;
+	// 	}
+	// 	auto distance = std::sqrt((curr_location.x - next_location.x) *
+	// 							  (curr_location.x - next_location.x) +
+	// 							  (curr_location.y - next_location.y) *
+	// 							  (curr_location.y - next_location.y) +
+	// 							  (curr_location.z - next_location.z) *
+	// 							  (curr_location.z - next_location.z));
+	// 	if (distance < vehicle_length_ * config::kMinDistCoeff) {
+	// 		std::cout << "\n agent " << id_ << " not moved bcs of " << agent->id_ << std::endl;
+	// 		return;
+	// 	} 
+	// }
+	// check if at red light
+	// if (next_waypoint->GetJunctionId() != -1) {
+	// 	auto tlstate = vehicle_->GetTrafficLightState();
+	// 	if (tlstate != carla::rpc::TrafficLightState::Yellow ||
+	// 		tlstate != carla::rpc::TrafficLightState::Red) {
+	// 		return;
+	// 	}
+	// }
+	auto next_tnsfm = next_waypoint->GetTransform();
+	vehicle_->SetTransform(next_tnsfm);
+	Eigen::Matrix3d rot;
+	rot = Eigen::AngleAxisd(-next_tnsfm.rotation.roll  * config::kToRadians, Eigen::Vector3d::UnitX()) *
+		  Eigen::AngleAxisd(-next_tnsfm.rotation.pitch * config::kToRadians, Eigen::Vector3d::UnitY()) *
+		  Eigen::AngleAxisd(-next_tnsfm.rotation.yaw   * config::kToRadians, Eigen::Vector3d::UnitZ());
+	Eigen::Vector3d trans(next_tnsfm.location.x, -next_tnsfm.location.y, next_tnsfm.location.z);
+	transform_.block<3, 3>(0, 0) = rot;
+	transform_.block<3, 1>(0, 3) = trans;
 }
 
 /* initializes the structures for the camera, lidar & depth measurements */
