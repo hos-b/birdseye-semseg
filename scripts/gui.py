@@ -400,7 +400,12 @@ class SampleWindow:
         print('\ndone')
 
     def change_sample(self):
-        (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
+        try:
+            (rgbs, labels, car_masks, fov_masks, car_transforms, batch_index) = next(self.dset_iterator)
+        except StopIteration:
+            self.next_sample['state'] = 'disabled'
+            self.root.title(f'end of dataset')
+            return
         rgbs, labels, car_masks, fov_masks, car_transforms = to_device(self.device, rgbs, labels,
                                                                        car_masks, fov_masks,
                                                                        car_transforms)
