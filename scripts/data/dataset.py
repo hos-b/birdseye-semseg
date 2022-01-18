@@ -39,6 +39,7 @@ class MassHDF5(torch.utils.data.Dataset):
         self.dataset = self.hdf5[self.dset_name]
         self.min_agent_count = self.dataset.attrs['min_agent_count'][0]
         self.max_agent_count = self.dataset.attrs['max_agent_count'][0]
+        self.batch_histogram = self.dataset.attrs['batch_histogram']
         self.n_samples = self.get_dataset_size()
         self.batch_indices, self.batch_sizes = self.get_batch_info(50100)
         print(f'found {self.n_samples} samples in {self.batch_sizes.shape[0]} batches')
@@ -105,9 +106,8 @@ class MassHDF5(torch.utils.data.Dataset):
         total number of samples.
         """
         total_samples = 0
-        batch_histogram = self.dataset.attrs['batch_histogram']
-        for i in range(batch_histogram.shape[0]):
-            total_samples += (i + self.min_agent_count) * batch_histogram[i]
+        for i in range(self.batch_histogram.shape[0]):
+            total_samples += (i + self.min_agent_count) * self.batch_histogram[i]
         
         assert total_samples == self.dataset.shape[0] - 1, 'unexpected number of samples'
         return total_samples
