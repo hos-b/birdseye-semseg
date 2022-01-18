@@ -9,37 +9,37 @@ models:
   runs: [
          'mcnnT2x-ce-0.1-unidata-baseline',
          'mcnnT3x-ce-0.1-uniform-math',
-         'mcnnT3x-ce-0.1-unidata-[4-.6-.6]-2xaggr+post',
-         'mcnnT3xNoisyRT-coolnoise-nodrop-mse-unidata',
-         'mcnnT3xNoisyRT-1e-4-ce-0.1drop-triple-unidata',
+        #  'mcnnT3x-ce-0.1-unidata-[4-.6-.6]-2xaggr+post',
+        #  'mcnnT3xNoisyRT-coolnoise-nodrop-mse-unidata',
+        #  'mcnnT3xNoisyRT-1e-4-ce-0.1drop-triple-unidata',
         ]
   graph-networks: [
                    false,
                    true,
-                   true,
-                   true,
-                   true,
+                  #  true,
+                  #  true,
+                  #  true,
                   ]
   model-names: [
                 'mcnnT2x',
                 'mcnnT3x',
-                'mcnnT3x',
-                'mcnnT3xNoisyRT',
-                'mcnnT3xNoisyRT',
+                # 'mcnnT3x',
+                # 'mcnnT3xNoisyRT',
+                # 'mcnnT3xNoisyRT',
                ]
   model-versions: [
                    'best',
                    'best',
-                   'best',
-                   'best',
-                   'best',
+                  #  'best',
+                  #  'best',
+                  #  'best',
                   ]
   aggregation-types: [
                       'bilinear',
                       'bilinear',
-                      'bilinear',
-                      'bilinear',
-                      'bilinear',
+                      # 'bilinear',
+                      # 'bilinear',
+                      # 'bilinear',
                      ]
 
 gui:
@@ -55,9 +55,9 @@ gui:
 
 # only tackled in mcnnT3xNoisyRT
 se2-noise:
-  se2-noise-theta-std: 4.0 # degrees
-  se2-noise-dx-std: 0.6    # meters
-  se2-noise-dy-std: 0.6    # meters
+  se2-noise-theta-std: 0.0 # degrees
+  se2-noise-dx-std: 0.0    # meters
+  se2-noise-dy-std: 0.0    # meters
 
 dataset:
   random-samples: false
@@ -67,15 +67,18 @@ dataset:
   gaussian-blur-std: 0.0
   gaussian-kernel-size: 11
   dataset-dir: '/export/home/aiscar4/mass-data'
-  dataset-file: 'noisy_town1_uniform.hdf5'
-  dataset-name: 'validation_set'
+  dataset-file: 'runtime.hdf5'
+  dataset-name: '3way-3'
 
 curriculum:
   difficulty: 8
   maximum-agent-count: 8
 
-plot:
-  count: 10
-  plot-type: 'disk' # 'show' || 'image' for getting rgb
-  plot-dir: './runs/{}/plots'
-  plot-tag: 'nostats' # added to dir name
+runtime:
+  title: 'GT Localization'
+  agents: [0, 1, 2, 3]
+  network-labels: ['Baseline', 'Ours']
+  cache-dir: './runtime_cache'
+  text-color: [0, 0, 0] # bgr
+  background-color: [255, 255, 255] # bgr
+  border-size: 10

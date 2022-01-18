@@ -1,7 +1,25 @@
+import cv2
 import torch
 import numpy as np
 from typing import Tuple
 from data.mask_warp import get_single_relative_img_transform
+
+def write_xycentered_text(image: np.ndarray, text: str, color, font, scale, thickness):
+    text_size = cv2.getTextSize(text, font, 1, 2)[0]
+    text_x = int((image.shape[1] - text_size[0]) / 2)
+    text_y = int((image.shape[0] + text_size[1]) / 2)
+    cv2.putText(image, text, (text_x, text_y), font, scale, color, thickness)
+
+def write_ycentered_text(image: np.ndarray, text: str, text_x, color, font, scale, thickness):
+    text_size = cv2.getTextSize(text, font, 1, 2)[0]
+    text_y = int((image.shape[0] + text_size[1]) / 2)
+    cv2.putText(image, text, (text_x, text_y), font, scale, color, thickness)
+
+def write_xcentered_text(image: np.ndarray, text: str, text_y, color, font, scale, thickness):
+    text_size = cv2.getTextSize(text, font, 1, 2)[0]
+    text_x = int((image.shape[1] - text_size[0]) / 2)
+    cv2.putText(image, text, (text_x, text_y), font, scale, color, thickness)
+
 
 def drop_agent_data(drop_probability, *args) -> Tuple[torch.Tensor]:
     """

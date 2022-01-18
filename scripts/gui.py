@@ -550,8 +550,7 @@ def main():
     NEW_SIZE = (eval_cfg.output_h, eval_cfg.output_w)
     CENTER = (sem_cfg.center_x(NEW_SIZE[1]), sem_cfg.center_y(NEW_SIZE[0]))
     PPM = sem_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
-    # gui object
-    # evaluate the added networks
+    # semantic classes -------------------------------------------------------------------------------------
     if eval_cfg.classes == 'carla':
         segmentation_classes = color_map.__carla_classes
     elif eval_cfg.classes == 'ours':
@@ -563,7 +562,8 @@ def main():
     elif eval_cfg.classes == 'diminished+mask':
         segmentation_classes = color_map.__diminished_classes_plus_mask
     else:
-        raise ValueError('Unknown class set')
+        raise ValueError('unknown class set')
+    # gui object -------------------------------------------------------------------------------------------
     gui = SampleWindow(eval_cfg, segmentation_classes, device, NEW_SIZE, CENTER, PPM)
     # dataloader stuff -------------------------------------------------------------------------------------
     test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,

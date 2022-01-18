@@ -1,342 +1,189 @@
+from operator import concat
 import os
 import cv2
 import torch
 import numpy as np
-import matplotlib
-import matplotlib.pyplot as plt
 
-from agent.agent_pool import CurriculumPool
-from data.color_map import convert_semantics_to_rgb
+import data.color_map as color_map
 from data.dataset import MassHDF5
-from data.config import EvaluationConfig, SemanticCloudConfig
+from data.config import SemanticCloudConfig, EvaluationConfig
+from data.color_map import convert_semantics_to_rgb
+from data.mask_warp import get_single_adjacent_aggregate_mask
 from data.utils import squeeze_all, to_device
-from data.utils import font_dict, newline_dict
+from data.utils import get_noisy_transforms, get_relative_noise
+from data.utils import write_xycentered_text, write_xcentered_text
 from model.factory import get_model
-
-def plot_mask_batch(rgbs: torch.Tensor, labels: torch.Tensor, solo_mask_preds: torch.Tensor,
-                    aggr_mask_preds: torch.Tensor, gt_solo_masks: torch.Tensor, gt_aggr_masks: torch.Tensor,
-                    plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
-    """
-    plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
-    full output, masked output, full target and masked target for all agents in the batch.
-    """
-    agent_count = rgbs.shape[0]
-    columns = 6
-    fig = plt.figure(figsize=(20, agent_count * 4))
-    fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
-    # plt.axis('off')
-    for i in range(agent_count):
-        rgb = rgbs[i, ...].permute(1, 2, 0)
-        rgb = (rgb + 1) / 2
-        solo_gt_mask = gt_solo_masks[i].cpu()
-        solo_pred_mask = solo_mask_preds[i].cpu().squeeze()
-        aggr_gt_mask = gt_aggr_masks[i].cpu()
-        aggr_pred_mask = aggr_mask_preds[i].cpu().squeeze()
-        ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
-        # create subplot and append to ax
-        ax = []
-        # target solo mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target solo mask {i}")
-        plt.imshow(solo_gt_mask)
-
-        # predicted solo mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
-        ax[-1].set_title(f"pred solo mask {i}")
-        plt.imshow(solo_pred_mask)
-
-        # target aggregated mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target aggr mask {i}")
-        plt.imshow(aggr_gt_mask)
-
-        # predicted aggregated mask
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
-        ax[-1].set_title(f"pred aggr mask {i}")
-        plt.imshow(aggr_pred_mask)
-
-        # target mask & BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target masked BEV {i}")
-        ss_gt_img_cp = ss_gt_img.copy()
-        ss_gt_img_cp[aggr_gt_mask == 0] = 0
-        plt.imshow(ss_gt_img_cp)
-
-        # predicted mask & BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
-        ax[-1].set_title(f"pred masked BEV {i}")
-        ss_gt_img[aggr_pred_mask < 0.5] = 0
-        plt.imshow(ss_gt_img)
-
-    if plot_dest == 'disk':
-        matplotlib.use('Agg')
-        fig.canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        width, height = int(width), int(height)
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-        fig.clear()
-        plt.close(fig)
-        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-    elif plot_dest == 'image':
-        matplotlib.use('Agg')
-        fig.canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        width, height = int(width), int(height)
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-        fig.clear()
-        plt.close(fig)
-        return image
-    elif plot_dest == 'show':
-        plt.show()
-
-def plot_full_batch(rgbs: torch.Tensor, labels: torch.Tensor,
-                    solo_sseg_preds: torch.Tensor,  aggr_sseg_preds: torch.Tensor,
-                    solo_mask_preds: torch.Tensor,  aggr_mask_preds: torch.Tensor,
-                    gt_solo_masks: torch.Tensor, gt_aggr_masks: torch.Tensor,
-                    plot_dest: str, semantic_classes: str, filename = 'test.png', title=''):
-    """
-    plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
-    full output, masked output, full target and masked target for all agents in the batch.
-    """
-    agent_count = rgbs.shape[0]
-    columns = 6
-    fig = plt.figure(figsize=(25, agent_count * 4))
-    fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
-    # plt.axis('off')
-    for i in range(agent_count):
-        rgb = rgbs[i, ...].permute(1, 2, 0)
-        rgb = (rgb + 1) / 2
-
-        solo_sseg_pred = solo_sseg_preds[i].cpu()
-        aggr_sseg_pred = aggr_sseg_preds[i].cpu()
-        solo_mask_pred = solo_mask_preds[i].cpu().squeeze()
-        aggr_mask_pred = aggr_mask_preds[i].cpu().squeeze()
-        solo_gt_mask = gt_solo_masks[i].cpu()
-        aggr_gt_mask = gt_aggr_masks[i].cpu()
-        ss_gt_img = convert_semantics_to_rgb(labels[i].cpu(), semantic_classes)
-        # create subplot and append to ax
-        ax = []
-
-        # front RGB image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
-        ax[-1].set_title(f"rgb {i}")
-        plt.imshow(rgb.cpu())
-
-        # omniscient BEV
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
-        ax[-1].set_title(f"omniscient BEV {i}")
-        plt.imshow(ss_gt_img)
-
-        # target solo prediction
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target solo {i}")
-        ss_gt_img_cpy = ss_gt_img.copy()
-        ss_gt_img_cpy[solo_gt_mask == 0] = 0
-        plt.imshow(ss_gt_img_cpy)
-
-        # predicted solo prediction
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
-        ax[-1].set_title(f"pred solo {i}")
-        solo_ss_pred_ids = torch.max(solo_sseg_pred, dim=0)[1]
-        solo_ss_pred_img = convert_semantics_to_rgb(solo_ss_pred_ids.cpu(), semantic_classes)
-        solo_ss_pred_img[solo_mask_pred < 0.6] = 0
-        plt.imshow(solo_ss_pred_img)
-
-        # target aggr prediction
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target aggr {i}")
-        ss_gt_img[aggr_gt_mask == 0] = 0
-        plt.imshow(ss_gt_img)
-
-        # predicted aggr prediction
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 6, xticks=[], yticks=[]))
-        ax[-1].set_title(f"pred aggr {i}")
-        aggr_ss_pred_ids = torch.max(aggr_sseg_pred, dim=0)[1]
-        aggr_ss_pred_img = convert_semantics_to_rgb(aggr_ss_pred_ids.cpu(), semantic_classes)
-        aggr_ss_pred_img[aggr_mask_pred < 0.6] = 0
-        plt.imshow(aggr_ss_pred_img)
-
-    
-    if plot_dest == 'disk':
-        matplotlib.use('Agg')
-        fig.canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        width, height = int(width), int(height)
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-        fig.clear()
-        plt.close(fig)
-        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-    elif plot_dest == 'image':
-        matplotlib.use('Agg')
-        fig.canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        width, height = int(width), int(height)
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-        fig.clear()
-        plt.close(fig)
-        return image
-    elif plot_dest == 'show':
-        plt.show()
-
-def plot_unmasked_batch(rgbs: torch.Tensor, solo_labels: torch.Tensor, solo_preds: torch.Tensor, 
-                        aggr_labels: torch.Tensor, aggr_preds: torch.Tensor, plot_dest: str,
-                        semantic_classes: str, filename = 'test.png', title=''):
-    """
-    plots a batch to the screen, a file or a numpy array. each image contains the input rgb,
-    full output, masked output, full target and masked target for all agents in the batch.
-    this function is only for networks that predict the mask as a semantic class.
-    """
-    agent_count = rgbs.shape[0]
-    columns = 5
-    fig = plt.figure(figsize=(20, agent_count * 4))
-    fig.suptitle(f'{newline_dict[agent_count]}{title}', fontsize=font_dict[agent_count])
-    # plt.axis('off')
-    for i in range(agent_count):
-        rgb = rgbs[i, ...].permute(1, 2, 0)
-        rgb = (rgb + 1) / 2
-        solo_ss_gt_img = convert_semantics_to_rgb(solo_labels[i].cpu(), semantic_classes)
-        aggr_ss_gt_img = convert_semantics_to_rgb(aggr_labels[i].cpu(), semantic_classes)
-        # create subplot and append to ax
-        ax = []
-
-        # front RGB image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 1, xticks=[], yticks=[]))
-        ax[-1].set_title(f"rgb {i}")
-        plt.imshow(rgb.cpu())
-
-        # target solo semantic BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 2, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target solo BEV {i}")
-        plt.imshow(solo_ss_gt_img)
-
-        # predicted semseg solo
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 3, xticks=[], yticks=[]))
-        ax[-1].set_title(f"predicted solo BEV {i}")
-        ss_pred = torch.max(solo_preds[i], dim=0)[1]
-        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
-        plt.imshow(ss_pred_img)
-
-        # target aggr semantic BEV image
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 4, xticks=[], yticks=[]))
-        ax[-1].set_title(f"target aggr BEV {i}")
-        plt.imshow(aggr_ss_gt_img)
-
-        # predicted semseg aggr
-        ax.append(fig.add_subplot(agent_count, columns, i * columns + 5, xticks=[], yticks=[]))
-        ax[-1].set_title(f"predicted aggr. BEV {i}")
-        ss_pred = torch.max(aggr_preds[i], dim=0)[1]
-        ss_pred_img = convert_semantics_to_rgb(ss_pred.cpu(), semantic_classes)
-        plt.imshow(ss_pred_img)
-
-    
-    if plot_dest == 'disk':
-        matplotlib.use('Agg')
-        fig.canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        width, height = int(width), int(height)
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-        fig.clear()
-        plt.close(fig)
-        cv2.imwrite(filename, cv2.cvtColor(image, cv2.COLOR_RGB2BGR))
-    elif plot_dest == 'image':
-        matplotlib.use('Agg')
-        fig.canvas.draw()
-        width, height = fig.get_size_inches() * fig.get_dpi()
-        width, height = int(width), int(height)
-        image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8').reshape(height, width, 3)
-        fig.clear()
-        plt.close(fig)
-        return image
-    elif plot_dest == 'show':
-        plt.show()
-
-def evaluate(**kwargs):
-    eval_cfg: EvaluationConfig = kwargs.get('eval_cfg')
-    model = kwargs.get('model')
-    loader = kwargs.get('loader')
-    device = kwargs.get('device')
-    agent_pool: CurriculumPool = kwargs.get('agent_pool')
-    model.eval()
-    NEW_SIZE, CENTER, PPM = kwargs.get('geom_properties')
-    for idx, (rgbs, labels, car_masks, fov_masks, car_transforms, batch_no) in enumerate(loader):
-        masks = car_masks + fov_masks
-        rgbs, labels, masks, car_transforms = to_device(device, rgbs, labels,
-                                                        masks, car_transforms)
-        rgbs, labels, masks, car_transforms = squeeze_all(rgbs, labels, masks, car_transforms)
-        agent_pool.generate_connection_strategy(masks, car_transforms,
-                                                PPM, NEW_SIZE[0], NEW_SIZE[1],
-                                                CENTER[0], CENTER[1])
-        print(f"index {idx + 1}/{len(loader)}")
-        # network output
-        with torch.no_grad():
-            sseg_preds, mask_preds = model(rgbs, car_transforms, agent_pool.adjacency_matrix)
-        plot_full_batch(rgbs, labels, sseg_preds, mask_preds, masks, agent_pool, eval_cfg.plot_type,
-                        eval_cfg.classes, f'{eval_cfg.plot_dir}/{eval_cfg.run}_batch{idx + 1}.png',
-                        f'Batch #{batch_no.item()}')
-        eval_cfg.plot_count -= 1
-        if eval_cfg.plot_count == 0:
-            print('\ndone!')
-            break
 
 
 def main():
-    # basic configuration ---------------------------------------------------------------
+    sem_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
     eval_cfg = EvaluationConfig('config/evaluation.yml')
-    geom_cfg = SemanticCloudConfig('../mass_data_collector/param/sc_settings.yaml')
-    if len(eval_cfg.runs) > 1:
-        print('more than one run selected, only using the first one')
-    new_size = (eval_cfg.output_h, eval_cfg.output_w)
-    center = (geom_cfg.center_x(new_size[1]), geom_cfg.center_y(new_size[0]))
-    ppm = geom_cfg.pix_per_m(new_size[0], new_size[1])
-    # torch device
-    device_str = eval_cfg.device
-    if eval_cfg.device == 'cuda':
-        torch.cuda.set_device(0)
-        device_str += f':{0}'
-    device = torch.device(device_str)
-    # seed to insure the same train/test split
+    device = torch.device(eval_cfg.device)
     torch.manual_seed(eval_cfg.torch_seed)
-    # plot stuff ------------------------------------------------------------------------
-    eval_cfg.plot_dir = eval_cfg.plot_dir.format(eval_cfg.runs[0])
-    eval_cfg.plot_dir += '_' + eval_cfg.plot_tag
-    if not os.path.exists(eval_cfg.plot_dir):
-        os.makedirs(eval_cfg.plot_dir)
-    if eval_cfg.plot_type == 'disk':
-        print('saving plots to disk')
-    elif eval_cfg.plot_type == 'show':
-        print('showing plots')
+    if len(eval_cfg.runtime_network_labels) != len(eval_cfg.runs):
+        print(f'sanity-check-error: runtime labels list size must match network count.')
+        exit()
+    # image geometry ---------------------------------------------------------------------------------------
+    NEW_SIZE = (eval_cfg.output_h, eval_cfg.output_w)
+    CENTER = (sem_cfg.center_x(NEW_SIZE[1]), sem_cfg.center_y(NEW_SIZE[0]))
+    PPM = sem_cfg.pix_per_m(NEW_SIZE[0], NEW_SIZE[1])
+    # semantic classes
+    if eval_cfg.classes == 'carla':
+        semantic_classes = color_map.__carla_classes
+    elif eval_cfg.classes == 'ours':
+        semantic_classes = color_map.__our_classes
+    elif eval_cfg.classes == 'ours+mask':
+        semantic_classes = color_map.__our_classes_plus_mask
+    elif eval_cfg.classes == 'diminished':
+        semantic_classes = color_map.__diminished_classes
+    elif eval_cfg.classes == 'diminished+mask':
+        semantic_classes = color_map.__diminished_classes_plus_mask
     else:
-        print("valid plot types are 'show' and 'disk'")
+        raise ValueError('unknown class set')
+    # dataloader stuff -------------------------------------------------------------------------------------
+    test_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
+                        hdf5name=eval_cfg.dset_file, size=NEW_SIZE,
+                        classes=eval_cfg.classes, jitter=[0, 0, 0, 0],
+                        mask_gaussian_sigma=eval_cfg.gaussian_mask_std,
+                        guassian_kernel_size=eval_cfg.gaussian_kernel_size)
+    loader = torch.utils.data.DataLoader(test_set, batch_size=1, shuffle=False, num_workers=1)
+    if test_set.batch_histogram.sum() != test_set.batch_histogram[test_set.max_agent_count - 1]:
+        print('sanity-check-error: batch sizes histogram has multiple non-empty bins.')
         exit()
-    # network stuff ---------------------------------------------------------------------
-    if eval_cfg.model_versions[0] != 'best' and eval_cfg.model_versions[0] != 'last':
-        print("valid model version are 'best' and 'last'")
-        exit()
-    eval_cfg.snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[0])
-    snapshot_path = f'{eval_cfg.model_versions[0]}_model.pth'
-    snapshot_path = eval_cfg.snapshot_dir + '/' + snapshot_path
-    if not os.path.exists(snapshot_path):
-        print(f'{snapshot_path} does not exist')
-        exit()
-    model = get_model(eval_cfg.model_name, eval_cfg.num_classes, new_size,
-                      geom_cfg, eval_cfg.aggregation_type).to(device)
-    model.load_state_dict(torch.load(snapshot_path))
-    agent_pool = CurriculumPool(eval_cfg.difficulty, eval_cfg.difficulty,
-                                eval_cfg.max_agent_count, device)
-    # dataloader stuff ------------------------------------------------------------------
-    eval_set = MassHDF5(dataset=eval_cfg.dset_name, path=eval_cfg.dset_dir,
-                        hdf5name=eval_cfg.dset_file, size=new_size,
-                        classes=eval_cfg.classes, jitter=[0, 0, 0, 0])
+    eval_cfg.runtime_cache_dir += f'/{eval_cfg.dset_file.split(".")[0]}/{eval_cfg.runtime_title}'
+    os.makedirs(eval_cfg.runtime_cache_dir, exist_ok=True)
+    # other network stuff ----------------------------------------------------------------------------------
+    networks = {}
+    for i in range(len(eval_cfg.runs)):
+        snapshot_dir = eval_cfg.snapshot_dir.format(eval_cfg.runs[i])
+        snapshot_path = f'{eval_cfg.model_versions[i]}_model.pth'
+        snapshot_path = snapshot_dir + '/' + snapshot_path
+        if not os.path.exists(snapshot_path):
+            print(f'{snapshot_path} does not exist')
+            exit(-1)
+        model = get_model(
+            eval_cfg.model_names[i], eval_cfg.num_classes, NEW_SIZE,
+            sem_cfg, eval_cfg.aggregation_types[i]
+        ).to(device)
+        print(f'loading {snapshot_path}')
+        try:
+            model.load_state_dict(torch.load(snapshot_path))
+        except:
+            print(f'{eval_cfg.model_names[i]} implementation is incompatible with {eval_cfg.runs[i]}')
+            exit()
+        networks[eval_cfg.runtime_network_labels[i]] = (model, eval_cfg.model_gnn_flags[i])
+    # evaluate the added networks --------------------------------------------------------------------------
+    dset_length = len(loader)
+    rgb_h = eval_cfg.output_h
+    rgb_w = int(640 / (480 / eval_cfg.output_w))
+    border_size = eval_cfg.runtime_border_size
+    label_w = 200
+    label_h = 65
+    font_scale = 1
+    font_thickness = 2
+    for idx, (rgbs, labels, car_masks, fov_masks, gt_transforms, _) in enumerate(loader):
+        print(f'\r{idx + 1}/{dset_length}', end='')
+        rgbs, labels, car_masks, fov_masks, gt_transforms = to_device(
+            device, rgbs, labels, car_masks, fov_masks, gt_transforms
+        )
+        rgbs, labels, car_masks, fov_masks, gt_transforms = squeeze_all(
+            rgbs, labels, car_masks, fov_masks, gt_transforms
+        )
+        agent_count = rgbs.shape[0]
+        adjacency_matrix = torch.ones((agent_count, agent_count))
+        frame = []
+        h_border = None
+        for agent_index, i in enumerate(eval_cfg.runtime_agents):
+            agent_sample = []
+            v_border = np.zeros((eval_cfg.output_h, border_size, 3), dtype=np.uint8)
+            v_border[:, :] = eval_cfg.runtime_bkg_color
+            agent_sample.append(v_border)
+            # create agent label
+            agent_label = np.zeros((eval_cfg.output_h, label_w, 3), dtype=np.uint8)
+            agent_label[:, :] = eval_cfg.runtime_bkg_color
+            write_xycentered_text(
+                agent_label, f'agent {agent_index}', eval_cfg.runtime_text_color,
+                cv2.FONT_HERSHEY_DUPLEX, font_scale, font_thickness
+            )
+            agent_sample.append(agent_label)
+            agent_sample.append(v_border)
+            # get resized rgb
+            rgb = rgbs[i, ...].permute(1, 2, 0)
+            rgb = ((rgb + 1) * 255 / 2).cpu().numpy().astype(np.uint8)
+            rgb = cv2.resize(rgb, dsize=(rgb_w, rgb_h), interpolation=cv2.INTER_LINEAR)
+            agent_sample.append(cv2.cvtColor(rgb, cv2.COLOR_BGR2RGB))
+            agent_sample.append(v_border)
+            # get gt semantics and mask
+            gt_ss_img = convert_semantics_to_rgb(labels[i].cpu(), eval_cfg.classes)
+            gt_aggr_mask = get_single_adjacent_aggregate_mask(
+                car_masks + fov_masks, gt_transforms, i, PPM,
+                eval_cfg.output_h, eval_cfg.output_w, CENTER[0], CENTER[1],
+                adjacency_matrix, True
+            ).cpu().numpy()
+            if eval_cfg.transparent_masks:
+                gt_ss_img[gt_aggr_mask == 0, :] = gt_ss_img[gt_aggr_mask == 0, :] / 1.5
+            else:
+                gt_ss_img[gt_aggr_mask == 0, :] = 0
+            agent_sample.append(cv2.cvtColor(gt_ss_img, cv2.COLOR_BGR2RGB))
+            agent_sample.append(v_border)
+            # add localization noise (if std > 0)
+            car_transforms = get_noisy_transforms(
+                gt_transforms,
+                eval_cfg.se2_noise_dx_std,
+                eval_cfg.se2_noise_dy_std,
+                eval_cfg.se2_noise_th_std
+            )
+            # get network outuput
+            for (network, graph_flag) in networks.values():
+                _, _, pred_aggr_sseg, pred_aggr_mask = network.get_eval_output(
+                    semantic_classes, graph_flag, rgbs, car_masks, fov_masks,
+                    car_transforms, adjacency_matrix, PPM, eval_cfg.output_h, eval_cfg.output_w,
+                    CENTER[0], CENTER[1], i, True,
+                    torch.device('cpu'), True
+                )
+                pred_aggr_ss_img = convert_semantics_to_rgb(pred_aggr_sseg.argmax(dim=0), eval_cfg.classes)
+                # thresholding aggr. mask
+                pred_aggr_mask[pred_aggr_mask < eval_cfg.mask_thresh] = 0
+                pred_aggr_mask[pred_aggr_mask >= eval_cfg.mask_thresh] = 1
+                if eval_cfg.transparent_masks and graph_flag:
+                    pred_aggr_ss_img[pred_aggr_mask == 0, :] = pred_aggr_ss_img[pred_aggr_mask == 0, :] / 1.5
+                else:
+                    pred_aggr_ss_img[pred_aggr_mask == 0, :] = 0
+                agent_sample.append(cv2.cvtColor(pred_aggr_ss_img, cv2.COLOR_BGR2RGB))
+                agent_sample.append(v_border)
 
-    eval_loader = torch.utils.data.DataLoader(eval_set, batch_size=1,
-                                              shuffle=eval_cfg.random_samples,
-                                              num_workers=1)
-    print(f'evaluating run {eval_cfg.runs[0]} with {eval_cfg.model_versions[0]} '
-          f'snapshot of {eval_cfg.model_names[0]}')
-    print(f'gathering at most {eval_cfg.plot_count} from {eval_cfg.dset_file} '
-          f'set randomly? {eval_cfg.random_samples}, w/ difficulty = {eval_cfg.difficulty}')
-    evaluate(model=model, agent_pool=agent_pool, loader=eval_loader, eval_cfg=eval_cfg,
-             geom_properties=(new_size, center, ppm), device=device)
+            # add concatenated agent sample to final frame
+            frame.append(np.concatenate(agent_sample, axis=1))
+            if h_border is None:
+                h_border = np.zeros((border_size, frame[0].shape[1], 3), dtype=np.uint8)
+                h_border[:, :] = eval_cfg.runtime_bkg_color
+            frame.append(h_border)
+
+        # add labels to the top
+        label_row = np.zeros((label_h, frame[0].shape[1], 3), dtype=np.uint8)
+        label_row[:, :] = eval_cfg.runtime_bkg_color
+        offset = label_w + (2 * border_size)
+        write_xycentered_text(
+            label_row[:, offset:offset + rgb_w], 'Input',
+            eval_cfg.runtime_text_color, cv2.FONT_HERSHEY_DUPLEX, font_scale, font_thickness
+        )
+        offset += rgb_w + border_size
+        write_xycentered_text(
+            label_row[:, offset:offset + eval_cfg.output_w], 'GT',
+            eval_cfg.runtime_text_color, cv2.FONT_HERSHEY_DUPLEX, font_scale, font_thickness
+        )
+        for net_label in eval_cfg.runtime_network_labels:
+            offset += eval_cfg.output_w + border_size
+            write_xycentered_text(
+                label_row[:, offset:offset + eval_cfg.output_w], net_label,
+                eval_cfg.runtime_text_color, cv2.FONT_HERSHEY_DUPLEX, font_scale, font_thickness
+            )
+        frame.insert(0, label_row)
+        cv2.imwrite(
+            f'{eval_cfg.runtime_cache_dir}/output_{idx:04d}.png',
+            np.concatenate(frame, axis=0)
+        )
+
 
 if __name__ == '__main__':
     main()

@@ -274,11 +274,6 @@ class EvaluationConfig:
         self.se2_noise_th_std = float(conf['se2-noise']['se2-noise-theta-std'])
         self.se2_noise_dx_std = float(conf['se2-noise']['se2-noise-dx-std'])
         self.se2_noise_dy_std = float(conf['se2-noise']['se2-noise-dy-std'])
-        # plotting parameters
-        self.plot_count = int(conf['plot']['count'])
-        self.plot_type = str(conf['plot']['plot-type'])
-        self.plot_dir = str(conf['plot']['plot-dir'])
-        self.plot_tag = str(conf['plot']['plot-tag'])
         # dataset parameters
         self.random_samples = bool(conf['dataset']['random-samples'])
         self.dset_dir = str(conf['dataset']['dataset-dir'])
@@ -293,6 +288,14 @@ class EvaluationConfig:
         # curriculum parameters
         self.difficulty = int(conf['curriculum']['difficulty'])
         self.max_agent_count = int(conf['curriculum']['maximum-agent-count'])
+        # runtime parameters
+        self.runtime_title = str(conf['runtime']['title'])
+        self.runtime_agents = list(conf['runtime']['agents'])
+        self.runtime_network_labels = list(conf['runtime']['network-labels'])
+        self.runtime_cache_dir = str(conf['runtime']['cache-dir'])
+        self.runtime_text_color = list(conf['runtime']['text-color'])
+        self.runtime_bkg_color = list(conf['runtime']['background-color'])
+        self.runtime_border_size = int(conf['runtime']['border-size'])
         self.perform_sanity_check()
     
     def perform_sanity_check(self):
