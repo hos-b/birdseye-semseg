@@ -184,6 +184,8 @@ def main():
             np.concatenate(frame, axis=0)
         )
 
+    print(f'\ndone.\nuse ffmpeg -r 10 -i {eval_cfg.runtime_cache_dir}/output_%04d.png '
+          f'-vcodec mpeg4 -y -vb 40M {eval_cfg.runtime_cache_dir}/../{eval_cfg.runtime_title}.mp4')
 
 if __name__ == '__main__':
     main()
